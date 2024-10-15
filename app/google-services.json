@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "535920978835",
+    "project_id": "allfy-10102024",
+    "storage_bucket": "allfy-10102024.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:535920978835:android:fcd4334afa28e6d723d666",
+        "android_client_info": {
+          "package_name": "com.arny.allfy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBFZxxbuPG1sLUroTBGf-c_61xZdlYcijs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
