@@ -14,6 +14,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.arny.allfy.presentation.ui.CreatePostScreen
 import com.arny.allfy.presentation.ui.EditProfileScreen
 import com.arny.allfy.presentation.ui.FeedScreen
 import com.arny.allfy.presentation.ui.LoginScreen
@@ -65,6 +66,9 @@ fun AllfyApp(navHostController: NavHostController, authViewModel: AuthViewModel)
         }
         composable(Screens.EditProfileScreen.route) {
             EditProfileScreen(onBackClick = { navHostController.popBackStack() })
+        }
+        composable(Screens.CreatePostScreen.route) {
+            CreatePostScreen(onBackClick = { navHostController.popBackStack() })
         }
     }
 }

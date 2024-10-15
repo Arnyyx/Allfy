@@ -1,8 +1,10 @@
 package com.arny.allfy.di
 
 import com.arny.allfy.data.remote.AuthenticationRepositoryImpl
+import com.arny.allfy.data.remote.PostRepositoryImpl
 import com.arny.allfy.data.remote.UserRepositoryImpl
 import com.arny.allfy.domain.repository.AuthenticationRepository
+import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.domain.repository.UserRepository
 import com.arny.allfy.domain.usecase.Authentication.AuthenticationUseCases
 import com.arny.allfy.domain.usecase.Authentication.FirebaseAuthState
@@ -10,6 +12,9 @@ import com.arny.allfy.domain.usecase.Authentication.FirebaseSignIn
 import com.arny.allfy.domain.usecase.Authentication.FirebaseSignOut
 import com.arny.allfy.domain.usecase.Authentication.FirebaseSignUp
 import com.arny.allfy.domain.usecase.Authentication.IsUserAuthenticated
+import com.arny.allfy.domain.usecase.Post.GetAllPosts
+import com.arny.allfy.domain.usecase.Post.PostUseCases
+import com.arny.allfy.domain.usecase.Post.UploadPost
 import com.arny.allfy.domain.usecase.User.GetUserDetails
 import com.arny.allfy.domain.usecase.User.SetUserDetails
 import com.arny.allfy.domain.usecase.User.UserUseCases
@@ -77,6 +82,21 @@ class AllfyModule {
         return UserRepositoryImpl(firestore)
     }
 
+    @Singleton
+    @Provides
+    fun providePostRepository(
+        firestore: FirebaseFirestore,
+        storage: FirebaseStorage
+    ): PostRepository {
+        return PostRepositoryImpl(firestore, storage)
+    }
+
+    @Singleton
+    @Provides
+    fun providePostUseCases(repository: PostRepository) = PostUseCases(
+        getAllPosts = GetAllPosts(repository),
+        uploadPost = UploadPost(repository)
+    )
 
 
 }

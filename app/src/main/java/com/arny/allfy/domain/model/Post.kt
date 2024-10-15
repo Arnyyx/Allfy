@@ -1,11 +1,11 @@
 package com.arny.allfy.domain.model
 
-data class Post (
-    val postID: String = "",
-    val postImage: String = "",
-    val postDescription: String = "",
-    val postedBy: User = User(),
-    val likedBy: List<User> = emptyList(),
-//    val comments: List<Comment> = emptyList(),
-    val timeStamp: Long? = null
+data class Post(
+    val id: String = "",
+    val userID: String = "",
+    val imageUrls: List<String> = emptyList(),
+    val caption: String = "",
+    val timestamp: Long = System.currentTimeMillis(),
+    val likes: Int = 0,
+    val comments: Int = 0
 )

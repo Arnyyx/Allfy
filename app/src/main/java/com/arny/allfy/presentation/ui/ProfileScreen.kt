@@ -58,7 +58,6 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel) {
         is Response.Success -> {
             if (response.data != null) {
                 val user = response.data
-                val selectedTabIndex by remember { mutableStateOf(0) }
 
                 user.imageUrl =
                     "https://cdn.pixabay.com/photo/2015/04/23/22/00/tree-736885_1280.jpg"
@@ -147,16 +146,27 @@ fun ProfileScreen(user: User, navController: NavController) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Edit Profile Button
-        OutlinedButton(
-            onClick = {
-                /* Handle edit profile click */
-                navController.navigate(Screens.EditProfileScreen.route)
-            },
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Edit Profile")
+            OutlinedButton(
+                onClick = {
+                    navController.navigate(Screens.EditProfileScreen.route)
+                },
+            ) {
+                Text("Edit Profile")
+            }
+            OutlinedButton(
+                onClick = {
+                    navController.navigate(Screens.CreatePostScreen.route)
+                },
+            ) {
+                Text("New Post")
+            }
         }
+
+
 
         Spacer(modifier = Modifier.height(16.dp))
 

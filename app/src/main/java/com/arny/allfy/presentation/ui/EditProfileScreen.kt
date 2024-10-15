@@ -38,9 +38,7 @@ import com.arny.allfy.ui.theme.Transparent
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(onBackClick: () -> Unit) {
-
     val user = User("" ,"", )
-
     Scaffold(
         topBar = {
             TopAppBar(
