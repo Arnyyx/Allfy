@@ -73,4 +73,6 @@ fun AllfyApp(navHostController: NavHostController, authViewModel: AuthViewModel)
     }
 }
 
+//TODO change app icon, receive posts
+
 

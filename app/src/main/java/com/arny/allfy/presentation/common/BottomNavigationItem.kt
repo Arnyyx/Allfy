@@ -1,10 +1,14 @@
 package com.arny.allfy.presentation.common
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.twotone.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -25,7 +29,9 @@ enum class BottomNavigationItem(val icon: ImageVector, val route: String) {
 
 @Composable
 fun BottomNavigation(selectedItem: BottomNavigationItem, navController: NavController) {
-    NavigationBar {
+    NavigationBar(
+        Modifier.height(60.dp)
+    ) {
         for (item in BottomNavigationItem.entries) {
             NavigationBarItem(
                 selected = selectedItem == item,
@@ -41,7 +47,8 @@ fun BottomNavigation(selectedItem: BottomNavigationItem, navController: NavContr
                 icon = {
                     Icon(
                         item.icon, null, modifier = Modifier.size(24.dp),
-                        tint = if (selectedItem == item) Color.Black else Color.Gray
+                        tint = if (selectedItem == item) MaterialTheme.colorScheme.onSecondaryContainer
+                        else MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }
             )

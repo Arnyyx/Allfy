@@ -33,12 +33,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.User
-import com.arny.allfy.ui.theme.Transparent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(onBackClick: () -> Unit) {
-    val user = User("" ,"", )
+    var name by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -50,7 +52,7 @@ fun EditProfileScreen(onBackClick: () -> Unit) {
                 },
                 actions = {
                     TextButton(onClick = { /* Save changes */ }) {
-                        Text("Done", color = Color.Blue)
+                        Text("Done")
                     }
                 },
             )
@@ -82,15 +84,15 @@ fun EditProfileScreen(onBackClick: () -> Unit) {
                 onClick = { /* Change profile picture */ },
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
-                Text("Change Profile Photo", color = Color.Blue)
+                Text("Change Profile Photo")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // Edit Fields
-            EditProfileField("Name", user.name) { user.name = it }
-            EditProfileField("Username", user.userName) { user.userName = it }
-            EditProfileField("Bio", user.bio) { user.bio = it }
+            EditProfileField("Name", name) { name = it }
+            EditProfileField("Username", username) { username = it }
+            EditProfileField("Bio", bio) { bio = it }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
@@ -122,10 +124,10 @@ fun EditProfileField(
             .fillMaxWidth()
             .padding(vertical = 8.dp),
         colors = TextFieldDefaults.colors(
-            focusedContainerColor = Transparent,
-            unfocusedContainerColor = Transparent,
-            disabledContainerColor = Transparent,
-            errorContainerColor = Transparent,
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            disabledContainerColor = Color.Transparent,
+            errorContainerColor = Color.Transparent,
         ),
     )
 }

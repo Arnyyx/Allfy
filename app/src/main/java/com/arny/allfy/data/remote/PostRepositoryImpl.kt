@@ -7,6 +7,7 @@ import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -19,23 +20,49 @@ class PostRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val storage: FirebaseStorage
 ) : PostRepository {
-    override fun getAllPosts(userID: String): Flow<Response<List<Post>>> = callbackFlow {
-        Response.Loading
-        val snapshotListener =
-            firestore.collection("posts").whereNotEqualTo("userId", userID)
-                .addSnapshotListener { snapshot, e ->
-                    val response = if (snapshot != null) {
-                        val posts = snapshot.toObjects(Post::class.java)
-                        Response.Success<List<Post>>(posts)
-                    } else {
-                        Response.Error(e?.message ?: e.toString())
-                    }
-                    trySend(response).isSuccess
-                }
-        awaitClose {
-            snapshotListener.remove()
-        }
+//    override fun getAllPosts(userID: String): Flow<Response<List<Post>>> = callbackFlow {
+//        Response.Loading
+//        val snapshotListener =
+//            firestore.collection("posts").whereNotEqualTo("userId", userID)
+//                .addSnapshotListener { snapshot, e ->
+//                    val response = if (snapshot != null) {
+//                        val posts = snapshot.toObjects(Post::class.java)
+//                        Response.Success<List<Post>>(posts)
+//                    } else {
+//                        Response.Error(e?.message ?: e.toString())
+//                    }
+//                    trySend(response).isSuccess
+//                }
+//        awaitClose {
+//            snapshotListener.remove()
+//        }
+//
+//    }
 
+    override fun getAllPosts(
+        userID: String,
+        lastVisible: Post?,
+        limit: Int
+    ): Flow<Response<List<Post>>> = flow {
+        emit(Response.Loading)
+        try {
+            val query = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .whereNotEqualTo("userID", userID)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .limit(limit.toLong())
+
+            val finalQuery = if (lastVisible != null) {
+                query.startAfter(lastVisible.timestamp)
+            } else {
+                query
+            }
+
+            val snapshot = finalQuery.get().await()
+            val posts = snapshot.toObjects(Post::class.java)
+            emit(Response.Success(posts))
+        } catch (e: Exception) {
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+        }
     }
 
     override fun uploadPost(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>> = flow {
