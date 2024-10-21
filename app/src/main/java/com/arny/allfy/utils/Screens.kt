@@ -9,4 +9,5 @@ sealed class Screens(val route: String) {
     object ProfileScreen : Screens("profile_screen")
     object EditProfileScreen : Screens("edit_profile_screen")
     object CreatePostScreen : Screens("create_post_screen")
+    object SettingsScreen : Screens("settings_screen")
 }

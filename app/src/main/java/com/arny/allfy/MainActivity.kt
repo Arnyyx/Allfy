@@ -3,12 +3,9 @@ package com.arny.allfy
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -20,6 +17,7 @@ import com.arny.allfy.presentation.ui.FeedScreen
 import com.arny.allfy.presentation.ui.LoginScreen
 import com.arny.allfy.presentation.ui.ProfileScreen
 import com.arny.allfy.presentation.ui.SearchScreen
+import com.arny.allfy.presentation.ui.SettingsScreen
 import com.arny.allfy.presentation.ui.SignUpScreen
 import com.arny.allfy.presentation.ui.SplashScreen
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
@@ -56,19 +54,22 @@ fun AllfyApp(navHostController: NavHostController, authViewModel: AuthViewModel)
             FeedScreen(navHostController)
         }
         composable(Screens.SplashScreen.route) {
-            SplashScreen(navController = navHostController, authViewModel = authViewModel)
+            SplashScreen(navController = navHostController, authViewModel)
         }
         composable(Screens.ProfileScreen.route) {
-            ProfileScreen(navHostController, authViewModel)
+            ProfileScreen(navHostController)
         }
         composable(Screens.SearchScreen.route) {
             SearchScreen(navHostController)
         }
         composable(Screens.EditProfileScreen.route) {
-            EditProfileScreen(onBackClick = { navHostController.popBackStack() })
+            EditProfileScreen(onBackClick = { navHostController.popBackStack() }, )
         }
         composable(Screens.CreatePostScreen.route) {
             CreatePostScreen(onBackClick = { navHostController.popBackStack() })
+        }
+        composable(Screens.SettingsScreen.route) {
+            SettingsScreen(navHostController, authViewModel)
         }
     }
 }

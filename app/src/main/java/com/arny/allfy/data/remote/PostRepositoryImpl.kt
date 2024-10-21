@@ -20,24 +20,6 @@ class PostRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val storage: FirebaseStorage
 ) : PostRepository {
-//    override fun getAllPosts(userID: String): Flow<Response<List<Post>>> = callbackFlow {
-//        Response.Loading
-//        val snapshotListener =
-//            firestore.collection("posts").whereNotEqualTo("userId", userID)
-//                .addSnapshotListener { snapshot, e ->
-//                    val response = if (snapshot != null) {
-//                        val posts = snapshot.toObjects(Post::class.java)
-//                        Response.Success<List<Post>>(posts)
-//                    } else {
-//                        Response.Error(e?.message ?: e.toString())
-//                    }
-//                    trySend(response).isSuccess
-//                }
-//        awaitClose {
-//            snapshotListener.remove()
-//        }
-//
-//    }
 
     override fun getAllPosts(
         userID: String,
@@ -92,7 +74,7 @@ class PostRepositoryImpl @Inject constructor(
     private suspend fun uploadImageToFirebase(postID: String, uri: Uri): String {
         try {
             val storageRef =
-                storage.reference.child("posts/$postID/${System.currentTimeMillis()}_${uri.lastPathSegment}")
+                storage.reference.child(Constants.COLLECTION_NAME_POSTS + "/$postID/${System.currentTimeMillis()}_${uri.lastPathSegment}")
             storageRef.putFile(uri).await()
             return storageRef.downloadUrl.await().toString()
         } catch (e: Exception) {

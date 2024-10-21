@@ -1,10 +1,12 @@
 package com.arny.allfy.data.remote
 
+import android.net.Uri
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.repository.UserRepository
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -13,8 +15,10 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 class UserRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val storage: FirebaseStorage
 ) : UserRepository {
+
     override fun getUserDetails(userID: String): Flow<Response<User>> = callbackFlow {
         Response.Loading
         val snapshotListener = firestore.collection("users").document(userID)
@@ -32,23 +36,40 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun setUserDetails(
-        userID: String,
-        name: String,
-        userName: String,
-        bio: String
-    ): Flow<Response<Boolean>> = flow {
+//    override fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>> = flow {
+//        emit(Response.Loading)
+//        try {
+//            firestore.collection(Constants.COLLECTION_NAME_USERS).document(user.userID)
+//                .set(user).await()
+//            user.imageUrl
+//
+//            if (imageUri != null) {
+//                storage.getReference(
+//                    Constants.COLLECTION_NAME_USERS + "/" + user.userID
+//                ).putFile(imageUri).await()
+//            }
+//
+//            emit(Response.Success(true))
+//        } catch (e: Exception) {
+//            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+//        }
+//    }
+
+    override fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
         try {
-            val user = mutableMapOf<String, String>()
-            user["name"] = name
-            user["userName"] = userName
-            user["bio"] = bio
-            firestore.collection(Constants.COLLECTION_NAME_USERS).document(userID)
-                .update(user as Map<String, Any>).await()
+            if (imageUri != null) {
+                val uploadTask =
+                    storage.getReference(Constants.COLLECTION_NAME_USERS + "/" + user.userID)
+                        .putFile(imageUri).await()
+                user.imageUrl = uploadTask.storage.downloadUrl.await().toString()
+            }
+            firestore.collection(Constants.COLLECTION_NAME_USERS).document(user.userID)
+                .set(user).await()
+
             emit(Response.Success(true))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
-
     }
 }

@@ -1,5 +1,7 @@
 package com.arny.allfy.domain.model
 
+import android.net.Uri
+
 data class User(
     var name: String = "",
     var userName: String = "",
@@ -11,5 +13,4 @@ data class User(
     var following: List<String> = emptyList(),
     var followers: List<String> = emptyList(),
     var totalPosts: String = "0",
-    var url: String = ""
 )

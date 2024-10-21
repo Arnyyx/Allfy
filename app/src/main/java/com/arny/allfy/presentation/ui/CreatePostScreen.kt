@@ -71,10 +71,7 @@ fun CreatePostScreen(
     when (val response = userViewModel.getUserData.value) {
         is Response.Loading -> {}
         is Response.Success -> {
-            if (response.data != null) {
-                user = response.data
-
-            }
+            user = response.data
         }
 
         is Response.Error -> {}
@@ -109,6 +106,7 @@ fun CreatePostScreen(
                         if (selectedImageUris.isNotEmpty()) {
                             val post = Post(
                                 userID = user.userID,
+                                username = user.userName,
                                 caption = captionText
                             )
                             postViewModel.uploadPost(post, selectedImageUris)

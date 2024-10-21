@@ -1,5 +1,6 @@
 package com.arny.allfy.presentation.ui
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,7 +37,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,24 +49,52 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
-import coil.compose.rememberImagePainter
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
+import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.common.BottomNavigation
 import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.presentation.viewmodel.PostViewModel
+import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
 
 @Composable
 fun FeedScreen(navController: NavController) {
-    val postViewModel: PostViewModel = hiltViewModel()
-    val state by postViewModel.state.collectAsState()
+    val userViewModel: UserViewModel = hiltViewModel()
+    userViewModel.getUserInfo()
 
-    LaunchedEffect(Unit) {
-        postViewModel.loadPosts(userID = "currentUserId") //TODO: Thay "currentUserId" bằng ID người dùng hiện tại
+    val user: User
+
+    when (val response = userViewModel.getUserData.value) {
+        is Response.Loading -> {
+            CircularProgressIndicator()
+        }
+
+        is Response.Success -> {
+            user = response.data
+            LoadPosts(user, navController)
+        }
+
+        is Response.Error -> {
+            Toast("Error: ${response.message}")
+            Log.d("TAG", "FeedScreen: ${response.message}")
+        }
     }
 
+
+
+    LaunchedEffect(Unit) {
+    }
+
+
+}
+
+@Composable
+fun LoadPosts(user: User, navController: NavController) {
+    val postViewModel: PostViewModel = hiltViewModel()
+    val state by postViewModel.state.collectAsState()
+    postViewModel.loadPosts(userID = user.userID)
     Scaffold(
         bottomBar = { BottomNavigation(BottomNavigationItem.Profile, navController) }
     ) { paddingValues ->
@@ -120,7 +148,6 @@ fun FeedScreen(navController: NavController) {
         }
     }
 
-
 }
 
 @Composable
@@ -150,7 +177,7 @@ fun PostItem(post: Post, onPostClick: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "post.username",
+                    text = post.username,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
@@ -168,8 +195,7 @@ fun PostItem(post: Post, onPostClick: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(300.dp),
-
-                    ) { page ->
+                ) { page ->
                     Image(
                         painter = rememberAsyncImagePainter(post.imageUrls[page]),
                         contentDescription = "Post Image",

@@ -9,5 +9,5 @@ class GetAllPosts @Inject constructor(
 ) {
     //    operator fun invoke(userID: String) = repository.getAllPosts(userID)
     operator fun invoke(userID: String, lastVisible: Post? = null, limit: Int = 10) =
-        repository.getAllPosts(userID)
+        repository.getAllPosts(userID, lastVisible, limit)
 }
