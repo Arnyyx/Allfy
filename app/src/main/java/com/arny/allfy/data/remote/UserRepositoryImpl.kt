@@ -21,7 +21,7 @@ class UserRepositoryImpl @Inject constructor(
 
     override fun getUserDetails(userID: String): Flow<Response<User>> = callbackFlow {
         Response.Loading
-        val snapshotListener = firestore.collection("users").document(userID)
+        val snapshotListener = firestore.collection(Constants.COLLECTION_NAME_USERS).document(userID)
             .addSnapshotListener { snapshot, e ->
                 val response = if (snapshot != null) {
                     val user = snapshot.toObject(User::class.java)

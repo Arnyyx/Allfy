@@ -13,6 +13,7 @@ import com.arny.allfy.domain.usecase.Authentication.FirebaseSignOut
 import com.arny.allfy.domain.usecase.Authentication.FirebaseSignUp
 import com.arny.allfy.domain.usecase.Authentication.IsUserAuthenticated
 import com.arny.allfy.domain.usecase.Post.GetAllPosts
+import com.arny.allfy.domain.usecase.Post.GetPost
 import com.arny.allfy.domain.usecase.Post.PostUseCases
 import com.arny.allfy.domain.usecase.Post.UploadPost
 import com.arny.allfy.domain.usecase.User.GetUserDetails
@@ -98,8 +99,7 @@ class AllfyModule {
     @Provides
     fun providePostUseCases(repository: PostRepository) = PostUseCases(
         getAllPosts = GetAllPosts(repository),
-        uploadPost = UploadPost(repository)
+        uploadPost = UploadPost(repository),
+        getPost = GetPost(repository)
     )
-
-
 }

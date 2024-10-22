@@ -3,9 +3,11 @@ package com.arny.allfy.data.remote
 import android.net.Uri
 import android.util.Log
 import com.arny.allfy.domain.model.Post
+import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
@@ -65,9 +67,31 @@ class PostRepositoryImpl @Inject constructor(
                 .set(postWithImages.copy(id = postID))
                 .await()
 
+            firestore.collection(Constants.COLLECTION_NAME_USERS).document(post.userID)
+                .update("postsIDs", FieldValue.arrayUnion(postID))
+                .await()
+
             emit(Response.Success(true))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+        }
+    }
+
+    override fun getPost(postID: String): Flow<Response<Post>> = callbackFlow {
+        Response.Loading
+        val snapshotListener =
+            firestore.collection(Constants.COLLECTION_NAME_POSTS).document(postID)
+                .addSnapshotListener { snapshot, e ->
+                    val response = if (snapshot != null) {
+                        val post = snapshot.toObject(Post::class.java)
+                        Response.Success(post!!)
+                    } else {
+                        Response.Error(e?.message ?: e.toString())
+                    }
+                    trySend(response).isSuccess
+                }
+        awaitClose {
+            snapshotListener.remove()
         }
     }
 

@@ -21,7 +21,10 @@ import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.utils.Screens
 
 @Composable
-fun SplashScreen(navController: NavController, authViewModel: AuthViewModel) {
+fun SplashScreen(
+    navController: NavController,
+    authViewModel: AuthViewModel
+) {
     val authValue = authViewModel.isUserAuthenticated
     val scale = remember {
         Animatable(0f)

@@ -41,9 +41,8 @@ import com.arny.allfy.utils.Response
 @Composable
 fun EditProfileScreen(
     onBackClick: () -> Unit,
+    userViewModel: UserViewModel
 ) {
-    val userViewModel: UserViewModel = hiltViewModel()
-
     userViewModel.getUserInfo()
 
     when (val response = userViewModel.getUserData.value) {

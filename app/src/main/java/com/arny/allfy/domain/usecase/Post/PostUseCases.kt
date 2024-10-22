@@ -1,7 +1,8 @@
 package com.arny.allfy.domain.usecase.Post
 
-class PostUseCases (
+class PostUseCases(
     val getAllPosts: GetAllPosts,
-    val uploadPost: UploadPost
-){
+    val uploadPost: UploadPost,
+    val getPost: GetPost,
+) {
 }

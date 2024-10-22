@@ -21,6 +21,8 @@ import com.arny.allfy.presentation.ui.SettingsScreen
 import com.arny.allfy.presentation.ui.SignUpScreen
 import com.arny.allfy.presentation.ui.SplashScreen
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
+import com.arny.allfy.presentation.viewmodel.PostViewModel
+import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.ui.theme.AllfyTheme
 import com.arny.allfy.utils.Screens
 import dagger.hilt.android.AndroidEntryPoint
@@ -34,7 +36,9 @@ class MainActivity : ComponentActivity() {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     val navController = rememberNavController()
                     val authViewModel: AuthViewModel = hiltViewModel()
-                    AllfyApp(navController, authViewModel)
+                    val userViewModel: UserViewModel = hiltViewModel()
+                    val postViewModel: PostViewModel = hiltViewModel()
+                    AllfyApp(navController, authViewModel, userViewModel, postViewModel)
                 }
             }
         }
@@ -42,7 +46,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AllfyApp(navHostController: NavHostController, authViewModel: AuthViewModel) {
+fun AllfyApp(
+    navHostController: NavHostController,
+    authViewModel: AuthViewModel,
+    userViewModel: UserViewModel,
+    postViewModel: PostViewModel
+) {
     NavHost(navController = navHostController, startDestination = Screens.SplashScreen.route) {
         composable(Screens.LoginScreen.route) {
             LoginScreen(navHostController, authViewModel)
@@ -51,29 +60,25 @@ fun AllfyApp(navHostController: NavHostController, authViewModel: AuthViewModel)
             SignUpScreen(navHostController, authViewModel)
         }
         composable(Screens.FeedScreen.route) {
-            FeedScreen(navHostController)
+            FeedScreen(navHostController, userViewModel)
         }
         composable(Screens.SplashScreen.route) {
             SplashScreen(navController = navHostController, authViewModel)
         }
         composable(Screens.ProfileScreen.route) {
-            ProfileScreen(navHostController)
+            ProfileScreen(navHostController, userViewModel, postViewModel)
         }
         composable(Screens.SearchScreen.route) {
             SearchScreen(navHostController)
         }
         composable(Screens.EditProfileScreen.route) {
-            EditProfileScreen(onBackClick = { navHostController.popBackStack() }, )
+            EditProfileScreen(onBackClick = { navHostController.popBackStack() }, userViewModel)
         }
         composable(Screens.CreatePostScreen.route) {
-            CreatePostScreen(onBackClick = { navHostController.popBackStack() })
+            CreatePostScreen(navHostController, postViewModel, userViewModel)
         }
         composable(Screens.SettingsScreen.route) {
             SettingsScreen(navHostController, authViewModel)
         }
     }
 }
-
-//TODO change app icon, receive posts
-
-

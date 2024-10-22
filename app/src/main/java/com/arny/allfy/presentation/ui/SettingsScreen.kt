@@ -26,7 +26,8 @@ import com.arny.allfy.utils.Screens
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    navController: NavController, authViewModel: AuthViewModel
+    navController: NavController,
+    authViewModel: AuthViewModel
 ) {
     Scaffold(
         topBar = {

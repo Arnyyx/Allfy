@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
@@ -61,11 +62,10 @@ import com.arny.allfy.utils.Response
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreatePostScreen(
-    onBackClick: () -> Unit,
-    postViewModel: PostViewModel = hiltViewModel(),
+    navHostController: NavHostController,
+    postViewModel: PostViewModel,
+    userViewModel: UserViewModel,
 ) {
-
-    val userViewModel: UserViewModel = hiltViewModel()
     userViewModel.getUserInfo()
     var user = User()
     when (val response = userViewModel.getUserData.value) {
@@ -96,7 +96,9 @@ fun CreatePostScreen(
         TopAppBar(
             title = { Text("New Post") },
             navigationIcon = {
-                IconButton(onClick = onBackClick) {
+                IconButton(onClick = {
+                    navHostController.popBackStack()
+                }) {
                     Icon(Icons.Default.Close, contentDescription = "Cancel")
                 }
             },
@@ -216,7 +218,7 @@ fun CreatePostScreen(
             is Response.Success -> {
                 LaunchedEffect(response.data) {
                     if (response.data) {
-                        onBackClick()
+                        navHostController.popBackStack()
                     }
                 }
             }
@@ -234,12 +236,4 @@ fun CreatePostScreen(
             }
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewCreatePostScreen() {
-    CreatePostScreen(
-        onBackClick = {}
-    )
 }

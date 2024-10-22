@@ -60,10 +60,11 @@ import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
 
 @Composable
-fun FeedScreen(navController: NavController) {
-    val userViewModel: UserViewModel = hiltViewModel()
+fun FeedScreen(
+    navController: NavController,
+    userViewModel: UserViewModel
+) {
     userViewModel.getUserInfo()
-
     val user: User
 
     when (val response = userViewModel.getUserData.value) {
@@ -81,24 +82,17 @@ fun FeedScreen(navController: NavController) {
             Log.d("TAG", "FeedScreen: ${response.message}")
         }
     }
-
-
-
-    LaunchedEffect(Unit) {
-    }
-
-
 }
 
 @Composable
 fun LoadPosts(user: User, navController: NavController) {
     val postViewModel: PostViewModel = hiltViewModel()
-    val state by postViewModel.state.collectAsState()
-    postViewModel.loadPosts(userID = user.userID)
+    val state by postViewModel.getAllPostsState.collectAsState()
+    postViewModel.getAllPosts(userID = user.userID)
     Scaffold(
         bottomBar = { BottomNavigation(BottomNavigationItem.Profile, navController) }
     ) { paddingValues ->
-        if (state.isLoading && state.posts.isEmpty()) {
+        if (state.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -107,8 +101,16 @@ fun LoadPosts(user: User, navController: NavController) {
             ) {
                 CircularProgressIndicator()
             }
+        } else if (state.posts.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "No posts available")
+            }
         } else if (state.error.isNotBlank()) {
-            // Hiển thị thông báo lỗi
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -118,7 +120,6 @@ fun LoadPosts(user: User, navController: NavController) {
                 Text(text = state.error, color = Color.Red)
             }
         } else {
-            // Hiển thị danh sách bài đăng
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -128,11 +129,10 @@ fun LoadPosts(user: User, navController: NavController) {
                     PostItem(post = post, onPostClick = { })
                 }
 
-                // Tải thêm bài đăng khi cuộn đến cuối danh sách
-                if (!state.endReached && !state.isLoading) {
+                if (!state.endReached) {
                     item {
                         LaunchedEffect(Unit) {
-                            postViewModel.loadPosts(userID = "currentUserId")
+                            postViewModel.getAllPosts(userID = "currentUserId")
                         }
                         Box(
                             modifier = Modifier
@@ -147,7 +147,6 @@ fun LoadPosts(user: User, navController: NavController) {
             }
         }
     }
-
 }
 
 @Composable
