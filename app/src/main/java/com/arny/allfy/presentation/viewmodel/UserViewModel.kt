@@ -72,15 +72,18 @@ class UserViewModel @Inject constructor(
     private val _getUserData = mutableStateOf<Response<User>>(Response.Loading)
     val getUserData: State<Response<User>> = _getUserData
 
+    private val _getCurrentUser = mutableStateOf<Response<User>>(Response.Loading)
+    val getCurrentUser: State<Response<User>> = _getCurrentUser
+
     private val _updateProfileStatus = MutableStateFlow<Response<Boolean>>(Response.Success(false))
     val updateProfileStatus: StateFlow<Response<Boolean>> = _updateProfileStatus
 
-    fun getUserInfo() {
+    fun getCurrentUser() {
         viewModelScope.launch {
             if (userID != null) {
                 viewModelScope.launch {
                     userUseCases.getUserDetails(userID).collect {
-                        _getUserData.value = it
+                        _getCurrentUser.value = it
                     }
                 }
             }
@@ -91,6 +94,14 @@ class UserViewModel @Inject constructor(
         viewModelScope.launch {
             userUseCases.setUserDetails(updatedUser, imageUri).collect {
                 _updateProfileStatus.value = it
+            }
+        }
+    }
+
+    fun getUser(userID: String) {
+        viewModelScope.launch {
+            userUseCases.getUserDetails(userID).collect {
+                _getUserData.value = it
             }
         }
     }

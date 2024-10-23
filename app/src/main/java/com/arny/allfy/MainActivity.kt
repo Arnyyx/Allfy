@@ -15,6 +15,7 @@ import com.arny.allfy.presentation.ui.CreatePostScreen
 import com.arny.allfy.presentation.ui.EditProfileScreen
 import com.arny.allfy.presentation.ui.FeedScreen
 import com.arny.allfy.presentation.ui.LoginScreen
+import com.arny.allfy.presentation.ui.PostDetailScreen
 import com.arny.allfy.presentation.ui.ProfileScreen
 import com.arny.allfy.presentation.ui.SearchScreen
 import com.arny.allfy.presentation.ui.SettingsScreen
@@ -24,6 +25,7 @@ import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.ui.theme.AllfyTheme
+import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screens
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -79,6 +81,20 @@ fun AllfyApp(
         }
         composable(Screens.SettingsScreen.route) {
             SettingsScreen(navHostController, authViewModel)
+        }
+        composable("postDetail/{postID}") { backStackEntry ->
+            val postID = backStackEntry.arguments?.getString("postID")
+            val post = postID?.let { postViewModel.getPostDetail(it) }
+            if (post != null) {
+                PostDetailScreen(
+                    post = post,
+                    navController = navHostController
+                )
+            } else {
+                //TODO Handle post not found
+            }
+
+
         }
     }
 }

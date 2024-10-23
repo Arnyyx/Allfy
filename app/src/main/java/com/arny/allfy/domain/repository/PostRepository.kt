@@ -14,5 +14,6 @@ interface PostRepository {
     ): Flow<Response<List<Post>>>
 
     fun uploadPost(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>>
-    fun getPost(postID: String): Flow<Response<Post>>
+    fun getPostByID(postID: String): Flow<Response<Post>>
+     suspend fun updatePost(post: Post)
 }

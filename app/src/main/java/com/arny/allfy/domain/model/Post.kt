@@ -7,6 +7,6 @@ data class Post(
     val imageUrls: List<String> = emptyList(),
     val caption: String = "",
     val timestamp: Long = System.currentTimeMillis(),
-    val likes: Int = 0,
+    val likes: List<String> = emptyList(),
     val comments: Int = 0
 )

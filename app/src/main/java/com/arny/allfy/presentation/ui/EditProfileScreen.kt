@@ -43,7 +43,7 @@ fun EditProfileScreen(
     onBackClick: () -> Unit,
     userViewModel: UserViewModel
 ) {
-    userViewModel.getUserInfo()
+    userViewModel.getCurrentUser()
 
     when (val response = userViewModel.getUserData.value) {
         is Response.Loading -> {

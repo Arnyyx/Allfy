@@ -66,7 +66,7 @@ fun CreatePostScreen(
     postViewModel: PostViewModel,
     userViewModel: UserViewModel,
 ) {
-    userViewModel.getUserInfo()
+    userViewModel.getCurrentUser()
     var user = User()
     when (val response = userViewModel.getUserData.value) {
         is Response.Loading -> {}

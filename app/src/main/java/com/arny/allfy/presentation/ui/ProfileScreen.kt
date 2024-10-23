@@ -4,6 +4,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,7 +57,6 @@ import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.common.BottomNavigation
-import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
@@ -64,10 +64,12 @@ import com.arny.allfy.utils.Screens
 
 @Composable
 fun ProfileScreen(
-    navController: NavController, userViewModel: UserViewModel, postViewModel: PostViewModel
+    navController: NavController,
+    userViewModel: UserViewModel,
+    postViewModel: PostViewModel
 ) {
-    userViewModel.getUserInfo()
-    when (val response = userViewModel.getUserData.value) {
+    userViewModel.getCurrentUser()
+    when (val response = userViewModel.getCurrentUser.value) {
         is Response.Loading -> {
             CircularProgressIndicator()
         }
@@ -125,9 +127,13 @@ fun ProfileScreen(navController: NavController, user: User, postViewModel: PostV
             Row(
                 modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically
             ) {
-                Image(
-                    painter = rememberAsyncImagePainter(user.imageUrl),
-                    contentDescription = "Profile Picture",
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(user.imageUrl)
+                        .placeholder(R.drawable.ic_user)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Post Image",
                     modifier = Modifier
                         .size(80.dp)
                         .clip(CircleShape),
@@ -150,7 +156,7 @@ fun ProfileScreen(navController: NavController, user: User, postViewModel: PostV
             Row(
                 modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround
             ) {
-                StatisticItem("Posts", user.totalPosts)
+                StatisticItem("Posts", user.postsIDs.size.toString())
                 StatisticItem("Followers", user.followers.size.toString())
                 StatisticItem("Following", user.following.size.toString())
             }
@@ -169,13 +175,14 @@ fun ProfileScreen(navController: NavController, user: User, postViewModel: PostV
             Spacer(modifier = Modifier.height(16.dp))
 
             // Posts
-            PostsGrid(user.postsIDs, postViewModel)
+            PostsGrid(navController, user.postsIDs, postViewModel)
         }
     }
 }
 
 @Composable
 fun PostsGrid(
+    navController: NavController,
     userPostIds: List<String>,
     postViewModel: PostViewModel,
     modifier: Modifier = Modifier
@@ -207,6 +214,12 @@ fun PostsGrid(
                 modifier = Modifier
                     .aspectRatio(1f)
                     .fillMaxWidth()
+                    .clickable {
+                        val post = loadedPosts[postId]
+                        if (post != null) {
+                            navController.navigate("postDetail/${post.id}")
+                        }
+                    }
             ) {
                 when (val post = loadedPosts[postId]) {
                     null -> {
@@ -257,6 +270,8 @@ fun PostsGrid(
 
         else -> {} // Loading state is handled by individual items
     }
+
+
 }
 
 @Composable

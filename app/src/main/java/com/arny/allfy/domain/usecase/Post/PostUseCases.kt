@@ -3,6 +3,7 @@ package com.arny.allfy.domain.usecase.Post
 class PostUseCases(
     val getAllPosts: GetAllPosts,
     val uploadPost: UploadPost,
-    val getPost: GetPost,
+    val getPostByID: GetPostByID,
+    val toggleLikePost: ToggleLikePostUseCase
 ) {
 }

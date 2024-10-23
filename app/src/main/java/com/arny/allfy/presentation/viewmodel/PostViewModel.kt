@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @HiltViewModel
@@ -78,9 +79,9 @@ class PostViewModel @Inject constructor(
         }
     }
 
-//    fun getPost(postID: String) {
+//    fun getPostByID(postID: String) {
 //        viewModelScope.launch {
-//            postUseCases.getPost(postID).collect {
+//            postUseCases.getPostByID(postID).collect {
 //                _getPostState.value = it
 //            }
 //        }
@@ -93,7 +94,7 @@ class PostViewModel @Inject constructor(
 
     fun getPost(postId: String) {
         viewModelScope.launch {
-            postUseCases.getPost(postId).collect { response ->
+            postUseCases.getPostByID(postId).collect { response ->
                 when (response) {
                     is Response.Success -> {
                         response.data?.let { post ->
@@ -114,5 +115,53 @@ class PostViewModel @Inject constructor(
         }
     }
 
+    fun getPostDetail(postId: String): Post? {
+        return loadedPosts[postId] ?: runBlocking {
+            var resultPost: Post? = null
+            postUseCases.getPostByID(postId).collect { response ->
+                when (response) {
+                    is Response.Success -> {
+                        resultPost = response.data
+                        loadedPosts[postId] = resultPost!!
+                    }
+
+                    is Response.Error -> {
+                    }
+
+                    is Response.Loading -> {
+                    }
+                }
+            }
+            resultPost
+        }
+    }
+
+    private val _postsLikeState = MutableStateFlow(PostState())
+    val postsLikeState: StateFlow<PostState> = _postsLikeState
+
+    fun toggleLikePost(postID: String, userID: String) {
+        viewModelScope.launch {
+            postUseCases.toggleLikePost(postID, userID).collect { response ->
+                when (response) {
+                    is Response.Success -> {
+                        val updatedPost = response.data
+                        _postsLikeState.value = _postsLikeState.value.copy(
+                            posts = _postsLikeState.value.posts.map {
+                                if (it.id == postID) updatedPost else it
+                            }
+                        )
+                    }
+
+                    is Response.Error -> {
+                        // Xử lý lỗi nếu cần
+                    }
+
+                    is Response.Loading -> {
+                        // Hiển thị trạng thái loading nếu cần
+                    }
+                }
+            }
+        }
+    }
 
 }

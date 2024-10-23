@@ -77,7 +77,7 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getPost(postID: String): Flow<Response<Post>> = callbackFlow {
+    override fun getPostByID(postID: String): Flow<Response<Post>> = callbackFlow {
         Response.Loading
         val snapshotListener =
             firestore.collection(Constants.COLLECTION_NAME_POSTS).document(postID)
@@ -94,6 +94,20 @@ class PostRepositoryImpl @Inject constructor(
             snapshotListener.remove()
         }
     }
+
+    override suspend fun updatePost(post: Post) {
+        try {
+            firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(post.id) // Sử dụng ID của post để xác định tài liệu cần cập nhật
+                .set(post) // Cập nhật toàn bộ tài liệu với dữ liệu từ đối tượng post
+                .await() // Chờ cho quá trình cập nhật hoàn thành
+            Log.d("PostRepositoryImpl", "Post updated successfully")
+        } catch (e: Exception) {
+            Log.e("PostRepositoryImpl", "Error updating post: ${e.localizedMessage}")
+            throw e // Ném ngoại lệ để xử lý tiếp tục ở nơi gọi hàm nếu cần
+        }
+    }
+
 
     private suspend fun uploadImageToFirebase(postID: String, uri: Uri): String {
         try {

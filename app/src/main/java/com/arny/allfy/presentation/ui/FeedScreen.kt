@@ -54,6 +54,7 @@ import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.common.BottomNavigation
+import com.arny.allfy.presentation.common.PostItem
 import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
@@ -64,12 +65,17 @@ fun FeedScreen(
     navController: NavController,
     userViewModel: UserViewModel
 ) {
-    userViewModel.getUserInfo()
+    userViewModel.getCurrentUser()
     val user: User
 
-    when (val response = userViewModel.getUserData.value) {
+    when (val response = userViewModel.getCurrentUser.value) {
         is Response.Loading -> {
-            CircularProgressIndicator()
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
         }
 
         is Response.Success -> {
@@ -139,143 +145,11 @@ fun LoadPosts(user: User, navController: NavController) {
                                 .fillMaxWidth()
                                 .padding(16.dp),
                             contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
+                        ) { CircularProgressIndicator() }
                     }
                 }
             }
         }
     }
-}
-
-@Composable
-fun PostItem(post: Post, onPostClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .clickable { onPostClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent
-        ),
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .padding(8.dp)
-            ) {
-                Image(
-                    painter = rememberAsyncImagePainter(R.drawable.ic_logo),
-                    contentDescription = "User Avatar",
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = post.username,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            }
-
-            // Carousel ảnh
-            if (post.imageUrls.isNotEmpty()) {
-                val pagerState = rememberPagerState(
-                    initialPage = 0,
-                    initialPageOffsetFraction = 0f,
-                    pageCount = { post.imageUrls.size }
-                )
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp),
-                ) { page ->
-                    Image(
-                        painter = rememberAsyncImagePainter(post.imageUrls[page]),
-                        contentDescription = "Post Image",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                // Chỉ số trang
-                if (post.imageUrls.size > 1) {
-                    Text(
-                        text = "${pagerState.currentPage + 1}/${post.imageUrls.size}",
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .padding(8.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
-
-            // Caption
-            if (post.caption.isNotBlank()) {
-                Text(
-                    text = post.caption,
-                    modifier = Modifier
-                        .padding(8.dp)
-                )
-            }
-
-            // Actions: Like, Comment, Share
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row {
-                    IconButton(onClick = { /* TODO: Implement Like */ }) {
-                        Icon(
-                            imageVector = Icons.Filled.FavoriteBorder,
-                            contentDescription = "Like"
-                        )
-                    }
-                    IconButton(onClick = { /* TODO: Implement Comment */ }) {
-                        Icon(
-                            imageVector = Icons.Default.MailOutline,
-                            contentDescription = "Comment"
-                        )
-                    }
-                }
-                IconButton(onClick = { /* TODO: Implement Share */ }) {
-                    Icon(
-                        imageVector = Icons.Filled.Share,
-                        contentDescription = "Share"
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Preview()
-@Composable
-fun PostItemPreview() {
-    val samplePost = Post(
-        id = "1",
-        userID = "user1",
-        imageUrls = listOf(
-            "https://example.com/image1.jpg",
-            "https://example.com/image2.jpg"
-        ),
-        caption = "This is a sample post caption.",
-        timestamp = System.currentTimeMillis(),
-        likes = 120,
-        comments = 30
-    )
-    PostItem(post = samplePost, onPostClick = {})
 }
 
