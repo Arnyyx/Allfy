@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -45,13 +46,16 @@ fun EditProfileScreen(
 ) {
     userViewModel.getCurrentUser()
 
-    when (val response = userViewModel.getUserData.value) {
+    when (val response = userViewModel.getCurrentUser.value) {
         is Response.Loading -> {
             Spacer(modifier = Modifier.height(16.dp))
-            CircularProgressIndicator(
-                color = MaterialTheme.colorScheme.primary,
-//                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
         }
 
         is Response.Success -> {
@@ -75,7 +79,7 @@ fun EditProfileScreen(
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun EditProfile(onBackClick: () -> Unit, initialUser: User, viewModel: UserViewModel) {
+private fun EditProfile(onBackClick: () -> Unit, initialUser: User, userViewModel: UserViewModel) {
     var user by remember { mutableStateOf(initialUser) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -96,7 +100,7 @@ private fun EditProfile(onBackClick: () -> Unit, initialUser: User, viewModel: U
                 },
                 actions = {
                     TextButton(onClick = {
-                        viewModel.updateUserProfile(user, selectedImageUri)
+                        userViewModel.updateUserProfile(user, selectedImageUri)
 //                        onBackClick()
                     }) {
                         Text("Save")
@@ -145,36 +149,34 @@ private fun EditProfile(onBackClick: () -> Unit, initialUser: User, viewModel: U
 
             EditProfileField("Username", user.userName) { user = user.copy(userName = it) }
             EditProfileField("Bio", user.bio) { user = user.copy(bio = it) }
-            EditProfileField("Email", user.email ?: "") { user = user.copy(email = it) }
+            EditProfileField("Email", user.email) { user = user.copy(email = it) }
 
 
-        when (val response = viewModel.updateProfileStatus.value) {
-            is Response.Loading -> {
-                Spacer(modifier = Modifier.height(16.dp))
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+            when (val response = userViewModel.updateProfileStatus.value) {
+                is Response.Loading -> {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    CircularProgressIndicator()
+                }
 
-            is Response.Success -> {
-                LaunchedEffect(response.data) {
-                    if (response.data) {
-                        onBackClick()
+                is Response.Success -> {
+                    LaunchedEffect(response.data) {
+                        if (response.data) {
+                            onBackClick()
+                        }
                     }
                 }
-            }
 
-            is Response.Error -> {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = response.message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier
-                        .padding(start = 16.dp, end = 16.dp)
-                )
+                is Response.Error -> {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = response.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .padding(start = 16.dp, end = 16.dp)
+                    )
+                }
             }
-        }
         }
     }
 }

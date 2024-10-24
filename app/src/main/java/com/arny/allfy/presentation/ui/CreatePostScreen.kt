@@ -47,9 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.arny.allfy.R
@@ -58,6 +56,186 @@ import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
+//
+//@OptIn(ExperimentalMaterial3Api::class)
+//@Composable
+//fun CreatePostScreen(
+//    navHostController: NavHostController,
+//    postViewModel: PostViewModel,
+//    userViewModel: UserViewModel,
+//) {
+//    userViewModel.getCurrentUser()
+//    var user = User()
+//    when (val response = userViewModel.getUserData.value) {
+//        is Response.Loading -> {}
+//        is Response.Success -> {
+//            user = response.data
+//        }
+//
+//        is Response.Error -> {}
+//    }
+//
+//    var captionText by remember { mutableStateOf("") }
+//    var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+//
+//    val launcher = rememberLauncherForActivityResult(
+//        contract = ActivityResultContracts.GetMultipleContents()
+//    ) { uris: List<Uri> ->
+//        selectedImageUris = uris
+//    }
+//    val pagerState = rememberPagerState(
+//        initialPage = 0,
+//        initialPageOffsetFraction = 0f,
+//        pageCount = { selectedImageUris.size }
+//    )
+//
+//    Column(modifier = Modifier.fillMaxSize()) {
+//        // Top Bar
+//        TopAppBar(
+//            title = { Text("New Post") },
+//            navigationIcon = {
+//                IconButton(onClick = {
+//                    navHostController.popBackStack()
+//                }) {
+//                    Icon(Icons.Default.Close, contentDescription = "Cancel")
+//                }
+//            },
+//            actions = {
+//                TextButton(
+//                    onClick = {
+//                        if (selectedImageUris.isNotEmpty()) {
+//                            val post = Post(
+//                                postOwnerID = user.userID,
+//                                postOwnerUsername = user.userName,
+//                                postOwnerImageUrl = user.imageUrl,
+//                                caption = captionText
+//                            )
+//                            postViewModel.uploadPost(post, selectedImageUris)
+//                        }
+//                    },
+//                    enabled = selectedImageUris.isNotEmpty()
+//                ) {
+//                    Text("Share", fontWeight = FontWeight.Bold)
+//                }
+//            }
+//        )
+//
+//        Box(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .height(500.dp)
+//                .clickable { launcher.launch("image/*") },
+//            contentAlignment = Alignment.Center
+//        ) {
+//            if (selectedImageUris.isNotEmpty()) {
+//                HorizontalPager(
+//                    state = pagerState,
+//                    modifier = Modifier.fillMaxSize()
+//                ) { page ->
+//                    Image(
+//                        painter = rememberAsyncImagePainter(selectedImageUris[page]),
+//                        contentDescription = "Selected Image ${page + 1}",
+//                        modifier = Modifier.fillMaxSize(),
+//                        contentScale = ContentScale.Crop
+//                    )
+//                }
+//
+//                // Page count
+//                if (selectedImageUris.size > 1) {
+//                    Text(
+//                        text = "${pagerState.currentPage + 1}/${selectedImageUris.size}",
+//                        color = MaterialTheme.colorScheme.onBackground,
+//                        modifier = Modifier
+//                            .align(Alignment.BottomEnd)
+//                            .padding(8.dp)
+//                            .background(
+//                                color = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
+//                                shape = RoundedCornerShape(16.dp)
+//                            )
+//                            .padding(horizontal = 8.dp, vertical = 4.dp)
+//                    )
+//                }
+//            } else {
+//                Column(
+//                    horizontalAlignment = Alignment.CenterHorizontally
+//                ) {
+//                    Image(
+//                        painter = painterResource(id = R.drawable.placehoder_image),
+//                        contentDescription = "Placeholder Image",
+//                        modifier = Modifier.size(100.dp)
+//                    )
+//                    Spacer(modifier = Modifier.height(8.dp))
+//                    Text("Tap to select images")
+//                }
+//            }
+//        }
+//
+//        // Caption Input
+//        TextField(
+//            value = captionText,
+//            onValueChange = { captionText = it },
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(16.dp),
+//            placeholder = { Text("Write a caption...") },
+//            maxLines = 5,
+//            colors = TextFieldDefaults.colors(
+//                focusedContainerColor = Color.Transparent,
+//                unfocusedContainerColor = Color.Transparent,
+//                disabledContainerColor = Color.Transparent,
+//                errorContainerColor = Color.Transparent,
+//            )
+//        )
+//
+//        // Action Buttons
+//        Row(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(16.dp),
+//            horizontalArrangement = Arrangement.SpaceBetween
+//        ) {
+//            IconButton(onClick = { /* TODO: Implement tagging people */ }) {
+//                Icon(Icons.Default.Person, contentDescription = "Tag People")
+//            }
+//            IconButton(onClick = { /* TODO: Implement adding location */ }) {
+//                Icon(Icons.Default.LocationOn, contentDescription = "Add Location")
+//            }
+//            IconButton(onClick = { /* TODO: Implement advanced settings */ }) {
+//                Icon(Icons.Default.MoreVert, contentDescription = "More Options")
+//            }
+//        }
+//
+//        when (val response = postViewModel.uploadPostSate.value) {
+//            is Response.Loading -> {
+//                Spacer(modifier = Modifier.height(16.dp))
+//                CircularProgressIndicator(
+//                    color = MaterialTheme.colorScheme.primary,
+//                    modifier = Modifier.align(Alignment.CenterHorizontally)
+//                )
+//            }
+//
+//            is Response.Success -> {
+//                LaunchedEffect(response.data) {
+//                    if (response.data) {
+//                        navHostController.popBackStack()
+//                    }
+//                }
+//            }
+//
+//            is Response.Error -> {
+//                Spacer(modifier = Modifier.height(16.dp))
+//                Text(
+//                    text = response.message,
+//                    color = MaterialTheme.colorScheme.error,
+//                    style = MaterialTheme.typography.bodySmall,
+//                    modifier = Modifier
+//                        .align(Alignment.CenterHorizontally)
+//                        .padding(start = 16.dp, end = 16.dp)
+//                )
+//            }
+//        }
+//    }
+//}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,17 +244,6 @@ fun CreatePostScreen(
     postViewModel: PostViewModel,
     userViewModel: UserViewModel,
 ) {
-    userViewModel.getCurrentUser()
-    var user = User()
-    when (val response = userViewModel.getUserData.value) {
-        is Response.Loading -> {}
-        is Response.Success -> {
-            user = response.data
-        }
-
-        is Response.Error -> {}
-    }
-
     var captionText by remember { mutableStateOf("") }
     var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
@@ -85,154 +252,192 @@ fun CreatePostScreen(
     ) { uris: List<Uri> ->
         selectedImageUris = uris
     }
+
     val pagerState = rememberPagerState(
         initialPage = 0,
         initialPageOffsetFraction = 0f,
         pageCount = { selectedImageUris.size }
     )
 
+    LaunchedEffect(Unit) {
+        userViewModel.getCurrentUser()
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top Bar
-        TopAppBar(
-            title = { Text("New Post") },
-            navigationIcon = {
-                IconButton(onClick = {
-                    navHostController.popBackStack()
-                }) {
-                    Icon(Icons.Default.Close, contentDescription = "Cancel")
-                }
-            },
-            actions = {
-                TextButton(
-                    onClick = {
-                        if (selectedImageUris.isNotEmpty()) {
-                            val post = Post(
-                                userID = user.userID,
-                                username = user.userName,
-                                caption = captionText
-                            )
-                            postViewModel.uploadPost(post, selectedImageUris)
-                        }
-                    },
-                    enabled = selectedImageUris.isNotEmpty()
-                ) {
-                    Text("Share", fontWeight = FontWeight.Bold)
-                }
-            }
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(500.dp)
-                .clickable { launcher.launch("image/*") },
-            contentAlignment = Alignment.Center
-        ) {
-            if (selectedImageUris.isNotEmpty()) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize()
-                ) { page ->
-                    Image(
-                        painter = rememberAsyncImagePainter(selectedImageUris[page]),
-                        contentDescription = "Selected Image ${page + 1}",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                // Page count
-                if (selectedImageUris.size > 1) {
-                    Text(
-                        text = "${pagerState.currentPage + 1}/${selectedImageUris.size}",
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(8.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            } else {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.placehoder_image),
-                        contentDescription = "Placeholder Image",
-                        modifier = Modifier.size(100.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Tap to select images")
-                }
-            }
-        }
-
-        // Caption Input
-        TextField(
-            value = captionText,
-            onValueChange = { captionText = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            placeholder = { Text("Write a caption...") },
-            maxLines = 5,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                disabledContainerColor = Color.Transparent,
-                errorContainerColor = Color.Transparent,
-            )
-        )
-
-        // Action Buttons
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            IconButton(onClick = { /* TODO: Implement tagging people */ }) {
-                Icon(Icons.Default.Person, contentDescription = "Tag People")
-            }
-            IconButton(onClick = { /* TODO: Implement adding location */ }) {
-                Icon(Icons.Default.LocationOn, contentDescription = "Add Location")
-            }
-            IconButton(onClick = { /* TODO: Implement advanced settings */ }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "More Options")
-            }
-        }
-
-        when (val response = postViewModel.uploadPostSate.value) {
+        when (val userResponse = userViewModel.getCurrentUser.value) {
             is Response.Loading -> {
-                Spacer(modifier = Modifier.height(16.dp))
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
 
             is Response.Success -> {
-                LaunchedEffect(response.data) {
-                    if (response.data) {
-                        navHostController.popBackStack()
+                val user = userResponse.data
+                // Only show create post UI when we have user data
+                TopAppBar(
+                    title = { Text("New Post") },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            navHostController.popBackStack()
+                        }) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel")
+                        }
+                    },
+                    actions = {
+                        TextButton(
+                            onClick = {
+                                if (selectedImageUris.isNotEmpty()) {
+                                    val post = Post(
+                                        postOwnerID = user.userID,
+                                        postOwnerUsername = user.userName,
+                                        postOwnerImageUrl = user.imageUrl,
+                                        caption = captionText
+                                    )
+                                    postViewModel.uploadPost(post, selectedImageUris)
+                                }
+                            },
+                            enabled = selectedImageUris.isNotEmpty()
+                        ) {
+                            Text("Share", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(500.dp)
+                        .clickable { launcher.launch("image/*") },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selectedImageUris.isNotEmpty()) {
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            Image(
+                                painter = rememberAsyncImagePainter(selectedImageUris[page]),
+                                contentDescription = "Selected Image ${page + 1}",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+
+                        if (selectedImageUris.size > 1) {
+                            Text(
+                                text = "${pagerState.currentPage + 1}/${selectedImageUris.size}",
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(8.dp)
+                                    .background(
+                                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
+                                        shape = RoundedCornerShape(16.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    } else {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.placehoder_image),
+                                contentDescription = "Placeholder Image",
+                                modifier = Modifier.size(100.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Tap to select images")
+                        }
+                    }
+                }
+
+                TextField(
+                    value = captionText,
+                    onValueChange = { captionText = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    placeholder = { Text("Write a caption...") },
+                    maxLines = 5,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        errorContainerColor = Color.Transparent,
+                    )
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(onClick = { /* TODO: Implement tagging people */ }) {
+                        Icon(Icons.Default.Person, contentDescription = "Tag People")
+                    }
+                    IconButton(onClick = { /* TODO: Implement adding location */ }) {
+                        Icon(Icons.Default.LocationOn, contentDescription = "Add Location")
+                    }
+                    IconButton(onClick = { /* TODO: Implement advanced settings */ }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More Options")
+                    }
+                }
+
+                // Handle post upload state
+                when (val uploadResponse = postViewModel.uploadPostSate.value) {
+                    is Response.Loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    is Response.Success -> {
+                        LaunchedEffect(uploadResponse.data) {
+                            if (uploadResponse.data) {
+                                navHostController.popBackStack()
+                            }
+                        }
+                    }
+                    is Response.Error -> {
+                        Text(
+                            text = uploadResponse.message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .align(Alignment.CenterHorizontally)
+                        )
                     }
                 }
             }
 
             is Response.Error -> {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = response.message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+                // Show error state when getting user data fails
+                Column(
                     modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(start = 16.dp, end = 16.dp)
-                )
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = userResponse.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    TextButton(onClick = {
+                        userViewModel.getCurrentUser()
+                    }) {
+                        Text("Retry")
+                    }
+                }
             }
         }
     }

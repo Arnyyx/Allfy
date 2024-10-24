@@ -15,12 +15,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
 import com.arny.allfy.domain.model.Post
+import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.PostItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostDetailScreen(
     post: Post,
+    currentUser: User,
     navController: NavController
 ) {
     Scaffold(
@@ -51,7 +53,9 @@ fun PostDetailScreen(
         ) {
             item {
                 PostItem(
-                    post = post, onPostClick = { /* Do nothing, we're already in detail */ })
+                    post = post,
+                    currentUser = currentUser,
+                    onPostClick = { /* Do nothing, we're already in detail */ })
             }
         }
     }

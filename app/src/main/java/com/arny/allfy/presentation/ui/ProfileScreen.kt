@@ -2,7 +2,6 @@ package com.arny.allfy.presentation.ui
 
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
@@ -110,7 +108,6 @@ fun ProfileScreen(navController: NavController, user: User, postViewModel: PostV
                 Icon(Icons.Default.Add, contentDescription = "New Post")
             }
             IconButton(onClick = {
-                // Navigate to settings screen
                 navController.navigate(Screens.SettingsScreen.route)
             }) {
                 Icon(Icons.Default.Menu, contentDescription = "Settings")
@@ -217,7 +214,7 @@ fun PostsGrid(
                     .clickable {
                         val post = loadedPosts[postId]
                         if (post != null) {
-                            navController.navigate("postDetail/${post.id}")
+                            navController.navigate("postDetail/${post.postID}")
                         }
                     }
             ) {

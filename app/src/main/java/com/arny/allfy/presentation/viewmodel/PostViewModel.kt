@@ -5,6 +5,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.util.copy
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.usecase.Post.PostUseCases
 import com.arny.allfy.presentation.state.PostState
@@ -21,45 +22,38 @@ import javax.inject.Inject
 class PostViewModel @Inject constructor(
     private val postUseCases: PostUseCases
 ) : ViewModel() {
-
-    private val _getPostState = mutableStateOf<Response<Post>>(Response.Loading)
-    val getPostState: State<Response<Post>> = _getPostState
-
-    private val _uploadPostSate = mutableStateOf<Response<Boolean>>(Response.Success(false))
-    val uploadPostSate: State<Response<Boolean>> = _uploadPostSate
-
-    private val _getAllPostsState = MutableStateFlow(PostState())
-    val getAllPostsState: StateFlow<PostState> = _getAllPostsState.asStateFlow()
+    private val _getFeedPostsState = MutableStateFlow(PostState())
+    val getFeedPostsState: StateFlow<PostState> = _getFeedPostsState.asStateFlow()
 
     private var lastVisiblePost: Post? = null
     private var isLoadingMore = false
 
-    fun getAllPosts(userID: String) {
-        if (_getAllPostsState.value.endReached || isLoadingMore) return
+    fun getFeedPosts(currentUserID: String) {
+        if (_getFeedPostsState.value.endReached || isLoadingMore) return
 
         isLoadingMore = true
-        _getAllPostsState.value = _getAllPostsState.value.copy(isLoading = true, error = "")
+        _getFeedPostsState.value = _getFeedPostsState.value.copy(isLoading = true, error = "")
 
         viewModelScope.launch {
-            postUseCases.getAllPosts(userID, lastVisiblePost).collect { response ->
+            postUseCases.getFeedPosts(currentUserID, lastVisiblePost).collect { response ->
                 when (response) {
                     is Response.Loading -> {
-                        _getAllPostsState.value = _getAllPostsState.value.copy(isLoading = true)
+                        _getFeedPostsState.value = _getFeedPostsState.value.copy(isLoading = true)
                     }
 
                     is Response.Success -> {
                         val newPosts = response.data
                         lastVisiblePost = newPosts.lastOrNull()
-                        _getAllPostsState.value = _getAllPostsState.value.copy(
+                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
                             isLoading = false,
-                            posts = _getAllPostsState.value.posts + newPosts,
-                            endReached = newPosts.size < 10 // Giả định limit = 10
+                            posts = _getFeedPostsState.value.posts + newPosts,
+                            endReached = newPosts.size < 10
                         )
                         isLoadingMore = false
                     }
 
                     is Response.Error -> {
-                        _getAllPostsState.value = _getAllPostsState.value.copy(
+                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
                             isLoading = false,
                             error = response.message
                         )
@@ -70,6 +64,8 @@ class PostViewModel @Inject constructor(
         }
     }
 
+    private val _uploadPostSate = mutableStateOf<Response<Boolean>>(Response.Success(false))
+    val uploadPostSate: State<Response<Boolean>> = _uploadPostSate
 
     fun uploadPost(post: Post, imageUris: List<Uri>) {
         viewModelScope.launch {
@@ -79,26 +75,18 @@ class PostViewModel @Inject constructor(
         }
     }
 
-//    fun getPostByID(postID: String) {
-//        viewModelScope.launch {
-//            postUseCases.getPostByID(postID).collect {
-//                _getPostState.value = it
-//            }
-//        }
-//    }
-
     private val _postsState = MutableStateFlow<Response<Map<String, Post>>>(Response.Loading)
     val postsState: StateFlow<Response<Map<String, Post>>> = _postsState.asStateFlow()
 
     private val loadedPosts = mutableMapOf<String, Post>()
 
-    fun getPost(postId: String) {
+    fun getPost(postID: String) {
         viewModelScope.launch {
-            postUseCases.getPostByID(postId).collect { response ->
+            postUseCases.getPostByID(postID).collect { response ->
                 when (response) {
                     is Response.Success -> {
                         response.data?.let { post ->
-                            loadedPosts[postId] = post
+                            loadedPosts[postID] = post
                             _postsState.value = Response.Success(loadedPosts.toMap())
                         }
                     }
@@ -115,14 +103,14 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    fun getPostDetail(postId: String): Post? {
-        return loadedPosts[postId] ?: runBlocking {
+    fun getPostDetail(postID: String): Post? {
+        return loadedPosts[postID] ?: runBlocking {
             var resultPost: Post? = null
-            postUseCases.getPostByID(postId).collect { response ->
+            postUseCases.getPostByID(postID).collect { response ->
                 when (response) {
                     is Response.Success -> {
                         resultPost = response.data
-                        loadedPosts[postId] = resultPost!!
+                        loadedPosts[postID] = resultPost!!
                     }
 
                     is Response.Error -> {
@@ -136,30 +124,36 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    private val _postsLikeState = MutableStateFlow(PostState())
-    val postsLikeState: StateFlow<PostState> = _postsLikeState
+    private val _postsLikeState = mutableStateOf<Response<Boolean>>(Response.Success(false))
+    val postsLikeState: State<Response<Boolean>> = _postsLikeState
 
-    fun toggleLikePost(postID: String, userID: String) {
+    //    fun toggleLikePost(post: Post, userID: String) {
+//        viewModelScope.launch {
+//            postUseCases.toggleLikePost(post, userID).collect {
+//                _postsLikeState.value = it
+//            }
+//        }
+//    }
+    fun toggleLikePost(post: Post, userID: String) {
         viewModelScope.launch {
-            postUseCases.toggleLikePost(postID, userID).collect { response ->
-                when (response) {
-                    is Response.Success -> {
-                        val updatedPost = response.data
-                        _postsLikeState.value = _postsLikeState.value.copy(
-                            posts = _postsLikeState.value.posts.map {
-                                if (it.id == postID) updatedPost else it
+            postUseCases.toggleLikePost(post, userID).collect { response ->
+                if (response is Response.Success) {
+                    val updatedPosts = _getFeedPostsState.value.posts.map { currentPost ->
+                        if (currentPost.postID == post.postID) {
+                            val isLiked = post.likes.contains(userID)
+                            val updatedLikes = if (isLiked) {
+                                post.likes.filterNot { it == userID }
+                            } else {
+                                post.likes + userID
                             }
-                        )
+                            currentPost.copy(likes = updatedLikes)
+                        } else {
+                            currentPost
+                        }
                     }
-
-                    is Response.Error -> {
-                        // Xử lý lỗi nếu cần
-                    }
-
-                    is Response.Loading -> {
-                        // Hiển thị trạng thái loading nếu cần
-                    }
+                    _getFeedPostsState.value = _getFeedPostsState.value.copy(posts = updatedPosts)
                 }
+                _postsLikeState.value = response
             }
         }
     }

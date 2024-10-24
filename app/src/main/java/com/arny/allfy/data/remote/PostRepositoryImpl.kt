@@ -3,7 +3,6 @@ package com.arny.allfy.data.remote
 import android.net.Uri
 import android.util.Log
 import com.arny.allfy.domain.model.Post
-import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
@@ -23,15 +22,15 @@ class PostRepositoryImpl @Inject constructor(
     private val storage: FirebaseStorage
 ) : PostRepository {
 
-    override fun getAllPosts(
-        userID: String,
+    override fun getFeedPosts(
+        currentUser: String,
         lastVisible: Post?,
         limit: Int
     ): Flow<Response<List<Post>>> = flow {
         emit(Response.Loading)
         try {
             val query = firestore.collection(Constants.COLLECTION_NAME_POSTS)
-                .whereNotEqualTo("userID", userID)
+                .whereNotEqualTo("postOwnerID", currentUser)
                 .orderBy("timestamp", Query.Direction.DESCENDING)
                 .limit(limit.toLong())
 
@@ -64,10 +63,10 @@ class PostRepositoryImpl @Inject constructor(
 
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
-                .set(postWithImages.copy(id = postID))
+                .set(postWithImages.copy(postID = postID))
                 .await()
 
-            firestore.collection(Constants.COLLECTION_NAME_USERS).document(post.userID)
+            firestore.collection(Constants.COLLECTION_NAME_USERS).document(post.postOwnerID)
                 .update("postsIDs", FieldValue.arrayUnion(postID))
                 .await()
 
@@ -95,16 +94,23 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun updatePost(post: Post) {
+    override fun updatePost(post: Post, userID: String): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
         try {
+            val isLiked = post.likes.contains(userID)
+            val updatedLikes = if (isLiked) {
+                post.likes - userID
+            } else {
+                post.likes + userID
+            }
+            val updatedPost = post.copy(likes = updatedLikes)
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
-                .document(post.id) // Sử dụng ID của post để xác định tài liệu cần cập nhật
-                .set(post) // Cập nhật toàn bộ tài liệu với dữ liệu từ đối tượng post
-                .await() // Chờ cho quá trình cập nhật hoàn thành
-            Log.d("PostRepositoryImpl", "Post updated successfully")
+                .document(post.postID)
+                .set(updatedPost)
+                .await()
+            emit(Response.Success(true))
         } catch (e: Exception) {
-            Log.e("PostRepositoryImpl", "Error updating post: ${e.localizedMessage}")
-            throw e // Ném ngoại lệ để xử lý tiếp tục ở nơi gọi hàm nếu cần
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 

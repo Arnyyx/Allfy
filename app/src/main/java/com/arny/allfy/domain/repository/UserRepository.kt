@@ -6,6 +6,6 @@ import com.arny.allfy.utils.Response
 import kotlinx.coroutines.flow.Flow
 
 interface UserRepository {
-    fun getUserDetails(userID: String): Flow<Response<User>>
+    fun getUserByID(userID: String): Flow<Response<User>>
     fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>>
 }

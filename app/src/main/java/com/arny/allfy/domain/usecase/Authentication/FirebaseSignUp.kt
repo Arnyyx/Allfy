@@ -9,5 +9,4 @@ class FirebaseSignUp @Inject constructor(
 ) {
     operator fun invoke(userName: String, email: String, password: String) =
         repository.firebaseSignUp(userName, email, password)
-
 }

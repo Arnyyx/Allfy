@@ -63,8 +63,7 @@ class AuthenticationRepositoryImpl @Inject constructor(
             val authResult = auth.createUserWithEmailAndPassword(email, password).await()
             val userID = authResult.user?.uid ?: throw Exception("Failed to get user ID")
 
-            val user =
-                User(userName = userName, email = email, password = password, userID = userID)
+            val user = User(userID = userID, userName = userName, email = email)
 
             firestore.collection(Constants.COLLECTION_NAME_USERS).document(userID).set(user).await()
 

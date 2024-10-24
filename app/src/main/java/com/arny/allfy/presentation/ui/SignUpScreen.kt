@@ -56,8 +56,8 @@ fun SignUpScreen(navController: NavHostController, authViewModel: AuthViewModel)
             Spacer(modifier = Modifier.height(32.dp))
 
             AutofillTextField(
-                value = emailState.value,
-                onValueChange = { emailState.value = it },
+                value = userNameState.value,
+                onValueChange = { userNameState.value = it },
                 label = { Text("Username") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -75,8 +75,8 @@ fun SignUpScreen(navController: NavHostController, authViewModel: AuthViewModel)
             Spacer(modifier = Modifier.height(16.dp))
 
             AutofillTextField(
-                value = userNameState.value,
-                onValueChange = { userNameState.value = it },
+                value = emailState.value,
+                onValueChange = { emailState.value = it },
                 label = { Text("Email") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),

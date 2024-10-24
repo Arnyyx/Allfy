@@ -62,7 +62,7 @@ fun AllfyApp(
             SignUpScreen(navHostController, authViewModel)
         }
         composable(Screens.FeedScreen.route) {
-            FeedScreen(navHostController, userViewModel)
+            FeedScreen(navHostController, userViewModel, postViewModel)
         }
         composable(Screens.SplashScreen.route) {
             SplashScreen(navController = navHostController, authViewModel)
@@ -85,16 +85,23 @@ fun AllfyApp(
         composable("postDetail/{postID}") { backStackEntry ->
             val postID = backStackEntry.arguments?.getString("postID")
             val post = postID?.let { postViewModel.getPostDetail(it) }
-            if (post != null) {
-                PostDetailScreen(
-                    post = post,
-                    navController = navHostController
-                )
-            } else {
-                //TODO Handle post not found
+            userViewModel.getCurrentUser()
+            when (val response = userViewModel.getCurrentUser.value) {
+                is Response.Success -> {
+                    val user = response.data
+                    if (post != null) {
+                        PostDetailScreen(
+                            post = post,
+                            currentUser = user,
+                            navController = navHostController
+                        )
+                    } else {
+                        //TODO Handle post not found
+                    }
+                }
+
+                else -> {}
             }
-
-
         }
     }
 }

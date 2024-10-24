@@ -19,7 +19,7 @@ class UserRepositoryImpl @Inject constructor(
     private val storage: FirebaseStorage
 ) : UserRepository {
 
-    override fun getUserDetails(userID: String): Flow<Response<User>> = callbackFlow {
+    override fun getUserByID(userID: String): Flow<Response<User>> = callbackFlow {
         Response.Loading
         val snapshotListener = firestore.collection(Constants.COLLECTION_NAME_USERS).document(userID)
             .addSnapshotListener { snapshot, e ->
@@ -35,25 +35,6 @@ class UserRepositoryImpl @Inject constructor(
             snapshotListener.remove()
         }
     }
-
-//    override fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>> = flow {
-//        emit(Response.Loading)
-//        try {
-//            firestore.collection(Constants.COLLECTION_NAME_USERS).document(user.userID)
-//                .set(user).await()
-//            user.imageUrl
-//
-//            if (imageUri != null) {
-//                storage.getReference(
-//                    Constants.COLLECTION_NAME_USERS + "/" + user.userID
-//                ).putFile(imageUri).await()
-//            }
-//
-//            emit(Response.Success(true))
-//        } catch (e: Exception) {
-//            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
-//        }
-//    }
 
     override fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)

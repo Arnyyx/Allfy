@@ -28,7 +28,7 @@ package com.arny.allfy.presentation.viewmodel
 //    fun getUserInfo() {
 //        if (userID != null) {
 //            viewModelScope.launch {
-//                userUseCases.getUserDetails(userID).collect {
+//                userUseCases.getUserByID(userID).collect {
 //                    _getUserData.value = it
 //                }
 //            }
@@ -65,7 +65,7 @@ import androidx.compose.runtime.State
 @HiltViewModel
 class UserViewModel @Inject constructor(
     private val userUseCases: UserUseCases,
-    private val auth: FirebaseAuth
+    auth: FirebaseAuth
 ) : ViewModel() {
     private val userID = auth.currentUser?.uid
 
@@ -74,9 +74,6 @@ class UserViewModel @Inject constructor(
 
     private val _getCurrentUser = mutableStateOf<Response<User>>(Response.Loading)
     val getCurrentUser: State<Response<User>> = _getCurrentUser
-
-    private val _updateProfileStatus = MutableStateFlow<Response<Boolean>>(Response.Success(false))
-    val updateProfileStatus: StateFlow<Response<Boolean>> = _updateProfileStatus
 
     fun getCurrentUser() {
         viewModelScope.launch {
@@ -89,6 +86,9 @@ class UserViewModel @Inject constructor(
             }
         }
     }
+
+    private val _updateProfileStatus = mutableStateOf<Response<Boolean>>(Response.Success(false))
+    val updateProfileStatus: State<Response<Boolean>> = _updateProfileStatus
 
     fun updateUserProfile(updatedUser: User, imageUri: Uri?) {
         viewModelScope.launch {
@@ -105,24 +105,4 @@ class UserViewModel @Inject constructor(
             }
         }
     }
-
-//    fun updateProfilePicture(imageUri: String) {
-//        viewModelScope.launch {
-//            _updateProfileStatus.value = Response.Loading
-//            try {
-//                val result = userRepository.updateProfilePicture(imageUri)
-//                if (result) {
-//                    _updateProfileStatus.value = Response.Success(true)
-//                    // Refresh user data after successful update
-//                    getUserInfo()
-//                } else {
-//                    _updateProfileStatus.value =
-//                        Response.Error("Failed to update profile picture")
-//                }
-//            } catch (e: Exception) {
-//                _updateProfileStatus.value =
-//                    Response.Error(e.message ?: "An unknown error occurred")
-//            }
-//        }
-//    }
 }

@@ -6,5 +6,5 @@ import javax.inject.Inject
 class GetUserDetails @Inject constructor(
     private val repository: UserRepository
 ) {
-    operator fun invoke(userID: String) = repository.getUserDetails(userID)
+    operator fun invoke(userID: String) = repository.getUserByID(userID)
 }
