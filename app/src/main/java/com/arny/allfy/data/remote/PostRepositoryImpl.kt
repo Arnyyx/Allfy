@@ -7,6 +7,8 @@ import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
+import java.util.UUID
 import javax.inject.Inject
 
 class PostRepositoryImpl @Inject constructor(
@@ -123,25 +126,54 @@ class PostRepositoryImpl @Inject constructor(
             if (snapshot.exists()) {
                 val commentsData =
                     snapshot.get("comments") as? List<HashMap<String, Any>> ?: emptyList()
+                if (commentsData.isEmpty()) {
+                    emit(Response.Success(emptyList()))
+                    return@flow
+                }
 
-                val comments = commentsData.mapNotNull { commentMap ->
+                val baseComments = commentsData.mapNotNull { commentMap ->
                     try {
-                        Comment(
-                            commentID = commentMap["commentID"] as? String
-                                ?: return@mapNotNull null,
-                            commentOwnerID = commentMap["commentOwnerID"] as? String
-                                ?: return@mapNotNull null,
-                            commentOwnerUserName = commentMap["commentOwnerUserName"] as? String
-                                ?: return@mapNotNull null,
-                            content = commentMap["content"] as? String ?: return@mapNotNull null,
-                            timestamp = (commentMap["timestamp"] as? com.google.firebase.Timestamp)?.toDate()?.time
-                                ?: System.currentTimeMillis(),
+                        Triple(
+                            commentMap["commentID"] as? String ?: return@mapNotNull null,
+                            commentMap["commentOwnerID"] as? String ?: return@mapNotNull null,
+                            Comment(
+                                commentID = commentMap["commentID"] as? String
+                                    ?: return@mapNotNull null,
+                                commentOwnerID = commentMap["commentOwnerID"] as? String
+                                    ?: return@mapNotNull null,
+                                content = commentMap["content"] as? String
+                                    ?: return@mapNotNull null,
+                                timestamp = commentMap["timestamp"] as? Timestamp
+                                    ?: Timestamp.now()
+                            )
                         )
                     } catch (e: Exception) {
                         null
                     }
+                }
+
+                val userIds = baseComments.map { it.second }.distinct()
+
+                val userSnapshots = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                    .whereIn(FieldPath.documentId(), userIds)
+                    .get()
+                    .await()
+
+                val userDataMap = userSnapshots.documents.associate { doc ->
+                    doc.id to Pair(
+                        doc.getString("userName"),
+                        doc.getString("imageUrl")
+                    )
+                }
+
+                val fullComments = baseComments.map { (_, userId, baseComment) ->
+                    val (userName, imageUrl) = userDataMap[userId] ?: ("" to "")
+                    baseComment.copy(
+                        commentOwnerUserName = userName ?: "",
+                        commentOwnerProfilePicture = imageUrl ?: ""
+                    )
                 }.sortedByDescending { it.timestamp }
-                emit(Response.Success(comments))
+                emit(Response.Success(fullComments))
             } else {
                 emit(Response.Success(emptyList()))
             }
@@ -158,15 +190,16 @@ class PostRepositoryImpl @Inject constructor(
         emit(Response.Loading)
 
         try {
-            val comment = Comment(
-                commentID = "",
-                content = content,
-                commentOwnerID = commentOwnerID,
-                timestamp = System.currentTimeMillis()
+            val newComment = hashMapOf(
+                "commentID" to UUID.randomUUID().toString(),
+                "commentOwnerID" to commentOwnerID,
+                "content" to content,
+                "timestamp" to Timestamp.now()
             )
+
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
-                .update("comments", FieldValue.arrayUnion(comment))
+                .update("comments", FieldValue.arrayUnion(newComment))
                 .await()
             emit(Response.Success(true))
         } catch (e: Exception) {

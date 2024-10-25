@@ -54,7 +54,7 @@ fun FeedScreen(
         }
 
         is Response.Error -> {
-            Toast("Error: ${response.message}")
+            Toast("FeedScreen: ${response.message}")
         }
     }
 }

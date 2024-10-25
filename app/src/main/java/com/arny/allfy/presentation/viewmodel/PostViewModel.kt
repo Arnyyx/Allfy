@@ -103,29 +103,6 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    fun getPostDetail(postID: String): Post? {
-        return loadedPosts[postID] ?: runBlocking {
-            var resultPost: Post? = null
-            postUseCases.getPostByID(postID).collect { response ->
-                when (response) {
-                    is Response.Success -> {
-                        resultPost = response.data
-                        loadedPosts[postID] = resultPost!!
-                    }
-
-                    is Response.Error -> {
-                        _postsState.value = response
-                    }
-
-                    is Response.Loading -> {
-                        _postsState.value = response
-                    }
-                }
-            }
-            resultPost
-        }
-    }
-
     private val _postsLikeState = mutableStateOf<Response<Boolean>>(Response.Success(false))
     val postsLikeState: State<Response<Boolean>> = _postsLikeState
 
@@ -154,27 +131,14 @@ class PostViewModel @Inject constructor(
     }
 
     //Comment
-    private val _comments = MutableStateFlow<List<Comment>>(emptyList())
-    val comments: StateFlow<List<Comment>> = _comments.asStateFlow()
+    private val _comments = MutableStateFlow<Response<List<Comment>>>(Response.Loading)
+    val comments: StateFlow<Response<List<Comment>>> = _comments.asStateFlow()
 
     fun loadComments(postID: String) {
         viewModelScope.launch {
             postUseCases.getComments(postID).collect { response ->
-                when (response) {
-                    is Response.Error -> {
-                        _comments.value = emptyList()
-                    }
-
-                    Response.Loading -> {
-                        _comments.value = emptyList()
-                    }
-
-                    is Response.Success -> {
-                        _comments.value = response.data
-                    }
-                }
+                _comments.value = response
             }
-
         }
     }
 
