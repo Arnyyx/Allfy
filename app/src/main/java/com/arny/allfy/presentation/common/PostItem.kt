@@ -32,10 +32,12 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,6 +45,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,33 +59,34 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
+import com.arny.allfy.presentation.ui.PostDetailScreen
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.utils.Response
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostItem(
     post: Post,
     currentUser: User,
-    onPostClick: () -> Unit,
+    navController: NavController
 ) {
     val postViewModel: PostViewModel = hiltViewModel()
 
-    // Theo dõi trạng thái liked cục bộ
     val (isLocalLiked, setLocalLiked) = remember {
         mutableStateOf(post.likes.contains(currentUser.userID))
     }
 
-    // Theo dõi số lượng like cục bộ
     val (localLikeCount, setLocalLikeCount) = remember {
         mutableIntStateOf(post.likes.size)
     }
 
-    // Animation cho icon
     val scale by animateFloatAsState(
         targetValue = if (isLocalLiked) 1.2f else 1f,
         animationSpec = spring(
@@ -90,7 +95,6 @@ fun PostItem(
         )
     )
 
-    // Animation cho số lượng like
     val animatedLikeCount by animateIntAsState(
         targetValue = localLikeCount,
         animationSpec = spring(
@@ -101,11 +105,14 @@ fun PostItem(
 
     val likeState by postViewModel.postsLikeState
 
+    val showComments = remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clickable { onPostClick() },
+            .clickable {
+            },
         colors = CardDefaults.cardColors(
             containerColor = Color.Transparent
         ),
@@ -198,7 +205,8 @@ fun PostItem(
                             onClick = {
                                 setLocalLiked(!isLocalLiked)
                                 setLocalLikeCount(if (!isLocalLiked) localLikeCount + 1 else localLikeCount - 1)
-                                post.likes = if (isLocalLiked) post.likes + currentUser.userID else post.likes - currentUser.userID
+                                post.likes =
+                                    if (isLocalLiked) post.likes + currentUser.userID else post.likes - currentUser.userID
                                 postViewModel.toggleLikePost(post, currentUser.userID)
                             },
                             enabled = likeState !is Response.Loading
@@ -236,12 +244,21 @@ fun PostItem(
                         }
                     }
 
-                    IconButton(onClick = { /* TODO: Implement Comment */ }) {
+                    //Comment
+                    IconButton(onClick = {
+                        showComments.value = true
+                    }) {
                         Icon(
-                            imageVector = Icons.Default.MailOutline,
+                            painterResource(R.drawable.ic_comment),
                             contentDescription = "Comment"
                         )
                     }
+                    CommentBottomSheet(
+                        post = post,
+                        currentUser = currentUser,
+                        isVisible = showComments.value,
+                        onDismiss = { showComments.value = false }
+                    )
                 }
 
                 IconButton(onClick = { /* TODO: Implement Share */ }) {

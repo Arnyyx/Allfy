@@ -5,7 +5,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.room.util.copy
+import com.arny.allfy.domain.model.Comment
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.usecase.Post.PostUseCases
 import com.arny.allfy.presentation.state.PostState
@@ -80,7 +80,7 @@ class PostViewModel @Inject constructor(
 
     private val loadedPosts = mutableMapOf<String, Post>()
 
-    fun getPost(postID: String) {
+    fun getPostByID(postID: String) {
         viewModelScope.launch {
             postUseCases.getPostByID(postID).collect { response ->
                 when (response) {
@@ -114,9 +114,11 @@ class PostViewModel @Inject constructor(
                     }
 
                     is Response.Error -> {
+                        _postsState.value = response
                     }
 
                     is Response.Loading -> {
+                        _postsState.value = response
                     }
                 }
             }
@@ -127,13 +129,6 @@ class PostViewModel @Inject constructor(
     private val _postsLikeState = mutableStateOf<Response<Boolean>>(Response.Success(false))
     val postsLikeState: State<Response<Boolean>> = _postsLikeState
 
-    //    fun toggleLikePost(post: Post, userID: String) {
-//        viewModelScope.launch {
-//            postUseCases.toggleLikePost(post, userID).collect {
-//                _postsLikeState.value = it
-//            }
-//        }
-//    }
     fun toggleLikePost(post: Post, userID: String) {
         viewModelScope.launch {
             postUseCases.toggleLikePost(post, userID).collect { response ->
@@ -154,6 +149,42 @@ class PostViewModel @Inject constructor(
                     _getFeedPostsState.value = _getFeedPostsState.value.copy(posts = updatedPosts)
                 }
                 _postsLikeState.value = response
+            }
+        }
+    }
+
+    //Comment
+    private val _comments = MutableStateFlow<List<Comment>>(emptyList())
+    val comments: StateFlow<List<Comment>> = _comments.asStateFlow()
+
+    fun loadComments(postID: String) {
+        viewModelScope.launch {
+            postUseCases.getComments(postID).collect { response ->
+                when (response) {
+                    is Response.Error -> {
+                        _comments.value = emptyList()
+                    }
+
+                    Response.Loading -> {
+                        _comments.value = emptyList()
+                    }
+
+                    is Response.Success -> {
+                        _comments.value = response.data
+                    }
+                }
+            }
+
+        }
+    }
+
+    private val _addCommentState = mutableStateOf<Response<Boolean>>(Response.Success(false))
+    val addCommentState: State<Response<Boolean>> = _addCommentState
+
+    fun addComment(postID: String, userID: String, content: String) {
+        viewModelScope.launch {
+            postUseCases.addComment(postID, userID, content).collect { response ->
+                _addCommentState.value = response
             }
         }
     }

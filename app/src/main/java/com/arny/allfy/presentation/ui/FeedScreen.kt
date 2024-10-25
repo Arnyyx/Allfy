@@ -121,7 +121,7 @@ fun LoadPosts(
                         PostItem(
                             post = post,
                             currentUser = currentUser,
-                            onPostClick = { }
+                            navController = navController
                         )
                     }
 

@@ -11,6 +11,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.presentation.ui.CreatePostScreen
 import com.arny.allfy.presentation.ui.EditProfileScreen
 import com.arny.allfy.presentation.ui.FeedScreen
@@ -84,23 +85,8 @@ fun AllfyApp(
         }
         composable("postDetail/{postID}") { backStackEntry ->
             val postID = backStackEntry.arguments?.getString("postID")
-            val post = postID?.let { postViewModel.getPostDetail(it) }
-            userViewModel.getCurrentUser()
-            when (val response = userViewModel.getCurrentUser.value) {
-                is Response.Success -> {
-                    val user = response.data
-                    if (post != null) {
-                        PostDetailScreen(
-                            post = post,
-                            currentUser = user,
-                            navController = navHostController
-                        )
-                    } else {
-                        //TODO Handle post not found
-                    }
-                }
-
-                else -> {}
+            if (postID != null) {
+                PostDetailScreen(postID, navHostController, postViewModel, userViewModel)
             }
         }
     }

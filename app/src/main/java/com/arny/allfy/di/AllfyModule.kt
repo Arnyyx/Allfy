@@ -12,6 +12,8 @@ import com.arny.allfy.domain.usecase.Authentication.FirebaseSignIn
 import com.arny.allfy.domain.usecase.Authentication.FirebaseSignOut
 import com.arny.allfy.domain.usecase.Authentication.FirebaseSignUp
 import com.arny.allfy.domain.usecase.Authentication.IsUserAuthenticated
+import com.arny.allfy.domain.usecase.Post.AddComment
+import com.arny.allfy.domain.usecase.Post.GetComments
 import com.arny.allfy.domain.usecase.Post.GetFeedPosts
 import com.arny.allfy.domain.usecase.Post.GetPostByID
 import com.arny.allfy.domain.usecase.Post.PostUseCases
@@ -102,6 +104,8 @@ class AllfyModule {
         getFeedPosts = GetFeedPosts(repository),
         uploadPost = UploadPost(repository),
         getPostByID = GetPostByID(repository),
-        toggleLikePost = ToggleLikePost(repository)
+        toggleLikePost = ToggleLikePost(repository),
+        addComment = AddComment(repository),
+        getComments = GetComments(repository)
     )
 }

@@ -171,7 +171,6 @@ fun ProfileScreen(navController: NavController, user: User, postViewModel: PostV
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Posts
             PostsGrid(navController, user.postsIDs, postViewModel)
         }
     }
@@ -184,17 +183,14 @@ fun PostsGrid(
     postViewModel: PostViewModel,
     modifier: Modifier = Modifier
 ) {
-    // State để track posts đã load
     var loadedPosts by remember { mutableStateOf<Map<String, Post>>(emptyMap()) }
 
-    // Effect để load tất cả posts một lần
     LaunchedEffect(userPostIds) {
         userPostIds.forEach { postId ->
-            postViewModel.getPost(postId)
+            postViewModel.getPostByID(postId)
         }
     }
 
-    // Observe state changes
     val postsState = postViewModel.postsState.collectAsState()
 
     LazyVerticalGrid(
@@ -205,7 +201,7 @@ fun PostsGrid(
     ) {
         items(
             items = userPostIds,
-            key = { it } // Use postId as key for better performance
+            key = { it }
         ) { postId ->
             Box(
                 modifier = Modifier
@@ -220,7 +216,6 @@ fun PostsGrid(
             ) {
                 when (val post = loadedPosts[postId]) {
                     null -> {
-                        // Loading placeholder
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -249,7 +244,6 @@ fun PostsGrid(
         }
     }
 
-    // Handle state changes
     val context = LocalContext.current
     when (val state = postsState.value) {
         is Response.Success -> {
@@ -265,7 +259,7 @@ fun PostsGrid(
             }
         }
 
-        else -> {} // Loading state is handled by individual items
+        else -> {}
     }
 
 

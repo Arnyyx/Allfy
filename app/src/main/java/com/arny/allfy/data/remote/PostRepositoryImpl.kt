@@ -2,6 +2,7 @@ package com.arny.allfy.data.remote
 
 import android.net.Uri
 import android.util.Log
+import com.arny.allfy.domain.model.Comment
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.utils.Constants
@@ -112,6 +113,66 @@ class PostRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
+    }
+
+    override fun getComments(postID: String): Flow<Response<List<Comment>>> = flow {
+        emit(Response.Loading)
+        try {
+            val snapshot = firestore.collection("posts").document(postID).get().await()
+
+            if (snapshot.exists()) {
+                val commentsData =
+                    snapshot.get("comments") as? List<HashMap<String, Any>> ?: emptyList()
+
+                val comments = commentsData.mapNotNull { commentMap ->
+                    try {
+                        Comment(
+                            commentID = commentMap["commentID"] as? String
+                                ?: return@mapNotNull null,
+                            commentOwnerID = commentMap["commentOwnerID"] as? String
+                                ?: return@mapNotNull null,
+                            commentOwnerUserName = commentMap["commentOwnerUserName"] as? String
+                                ?: return@mapNotNull null,
+                            content = commentMap["content"] as? String ?: return@mapNotNull null,
+                            timestamp = (commentMap["timestamp"] as? com.google.firebase.Timestamp)?.toDate()?.time
+                                ?: System.currentTimeMillis(),
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                }.sortedByDescending { it.timestamp }
+                emit(Response.Success(comments))
+            } else {
+                emit(Response.Success(emptyList()))
+            }
+        } catch (e: Exception) {
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+        }
+    }
+
+    override fun addComment(
+        postID: String,
+        commentOwnerID: String,
+        content: String
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+
+        try {
+            val comment = Comment(
+                commentID = "",
+                content = content,
+                commentOwnerID = commentOwnerID,
+                timestamp = System.currentTimeMillis()
+            )
+            firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .update("comments", FieldValue.arrayUnion(comment))
+                .await()
+            emit(Response.Success(true))
+        } catch (e: Exception) {
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+        }
+
     }
 
 
