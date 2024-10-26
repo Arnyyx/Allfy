@@ -84,9 +84,8 @@ fun PostDetailScreen(
                             ) {
                                 item {
                                     PostItem(
-                                        post = post,
+                                        initialPost = post,
                                         currentUser = currentUser,
-                                        navController = navController
                                     )
                                 }
                             }

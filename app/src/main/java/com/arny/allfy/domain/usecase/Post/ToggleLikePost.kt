@@ -9,8 +9,8 @@ import javax.inject.Inject
 class ToggleLikePost @Inject constructor(
     private val repository: PostRepository
 ) {
-    operator fun invoke(post: Post, userID: String): Flow<Response<Boolean>> {
-        return repository.updatePost(post, userID)
+    operator fun invoke(post: Post, userID: String): Flow<Response<Post>> {
+        return repository.toggleLikePost(post, userID)
     }
 }
 

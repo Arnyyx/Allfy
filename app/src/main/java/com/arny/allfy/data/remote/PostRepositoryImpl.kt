@@ -98,7 +98,7 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun updatePost(post: Post, userID: String): Flow<Response<Boolean>> = flow {
+    override fun toggleLikePost(post: Post, userID: String): Flow<Response<Post>> = flow {
         emit(Response.Loading)
         try {
             val isLiked = post.likes.contains(userID)
@@ -107,12 +107,13 @@ class PostRepositoryImpl @Inject constructor(
             } else {
                 post.likes + userID
             }
-            val updatedPost = post.copy(likes = updatedLikes)
+            val uploadPost = post.copy(likes = updatedLikes)
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(post.postID)
-                .set(updatedPost)
+                .set(uploadPost)
                 .await()
-            emit(Response.Success(true))
+
+            emit(Response.Success(uploadPost))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }

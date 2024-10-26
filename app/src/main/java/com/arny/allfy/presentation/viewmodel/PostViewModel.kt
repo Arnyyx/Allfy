@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @HiltViewModel
@@ -103,32 +102,42 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    private val _postsLikeState = mutableStateOf<Response<Boolean>>(Response.Success(false))
-    val postsLikeState: State<Response<Boolean>> = _postsLikeState
+    //Like
+    private val _likeLoadingStates = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val likeLoadingStates: StateFlow<Map<String, Boolean>> = _likeLoadingStates.asStateFlow()
+
+    private val _currentPost = MutableStateFlow<Post?>(null)
+    val currentPost: StateFlow<Post?> = _currentPost.asStateFlow()
 
     fun toggleLikePost(post: Post, userID: String) {
         viewModelScope.launch {
+            _likeLoadingStates.value += (post.postID to true)
+
             postUseCases.toggleLikePost(post, userID).collect { response ->
-                if (response is Response.Success) {
-                    val updatedPosts = _getFeedPostsState.value.posts.map { currentPost ->
-                        if (currentPost.postID == post.postID) {
-                            val isLiked = post.likes.contains(userID)
-                            val updatedLikes = if (isLiked) {
-                                post.likes.filterNot { it == userID }
-                            } else {
-                                post.likes + userID
+                when (response) {
+                    is Response.Success -> {
+                        val updatedPost = response.data
+                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
+                            posts = _getFeedPostsState.value.posts.map {
+                                if (it.postID == updatedPost.postID) updatedPost else it
                             }
-                            currentPost.copy(likes = updatedLikes)
-                        } else {
-                            currentPost
-                        }
+                        )
+                        _currentPost.value = updatedPost
+                        _likeLoadingStates.value -= post.postID
                     }
-                    _getFeedPostsState.value = _getFeedPostsState.value.copy(posts = updatedPosts)
+                    is Response.Error -> {
+                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
+                            error = response.message
+                        )
+                        _likeLoadingStates.value -= post.postID
+                    }
+                    is Response.Loading -> {
+                    }
                 }
-                _postsLikeState.value = response
             }
         }
     }
+
 
     //Comment
     private val _comments = MutableStateFlow<Response<List<Comment>>>(Response.Loading)

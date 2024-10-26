@@ -9,5 +9,5 @@ data class Post(
     val caption: String = "",
     val timestamp: Long = System.currentTimeMillis(),
     var likes: List<String> = emptyList(),
-    val comments: List<Comment> = emptyList()
+    val comments: List<Comment> = emptyList(),
 )
