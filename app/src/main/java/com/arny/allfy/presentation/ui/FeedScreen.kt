@@ -1,33 +1,35 @@
 package com.arny.allfy.presentation.ui
 
+import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshState
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.arny.allfy.domain.model.User
-import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.common.BottomNavigation
+import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.common.PostItem
 import com.arny.allfy.presentation.common.Toast
+import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
@@ -35,14 +37,20 @@ import com.arny.allfy.utils.Response
 @Composable
 fun FeedScreen(
     navController: NavController,
-    userViewModel: UserViewModel = hiltViewModel(),
-    postViewModel: PostViewModel = hiltViewModel()
+    userViewModel: UserViewModel,
+    postViewModel: PostViewModel,
+    authViewModel: AuthViewModel
 ) {
     LaunchedEffect(Unit) {
         userViewModel.getCurrentUser()
     }
+    val currentUser by userViewModel.currentUser.collectAsState()
+    LaunchedEffect(currentUser) {
+        Log.d("FeedScreen", "Current user changed: $currentUser")
+    }
 
-    when (val response = userViewModel.getCurrentUser.value) {
+
+    when (currentUser) {
         is Response.Loading -> {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -53,16 +61,17 @@ fun FeedScreen(
         }
 
         is Response.Success -> {
-            val currentUser = response.data
-            LoadPosts(currentUser, postViewModel, navController)
+            val user = (currentUser as Response.Success<User>).data
+            LoadPosts(user, postViewModel, navController)
         }
 
         is Response.Error -> {
-            Toast("FeedScreen: ${response.message}")
+            Toast("Error: ${(currentUser as Response.Error).message}")
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoadPosts(
     currentUser: User,
@@ -71,7 +80,8 @@ fun LoadPosts(
 ) {
     val state by postViewModel.getFeedPostsState.collectAsState()
 
-    LaunchedEffect(Unit) {
+    // Load posts initially
+    LaunchedEffect(currentUser) {
         postViewModel.getFeedPosts(currentUser.userID)
     }
 
@@ -113,6 +123,7 @@ fun LoadPosts(
             }
 
             else -> {
+
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()

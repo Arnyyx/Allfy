@@ -8,20 +8,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.utils.Screens
-
-//@Composable
-//@Preview
-//fun SettingPreview() {
-//    val navController = NavController(LocalContext.current)
-//    SettingsScreen(navController)
-//}
+import com.google.firebase.auth.FirebaseAuth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +26,19 @@ fun SettingsScreen(
     navController: NavController,
     authViewModel: AuthViewModel
 ) {
+    val authState = authViewModel.authState.observeAsState()
+    LaunchedEffect(authState.value) {
+        when (authState.value) {
+            is AuthState.Unauthenticated -> {
+                navController.navigate(Screens.LoginScreen.route) {
+                    popUpTo(Screens.SettingsScreen.route) { inclusive = true }
+                }
+            }
+
+            else -> Unit
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -72,11 +82,6 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         authViewModel.signOut()
-                        navController.navigate(Screens.LoginScreen.route) {
-                            popUpTo(Screens.FeedScreen.route) {
-                                inclusive = true
-                            }
-                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()

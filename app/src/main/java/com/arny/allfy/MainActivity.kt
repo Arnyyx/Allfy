@@ -3,6 +3,9 @@ package com.arny.allfy
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -11,7 +14,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.presentation.ui.CreatePostScreen
 import com.arny.allfy.presentation.ui.EditProfileScreen
 import com.arny.allfy.presentation.ui.FeedScreen
@@ -26,7 +28,6 @@ import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.ui.theme.AllfyTheme
-import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screens
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -55,7 +56,10 @@ fun AllfyApp(
     userViewModel: UserViewModel,
     postViewModel: PostViewModel
 ) {
-    NavHost(navController = navHostController, startDestination = Screens.SplashScreen.route) {
+    NavHost(
+        navController = navHostController,
+        startDestination = Screens.SplashScreen.route,
+    ) {
         composable(Screens.LoginScreen.route) {
             LoginScreen(navHostController, authViewModel)
         }
@@ -63,7 +67,7 @@ fun AllfyApp(
             SignUpScreen(navHostController, authViewModel)
         }
         composable(Screens.FeedScreen.route) {
-            FeedScreen(navHostController, userViewModel, postViewModel)
+            FeedScreen(navHostController, userViewModel, postViewModel, authViewModel)
         }
         composable(Screens.SplashScreen.route) {
             SplashScreen(navController = navHostController, authViewModel)
@@ -71,6 +75,10 @@ fun AllfyApp(
         composable(Screens.ProfileScreen.route) {
             ProfileScreen(navHostController, userViewModel, postViewModel)
         }
+//        composable("userProfile/{userId}") { backStackEntry ->
+//            val userID = backStackEntry.arguments?.getString("userID") ?: ""
+//            ProfileScreen(userID, navHostController, userViewModel, postViewModel)
+//        }
         composable(Screens.SearchScreen.route) {
             SearchScreen(navHostController)
         }
@@ -89,5 +97,9 @@ fun AllfyApp(
                 PostDetailScreen(postID, navHostController, postViewModel, userViewModel)
             }
         }
+//        composable("userProfile/{userId}") { backStackEntry ->
+//            val userId = backStackEntry.arguments?.getString("userId") ?: ""
+//            UserProfileScreen(userId, navController, userViewModel, postViewModel)
+//        }
     }
 }

@@ -40,14 +40,14 @@ fun PostDetailScreen(
         postViewModel.getPostByID(postID)
     }
 
-    when (userViewModel.getCurrentUser.value) {
+    when (userViewModel.currentUser.value) {
         is Response.Loading -> CircularProgressIndicator()
         is Response.Error -> {
-            Toast("Error: ${(userViewModel.getCurrentUser.value as Response.Error).message}")
+            Toast("Error: ${(userViewModel.currentUser.value as Response.Error).message}")
         }
 
         is Response.Success -> {
-            val currentUser = (userViewModel.getCurrentUser.value as Response.Success<User>).data
+            val currentUser = (userViewModel.currentUser.value as Response.Success<User>).data
             val postState by postViewModel.postsState.collectAsState()
             when (postState) {
                 Response.Loading -> {

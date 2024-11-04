@@ -66,14 +66,29 @@ fun ProfileScreen(
     userViewModel: UserViewModel,
     postViewModel: PostViewModel
 ) {
-    userViewModel.getCurrentUser()
-    when (val response = userViewModel.getCurrentUser.value) {
+    LaunchedEffect(Unit) {
+        userViewModel.getCurrentUser()
+    }
+    val currentUser by userViewModel.currentUser.collectAsState()
+
+    when (currentUser) {
         is Response.Loading -> {
-            CircularProgressIndicator()
+            Box(
+                modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
+        is Response.Error -> {
+            Toast.makeText(
+                LocalContext.current,
+                "Error: ${(currentUser as Response.Error).message}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
         is Response.Success -> {
-            val user = response.data
             Scaffold(bottomBar = {
                 BottomNavigation(
                     BottomNavigationItem.Profile,
@@ -86,15 +101,15 @@ fun ProfileScreen(
                         .background(MaterialTheme.colorScheme.background)
                         .padding(innerPadding)
                 ) {
-                    ProfileScreen(navController, user, postViewModel)
+                    ProfileScreen(
+                        navController,
+                        (currentUser as Response.Success<User>).data,
+                        postViewModel
+                    )
                 }
             }
         }
-
-        is Response.Error -> {}
     }
-
-
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

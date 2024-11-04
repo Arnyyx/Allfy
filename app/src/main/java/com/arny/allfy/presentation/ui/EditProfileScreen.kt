@@ -31,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.rememberAsyncImagePainter
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.User
@@ -46,7 +45,7 @@ fun EditProfileScreen(
 ) {
     userViewModel.getCurrentUser()
 
-    when (val response = userViewModel.getCurrentUser.value) {
+    when (val response = userViewModel.currentUser.value) {
         is Response.Loading -> {
             Spacer(modifier = Modifier.height(16.dp))
             Box(

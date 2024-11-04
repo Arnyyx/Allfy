@@ -56,9 +56,3 @@ fun BottomNavigation(selectedItem: BottomNavigationItem, navController: NavContr
 
     }
 }
-
-@Preview
-@Composable
-fun MyBottomBarPreview() {
-    BottomNavigation(BottomNavigationItem.Feed, rememberNavController())
-}

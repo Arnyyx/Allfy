@@ -11,6 +11,7 @@ import com.arny.allfy.domain.usecase.Authentication.FirebaseAuthState
 import com.arny.allfy.domain.usecase.Authentication.FirebaseSignIn
 import com.arny.allfy.domain.usecase.Authentication.FirebaseSignOut
 import com.arny.allfy.domain.usecase.Authentication.FirebaseSignUp
+import com.arny.allfy.domain.usecase.Authentication.GetCurrentUserID
 import com.arny.allfy.domain.usecase.Authentication.IsUserAuthenticated
 import com.arny.allfy.domain.usecase.Post.AddComment
 import com.arny.allfy.domain.usecase.Post.GetComments
@@ -70,7 +71,8 @@ class AllfyModule {
         firebaseAuthState = FirebaseAuthState(repositoryImpl),
         firebaseSignOut = FirebaseSignOut(repositoryImpl),
         firebaseSignIn = FirebaseSignIn(repositoryImpl),
-        firebaseSignUp = FirebaseSignUp(repositoryImpl)
+        firebaseSignUp = FirebaseSignUp(repositoryImpl),
+        getCurrentUserID = GetCurrentUserID(repositoryImpl)
     )
 
     @Singleton

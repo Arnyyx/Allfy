@@ -27,11 +27,23 @@ class PostViewModel @Inject constructor(
     private var lastVisiblePost: Post? = null
     private var isLoadingMore = false
 
-    fun getFeedPosts(currentUserID: String) {
-        if (_getFeedPostsState.value.endReached || isLoadingMore) return
+    fun getFeedPosts(currentUserID: String, forceRefresh: Boolean = false) {
+        // Reset pagination state if force refresh
+        if (forceRefresh) {
+            lastVisiblePost = null
+            isLoadingMore = false
+            _getFeedPostsState.value = _getFeedPostsState.value.copy(
+                posts = emptyList(),
+                endReached = false,
+                isLoading = true,
+                error = ""
+            )
+        }
+
+        // Return if we're at the end or already loading more, unless it's a force refresh
+        if (!forceRefresh && (_getFeedPostsState.value.endReached || isLoadingMore)) return
 
         isLoadingMore = true
-        _getFeedPostsState.value = _getFeedPostsState.value.copy(isLoading = true, error = "")
 
         viewModelScope.launch {
             postUseCases.getFeedPosts(currentUserID, lastVisiblePost).collect { response ->
@@ -43,10 +55,13 @@ class PostViewModel @Inject constructor(
                     is Response.Success -> {
                         val newPosts = response.data
                         lastVisiblePost = newPosts.lastOrNull()
+
                         _getFeedPostsState.value = _getFeedPostsState.value.copy(
                             isLoading = false,
-                            posts = _getFeedPostsState.value.posts + newPosts,
-                            endReached = newPosts.size < 10
+                            // If force refresh, use only new posts, otherwise append
+                            posts = if (forceRefresh) newPosts else _getFeedPostsState.value.posts + newPosts,
+                            endReached = newPosts.size < 10,
+                            error = ""
                         )
                         isLoadingMore = false
                     }
@@ -125,12 +140,14 @@ class PostViewModel @Inject constructor(
                         _currentPost.value = updatedPost
                         _likeLoadingStates.value -= post.postID
                     }
+
                     is Response.Error -> {
                         _getFeedPostsState.value = _getFeedPostsState.value.copy(
                             error = response.message
                         )
                         _likeLoadingStates.value -= post.postID
                     }
+
                     is Response.Loading -> {
                     }
                 }

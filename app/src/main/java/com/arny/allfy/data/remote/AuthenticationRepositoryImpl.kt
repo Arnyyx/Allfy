@@ -2,6 +2,7 @@ package com.arny.allfy.data.remote
 
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.repository.AuthenticationRepository
+import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
 import com.google.firebase.auth.FirebaseAuth
@@ -32,23 +33,33 @@ class AuthenticationRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun firebaseSignIn(email: String, password: String): Flow<Response<Boolean>> = flow {
+    override fun getCurrentUserID(): Flow<Response<String>> = flow {
         emit(Response.Loading)
         try {
-            auth.signInWithEmailAndPassword(email, password).await()
-            emit(Response.Success(true))
+            val userID = auth.currentUser?.uid ?: throw Exception("User ID not found")
+            emit(Response.Success(userID))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 
-    override fun firebaseSignOut(): Flow<Response<Boolean>> = flow {
+    override fun firebaseSignIn(email: String, password: String): Flow<AuthState> = flow {
+        emit(AuthState.Loading)
         try {
-            emit(Response.Loading)
-            auth.signOut()
-            emit(Response.Success(true))
+            auth.signInWithEmailAndPassword(email, password).await()
+            emit(AuthState.Authenticated)
         } catch (e: Exception) {
-            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+            emit(AuthState.Error(e.localizedMessage ?: "An Unexpected Error"))
+        }
+    }
+
+    override fun firebaseSignOut(): Flow<AuthState> = flow {
+        try {
+            emit(AuthState.Loading)
+            auth.signOut()
+            emit(AuthState.Unauthenticated)
+        } catch (e: Exception) {
+            emit(AuthState.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 
@@ -56,20 +67,16 @@ class AuthenticationRepositoryImpl @Inject constructor(
         userName: String,
         email: String,
         password: String
-    ): Flow<Response<Boolean>> = flow {
+    ): Flow<AuthState> = flow {
         try {
-            emit(Response.Loading)
-
+            emit(AuthState.Loading)
             val authResult = auth.createUserWithEmailAndPassword(email, password).await()
             val userID = authResult.user?.uid ?: throw Exception("Failed to get user ID")
-
             val user = User(userID = userID, userName = userName, email = email)
-
             firestore.collection(Constants.COLLECTION_NAME_USERS).document(userID).set(user).await()
-
-            emit(Response.Success(true))
+            emit(AuthState.Authenticated)
         } catch (e: Exception) {
-            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+            emit(AuthState.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 }

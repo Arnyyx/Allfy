@@ -5,6 +5,6 @@ data class AuthenticationUseCases(
     val firebaseAuthState: FirebaseAuthState,
     val firebaseSignOut: FirebaseSignOut,
     val firebaseSignIn: FirebaseSignIn,
-    val firebaseSignUp: FirebaseSignUp
-) {
-}
+    val firebaseSignUp: FirebaseSignUp,
+    val getCurrentUserID: GetCurrentUserID
+)
