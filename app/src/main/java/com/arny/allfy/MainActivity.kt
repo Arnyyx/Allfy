@@ -59,6 +59,12 @@ fun AllfyApp(
     NavHost(
         navController = navHostController,
         startDestination = Screens.SplashScreen.route,
+        enterTransition = {
+            fadeIn(animationSpec = tween(1))
+        },
+        exitTransition = {
+            fadeOut(animationSpec = tween(1))
+        }
     ) {
         composable(Screens.LoginScreen.route) {
             LoginScreen(navHostController, authViewModel)
@@ -75,10 +81,10 @@ fun AllfyApp(
         composable(Screens.ProfileScreen.route) {
             ProfileScreen(navHostController, userViewModel, postViewModel)
         }
-//        composable("userProfile/{userId}") { backStackEntry ->
-//            val userID = backStackEntry.arguments?.getString("userID") ?: ""
-//            ProfileScreen(userID, navHostController, userViewModel, postViewModel)
-//        }
+        composable("profile/{userID}") { backStackEntry ->
+            val userID = backStackEntry.arguments?.getString("userID") ?: ""
+            ProfileScreen(navHostController, userViewModel, postViewModel, userID)
+        }
         composable(Screens.SearchScreen.route) {
             SearchScreen(navHostController)
         }

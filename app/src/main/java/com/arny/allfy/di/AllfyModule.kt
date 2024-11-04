@@ -20,8 +20,10 @@ import com.arny.allfy.domain.usecase.Post.GetPostByID
 import com.arny.allfy.domain.usecase.Post.PostUseCases
 import com.arny.allfy.domain.usecase.Post.ToggleLikePost
 import com.arny.allfy.domain.usecase.Post.UploadPost
+import com.arny.allfy.domain.usecase.User.FollowUserUseCase
 import com.arny.allfy.domain.usecase.User.GetUserDetails
 import com.arny.allfy.domain.usecase.User.SetUserDetails
+import com.arny.allfy.domain.usecase.User.UnfollowUserUseCase
 import com.arny.allfy.domain.usecase.User.UserUseCases
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -79,7 +81,9 @@ class AllfyModule {
     @Provides
     fun provideUserUseCases(repository: UserRepository) = UserUseCases(
         getUserDetails = GetUserDetails(repository),
-        setUserDetails = SetUserDetails(repository)
+        setUserDetails = SetUserDetails(repository),
+        followUser = FollowUserUseCase(repository),
+        unfollowUser = UnfollowUserUseCase(repository)
     )
 
     @Singleton

@@ -86,6 +86,7 @@ fun PostDetailScreen(
                                     PostItem(
                                         initialPost = post,
                                         currentUser = currentUser,
+                                        navController = navController
                                     )
                                 }
                             }

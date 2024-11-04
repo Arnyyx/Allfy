@@ -23,6 +23,15 @@ class UserViewModel @Inject constructor(
     private val _currentUser = MutableStateFlow<Response<User>>(Response.Loading)
     val currentUser: StateFlow<Response<User>> = _currentUser.asStateFlow()
 
+    private val _otherUser = MutableStateFlow<Response<User>>(Response.Loading)
+    val otherUser: StateFlow<Response<User>> = _otherUser.asStateFlow()
+
+    private val _followStatus = MutableStateFlow<Response<Boolean>>(Response.Success(false))
+    val followStatus: StateFlow<Response<Boolean>> = _followStatus.asStateFlow()
+
+    private val _updateProfileStatus = mutableStateOf<Response<Boolean>>(Response.Success(false))
+    val updateProfileStatus: State<Response<Boolean>> = _updateProfileStatus
+
     fun getCurrentUser() {
         viewModelScope.launch {
             val userID = FirebaseAuth.getInstance().currentUser?.uid
@@ -34,29 +43,62 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    private val _user = MutableStateFlow<Response<User>>(Response.Loading)
-    val user: StateFlow<Response<User>> = _user.asStateFlow()
-
-    fun getUserByID(userID: String?) {
+    fun getUserById(userId: String) {
         viewModelScope.launch {
-            if (userID != null) {
-                viewModelScope.launch {
-                    userUseCases.getUserDetails(userID).collect {
-                        _user.value = it
-                    }
+            if (userId == FirebaseAuth.getInstance().currentUser?.uid) {
+                getCurrentUser()
+                _otherUser.value = _currentUser.value
+            } else {
+                userUseCases.getUserDetails(userId).collect {
+                    _otherUser.value = it
                 }
             }
         }
     }
-
-    private val _updateProfileStatus = mutableStateOf<Response<Boolean>>(Response.Success(false))
-    val updateProfileStatus: State<Response<Boolean>> = _updateProfileStatus
 
     fun updateUserProfile(updatedUser: User, imageUri: Uri?) {
         viewModelScope.launch {
             userUseCases.setUserDetails(updatedUser, imageUri).collect {
                 _updateProfileStatus.value = it
             }
+        }
+    }
+
+    fun followUser(userId: String) {
+        viewModelScope.launch {
+            val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
+            if (currentUserId != null) {
+                userUseCases.followUser(currentUserId, userId).collect { response ->
+                    _followStatus.value = response
+                    // Refresh both users' data after follow action
+                    if (response is Response.Success && response.data) {
+                        getCurrentUser()
+                        getUserById(userId)
+                    }
+                }
+            }
+        }
+    }
+
+    fun unfollowUser(userId: String) {
+        viewModelScope.launch {
+            val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
+            if (currentUserId != null) {
+                userUseCases.unfollowUser(currentUserId, userId).collect { response ->
+                    _followStatus.value = response
+                    if (response is Response.Success && response.data) {
+                        getCurrentUser()
+                        getUserById(userId)
+                    }
+                }
+            }
+        }
+    }
+
+    fun isFollowingUser(userId: String): Boolean {
+        return when (val user = _currentUser.value) {
+            is Response.Success -> user.data.following.contains(userId)
+            else -> false
         }
     }
 }

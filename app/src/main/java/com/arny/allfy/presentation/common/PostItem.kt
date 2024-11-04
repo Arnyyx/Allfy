@@ -74,6 +74,7 @@ import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.ui.PostDetailScreen
+import com.arny.allfy.presentation.ui.ProfileScreen
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.utils.Response
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -84,7 +85,8 @@ import kotlinx.coroutines.launch
 fun PostItem(
     initialPost: Post,
     currentUser: User,
-    postViewModel: PostViewModel = hiltViewModel()
+    postViewModel: PostViewModel = hiltViewModel(),
+    navController: NavController
 ) {
     val currentPost by postViewModel.currentPost.collectAsState()
     var post by remember { mutableStateOf(initialPost) }
@@ -123,7 +125,7 @@ fun PostItem(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            PostHeader(post)
+            PostHeader(post, navController)
             PostImages(post)
             if (post.caption.isNotBlank()) PostCaption(post.caption)
             PostActions(
@@ -149,8 +151,16 @@ fun PostItem(
 }
 
 @Composable
-private fun PostHeader(post: Post) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
+private fun PostHeader(post: Post, navController: NavController) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(8.dp)
+            .clickable(onClick = {
+                navController.navigate("profile/${post.postOwnerID}")
+            }
+            )
+    ) {
         AsyncImage(
             model = post.postOwnerImageUrl,
             contentDescription = "User Avatar",

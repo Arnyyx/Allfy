@@ -21,8 +21,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -64,17 +67,28 @@ import com.arny.allfy.utils.Screens
 fun ProfileScreen(
     navController: NavController,
     userViewModel: UserViewModel,
-    postViewModel: PostViewModel
+    postViewModel: PostViewModel,
+    userId: String? = null
 ) {
-    LaunchedEffect(Unit) {
-        userViewModel.getCurrentUser()
+    LaunchedEffect(userId) {
+        if (!userId.isNullOrBlank()) {
+            userViewModel.getUserById(userId)
+        } else {
+            userViewModel.getCurrentUser()
+        }
     }
-    val currentUser by userViewModel.currentUser.collectAsState()
 
-    when (currentUser) {
+    val userState by if (userId != null) {
+        userViewModel.otherUser.collectAsState()
+    } else {
+        userViewModel.currentUser.collectAsState()
+    }
+
+    when (userState) {
         is Response.Loading -> {
             Box(
-                modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
             }
@@ -83,28 +97,34 @@ fun ProfileScreen(
         is Response.Error -> {
             Toast.makeText(
                 LocalContext.current,
-                "Error: ${(currentUser as Response.Error).message}",
+                "Error: ${(userState as Response.Error).message}",
                 Toast.LENGTH_SHORT
             ).show()
         }
 
         is Response.Success -> {
-            Scaffold(bottomBar = {
-                BottomNavigation(
-                    BottomNavigationItem.Profile,
-                    navController
-                )
-            }) { innerPadding ->
+            Scaffold(
+                bottomBar = {
+                    if (userId == null) {
+                        BottomNavigation(
+                            BottomNavigationItem.Profile,
+                            navController
+                        )
+                    }
+                }
+            ) { innerPadding ->
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                         .padding(innerPadding)
                 ) {
-                    ProfileScreen(
-                        navController,
-                        (currentUser as Response.Success<User>).data,
-                        postViewModel
+                    ProfileContent(
+                        navController = navController,
+                        user = (userState as Response.Success<User>).data,
+                        postViewModel = postViewModel,
+                        userViewModel = userViewModel,
+                        isCurrentUser = userId == null
                     )
                 }
             }
@@ -114,30 +134,61 @@ fun ProfileScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(navController: NavController, user: User, postViewModel: PostViewModel) {
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Profile") }, actions = {
-            IconButton(onClick = {
-                navController.navigate(Screens.CreatePostScreen.route)
-            }) {
-                Icon(Icons.Default.Add, contentDescription = "New Post")
-            }
-            IconButton(onClick = {
-                navController.navigate(Screens.SettingsScreen.route)
-            }) {
-                Icon(Icons.Default.Menu, contentDescription = "Settings")
-            }
-        })
-    }) { paddingValues ->
+fun ProfileContent(
+    navController: NavController,
+    user: User,
+    postViewModel: PostViewModel,
+    userViewModel: UserViewModel,
+    isCurrentUser: Boolean
+) {
+    var isFollowing by remember { mutableStateOf(false) }
+    val currentUserState by userViewModel.currentUser.collectAsState()
+
+    LaunchedEffect(currentUserState) {
+        if (currentUserState is Response.Success && !isCurrentUser) {
+            val currentUser = (currentUserState as Response.Success<User>).data
+            isFollowing = currentUser.following.contains(user.userID)
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(user.userName) },
+                actions = {
+                    if (isCurrentUser) {
+                        IconButton(onClick = {
+                            navController.navigate(Screens.CreatePostScreen.route)
+                        }) {
+                            Icon(Icons.Default.Add, contentDescription = "New Post")
+                        }
+                        IconButton(onClick = {
+                            navController.navigate(Screens.SettingsScreen.route)
+                        }) {
+                            Icon(Icons.Default.Menu, contentDescription = "Settings")
+                        }
+                    }
+                }, navigationIcon = {
+                    if (isCurrentUser) return@TopAppBar
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            // Profile Header
             Row(
-                modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
@@ -145,7 +196,7 @@ fun ProfileScreen(navController: NavController, user: User, postViewModel: PostV
                         .placeholder(R.drawable.ic_user)
                         .crossfade(true)
                         .build(),
-                    contentDescription = "Post Image",
+                    contentDescription = "Profile Image",
                     modifier = Modifier
                         .size(80.dp)
                         .clip(CircleShape),
@@ -154,19 +205,22 @@ fun ProfileScreen(navController: NavController, user: User, postViewModel: PostV
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
-                        text = user.userName, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                        text = user.userName,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = user.bio, fontSize = 14.sp
+                        text = user.bio,
+                        fontSize = 14.sp
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Statistics
             Row(
-                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround
             ) {
                 StatisticItem("Posts", user.postsIDs.size.toString())
                 StatisticItem("Followers", user.followers.size.toString())
@@ -175,19 +229,62 @@ fun ProfileScreen(navController: NavController, user: User, postViewModel: PostV
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Edit Profile Button
-            OutlinedButton(
-                onClick = {
-                    navController.navigate(Screens.EditProfileScreen.route)
-                }, modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Edit Profile")
+            if (isCurrentUser) {
+                OutlinedButton(
+                    onClick = {
+                        navController.navigate(Screens.EditProfileScreen.route)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Edit Profile")
+                }
+            } else {
+                Button(
+                    onClick = {
+                        if (isFollowing) {
+                            userViewModel.unfollowUser(user.userID)
+                        } else {
+                            userViewModel.followUser(user.userID)
+                        }
+                        isFollowing = !isFollowing
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isFollowing)
+                            MaterialTheme.colorScheme.surface
+                        else
+                            MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(
+                        if (isFollowing) "Following" else "Follow",
+                        color = if (isFollowing)
+                            MaterialTheme.colorScheme.onSurface
+                        else
+                            MaterialTheme.colorScheme.onPrimary
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             PostsGrid(navController, user.postsIDs, postViewModel)
         }
+    }
+}
+
+@Composable
+fun StatisticItem(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = label,
+            fontSize = 14.sp
+        )
     }
 }
 
@@ -278,16 +375,4 @@ fun PostsGrid(
     }
 
 
-}
-
-@Composable
-fun StatisticItem(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value, fontSize = 18.sp, fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = label, fontSize = 14.sp
-        )
-    }
 }
