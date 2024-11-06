@@ -6,7 +6,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.arny.allfy.domain.usecase.Authentication.AuthenticationUseCases
+import com.arny.allfy.domain.usecase.authentication.AuthenticationUseCases
 import com.arny.allfy.utils.Response
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel

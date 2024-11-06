@@ -10,4 +10,5 @@ interface UserRepository {
     fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>>
     fun followUser(currentUserId: String, targetUserId: String): Flow<Response<Boolean>>
     fun unfollowUser(currentUserId: String, targetUserId: String): Flow<Response<Boolean>>
+    fun getFollowers(followerId: List<String>): Flow<Response<List<User>>>
 }

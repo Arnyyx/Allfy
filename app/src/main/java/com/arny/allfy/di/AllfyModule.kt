@@ -1,31 +1,43 @@
 package com.arny.allfy.di
 
+import com.arny.allfy.data.mapper.ConversationMapper
+import com.arny.allfy.data.mapper.MessageMapper
 import com.arny.allfy.data.remote.AuthenticationRepositoryImpl
+import com.arny.allfy.data.remote.ConversationRepositoryImpl
+import com.arny.allfy.data.remote.MessageRepositoryImpl
 import com.arny.allfy.data.remote.PostRepositoryImpl
 import com.arny.allfy.data.remote.UserRepositoryImpl
 import com.arny.allfy.domain.repository.AuthenticationRepository
+import com.arny.allfy.domain.repository.ConversationRepository
+import com.arny.allfy.domain.repository.MessageRepository
 import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.domain.repository.UserRepository
-import com.arny.allfy.domain.usecase.Authentication.AuthenticationUseCases
-import com.arny.allfy.domain.usecase.Authentication.FirebaseAuthState
-import com.arny.allfy.domain.usecase.Authentication.FirebaseSignIn
-import com.arny.allfy.domain.usecase.Authentication.FirebaseSignOut
-import com.arny.allfy.domain.usecase.Authentication.FirebaseSignUp
-import com.arny.allfy.domain.usecase.Authentication.GetCurrentUserID
-import com.arny.allfy.domain.usecase.Authentication.IsUserAuthenticated
-import com.arny.allfy.domain.usecase.Post.AddComment
-import com.arny.allfy.domain.usecase.Post.GetComments
-import com.arny.allfy.domain.usecase.Post.GetFeedPosts
-import com.arny.allfy.domain.usecase.Post.GetPostByID
-import com.arny.allfy.domain.usecase.Post.PostUseCases
-import com.arny.allfy.domain.usecase.Post.ToggleLikePost
-import com.arny.allfy.domain.usecase.Post.UploadPost
-import com.arny.allfy.domain.usecase.User.FollowUserUseCase
-import com.arny.allfy.domain.usecase.User.GetUserDetails
-import com.arny.allfy.domain.usecase.User.SetUserDetails
-import com.arny.allfy.domain.usecase.User.UnfollowUserUseCase
-import com.arny.allfy.domain.usecase.User.UserUseCases
+import com.arny.allfy.domain.usecase.authentication.AuthenticationUseCases
+import com.arny.allfy.domain.usecase.authentication.FirebaseAuthState
+import com.arny.allfy.domain.usecase.authentication.FirebaseSignIn
+import com.arny.allfy.domain.usecase.authentication.FirebaseSignOut
+import com.arny.allfy.domain.usecase.authentication.FirebaseSignUp
+import com.arny.allfy.domain.usecase.authentication.GetCurrentUserID
+import com.arny.allfy.domain.usecase.authentication.IsUserAuthenticated
+import com.arny.allfy.domain.usecase.conversation.GetConversationsUseCase
+import com.arny.allfy.domain.usecase.message.GetMessagesUseCase
+import com.arny.allfy.domain.usecase.message.MarkMessageAsReadUseCase
+import com.arny.allfy.domain.usecase.message.SendMessageUseCase
+import com.arny.allfy.domain.usecase.post.AddComment
+import com.arny.allfy.domain.usecase.post.GetComments
+import com.arny.allfy.domain.usecase.post.GetFeedPosts
+import com.arny.allfy.domain.usecase.post.GetPostByID
+import com.arny.allfy.domain.usecase.post.PostUseCases
+import com.arny.allfy.domain.usecase.post.ToggleLikePost
+import com.arny.allfy.domain.usecase.post.UploadPost
+import com.arny.allfy.domain.usecase.user.FollowUserUseCase
+import com.arny.allfy.domain.usecase.user.GetFollowersUseCase
+import com.arny.allfy.domain.usecase.user.GetUserDetails
+import com.arny.allfy.domain.usecase.user.SetUserDetails
+import com.arny.allfy.domain.usecase.user.UnfollowUserUseCase
+import com.arny.allfy.domain.usecase.user.UserUseCases
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import dagger.Module
@@ -83,7 +95,8 @@ class AllfyModule {
         getUserDetails = GetUserDetails(repository),
         setUserDetails = SetUserDetails(repository),
         followUser = FollowUserUseCase(repository),
-        unfollowUser = UnfollowUserUseCase(repository)
+        unfollowUser = UnfollowUserUseCase(repository),
+        getFollowers = GetFollowersUseCase(repository)
     )
 
     @Singleton
@@ -114,4 +127,62 @@ class AllfyModule {
         addComment = AddComment(repository),
         getComments = GetComments(repository)
     )
+
+    @Provides
+    @Singleton
+    fun provideConversationRepository(
+        firebaseDatabase: FirebaseDatabase,
+        conversationMapper: ConversationMapper,
+        messageRepository: MessageRepository
+    ): ConversationRepository {
+        return ConversationRepositoryImpl(
+            firebaseDatabase,
+            conversationMapper,
+            messageRepository
+        )
+    }
+
+    @Singleton
+    @Provides
+    fun provideGetConversationsUseCase(
+        conversationRepository: ConversationRepository
+    ): GetConversationsUseCase {
+        return GetConversationsUseCase(conversationRepository)
+    }
+
+    @Singleton
+    @Provides
+    fun provideFirebaseDatabase(): FirebaseDatabase {
+        return FirebaseDatabase.getInstance()
+    }
+
+    @Provides
+    @Singleton
+    fun provideMessageRepository(
+        firebaseDatabase: FirebaseDatabase,
+        messageMapper: MessageMapper
+    ): MessageRepository {
+        return MessageRepositoryImpl(firebaseDatabase, messageMapper)
+    }
+
+    @Provides
+    fun provideSendMessageUseCase(
+        messageRepository: MessageRepository
+    ): SendMessageUseCase {
+        return SendMessageUseCase(messageRepository)
+    }
+
+    @Provides
+    fun provideGetMessagesUseCase(
+        messageRepository: MessageRepository
+    ): GetMessagesUseCase {
+        return GetMessagesUseCase(messageRepository)
+    }
+
+    @Provides
+    fun provideMarkMessageAsReadUseCase(
+        messageRepository: MessageRepository
+    ): MarkMessageAsReadUseCase {
+        return MarkMessageAsReadUseCase(messageRepository)
+    }
 }

@@ -53,23 +53,19 @@ fun LoginScreen(
     val authState = authViewModel.authState.observeAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(authState.value) {
-        when (authState.value) {
-            is AuthState.Authenticated -> {
-                navController.navigate(Screens.FeedScreen.route) {
-                    popUpTo(Screens.LoginScreen.route) { inclusive = true }
-                }
-            }
-
-            is AuthState.Error -> Toast.makeText(
-                context,
-                (authState.value as AuthState.Error).message, Toast.LENGTH_SHORT
-            ).show()
-
-            else -> {
-
+    when (authState.value) {
+        is AuthState.Authenticated -> {
+            navController.navigate(Screens.FeedScreen.route) {
+                popUpTo(Screens.LoginScreen.route) { inclusive = true }
             }
         }
+
+        is AuthState.Error -> Toast.makeText(
+            context,
+            (authState.value as AuthState.Error).message, Toast.LENGTH_SHORT
+        ).show()
+
+        else -> {}
     }
 
     Box(
@@ -135,16 +131,28 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Button(
-                onClick = {
-                    authViewModel.signIn(emailState.value, passwordState.value)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3897F0))
-            ) {
-                Text("Log In", color = Color.White)
+            Text(
+                text = "By continuing, you agree to Allfy's Terms of Service and Privacy Policy.",
+                color = Color.Gray,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            when (authState.value) {
+                is AuthState.Loading -> CircularProgressIndicator()
+                else -> {
+                    Button(
+                        onClick = {
+                            authViewModel.signIn(emailState.value, passwordState.value)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3897F0)),
+                    ) {
+                        Text("Log In", color = Color.White)
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

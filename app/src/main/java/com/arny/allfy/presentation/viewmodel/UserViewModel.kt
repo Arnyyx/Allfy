@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arny.allfy.domain.model.User
-import com.arny.allfy.domain.usecase.User.UserUseCases
+import com.arny.allfy.domain.usecase.user.UserUseCases
 import com.arny.allfy.utils.Response
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -99,6 +99,18 @@ class UserViewModel @Inject constructor(
         return when (val user = _currentUser.value) {
             is Response.Success -> user.data.following.contains(userId)
             else -> false
+        }
+    }
+
+    private val _followers = MutableStateFlow<Response<List<User>>>(Response.Loading)
+    val followers: StateFlow<Response<List<User>>> = _followers.asStateFlow()
+
+    fun getFollowers(followerId: List<String>) {
+        viewModelScope.launch {
+            userUseCases.getFollowers(followerId)
+                .collect { response ->
+                    _followers.value = response
+                }
         }
     }
 }

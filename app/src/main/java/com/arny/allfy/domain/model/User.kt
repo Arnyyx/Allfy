@@ -11,4 +11,5 @@ data class User(
     var following: List<String> = emptyList(),
     var followers: List<String> = emptyList(),
     var postsIDs: List<String> = emptyList(),
+    val isOnline: Boolean = false,
 )

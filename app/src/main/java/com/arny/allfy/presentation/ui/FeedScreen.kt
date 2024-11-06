@@ -7,13 +7,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.PullToRefreshState
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -21,25 +23,25 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.arny.allfy.R
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.BottomNavigation
 import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.common.PostItem
 import com.arny.allfy.presentation.common.Toast
-import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.Screens
 
 @Composable
 fun FeedScreen(
     navController: NavController,
     userViewModel: UserViewModel,
     postViewModel: PostViewModel,
-    authViewModel: AuthViewModel
 ) {
     LaunchedEffect(Unit) {
         userViewModel.getCurrentUser()
@@ -80,12 +82,26 @@ fun LoadPosts(
 ) {
     val state by postViewModel.getFeedPostsState.collectAsState()
 
-    // Load posts initially
     LaunchedEffect(currentUser) {
         postViewModel.getFeedPosts(currentUser.userID)
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Allfy") },
+                actions = {
+                    IconButton(onClick = {
+                        navController.navigate(Screens.ConversationsScreen.route)
+                    }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_message),
+                            contentDescription = "Messages"
+                        )
+                    }
+                }
+            )
+        },
         bottomBar = { BottomNavigation(BottomNavigationItem.Feed, navController) }
     ) { paddingValues ->
         when {

@@ -11,9 +11,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.arny.allfy.domain.model.User
+import com.arny.allfy.presentation.ui.ChatScreen
+import com.arny.allfy.presentation.ui.ConversationsScreen
 import com.arny.allfy.presentation.ui.CreatePostScreen
 import com.arny.allfy.presentation.ui.EditProfileScreen
 import com.arny.allfy.presentation.ui.FeedScreen
@@ -25,6 +30,7 @@ import com.arny.allfy.presentation.ui.SettingsScreen
 import com.arny.allfy.presentation.ui.SignUpScreen
 import com.arny.allfy.presentation.ui.SplashScreen
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
+import com.arny.allfy.presentation.viewmodel.ConversationsViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.ui.theme.AllfyTheme
@@ -42,7 +48,14 @@ class MainActivity : ComponentActivity() {
                     val authViewModel: AuthViewModel = hiltViewModel()
                     val userViewModel: UserViewModel = hiltViewModel()
                     val postViewModel: PostViewModel = hiltViewModel()
-                    AllfyApp(navController, authViewModel, userViewModel, postViewModel)
+                    val conversationsViewModel: ConversationsViewModel = hiltViewModel()
+                    AllfyApp(
+                        navController,
+                        authViewModel,
+                        userViewModel,
+                        postViewModel,
+                        conversationsViewModel
+                    )
                 }
             }
         }
@@ -54,7 +67,8 @@ fun AllfyApp(
     navHostController: NavHostController,
     authViewModel: AuthViewModel,
     userViewModel: UserViewModel,
-    postViewModel: PostViewModel
+    postViewModel: PostViewModel,
+    conversationsViewModel: ConversationsViewModel
 ) {
     NavHost(
         navController = navHostController,
@@ -73,7 +87,7 @@ fun AllfyApp(
             SignUpScreen(navHostController, authViewModel)
         }
         composable(Screens.FeedScreen.route) {
-            FeedScreen(navHostController, userViewModel, postViewModel, authViewModel)
+            FeedScreen(navHostController, userViewModel, postViewModel)
         }
         composable(Screens.SplashScreen.route) {
             SplashScreen(navController = navHostController, authViewModel)
@@ -103,9 +117,32 @@ fun AllfyApp(
                 PostDetailScreen(postID, navHostController, postViewModel, userViewModel)
             }
         }
-//        composable("userProfile/{userId}") { backStackEntry ->
-//            val userId = backStackEntry.arguments?.getString("userId") ?: ""
-//            UserProfileScreen(userId, navController, userViewModel, postViewModel)
-//        }
+        composable(Screens.ConversationsScreen.route) {
+            ConversationsScreen(
+                navHostController,
+                conversationsViewModel,
+                userViewModel
+            ) { participantId ->
+                navHostController.navigate("chat/$participantId")
+            }
+        }
+        composable(
+            route = "chat/{participantId}",
+            arguments = listOf(
+                navArgument("participantId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val participantId = backStackEntry.arguments?.getString("participantId")
+            requireNotNull(participantId) { "participantId parameter wasn't found" }
+            val user = User(
+                userID = participantId
+            )
+
+            ChatScreen(
+                viewModel = hiltViewModel(),
+                otherUser = user,
+                onBackClick = { navHostController.popBackStack() }
+            )
+        }
     }
 }

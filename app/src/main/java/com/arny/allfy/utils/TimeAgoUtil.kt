@@ -1,6 +1,9 @@
 package com.arny.allfy.utils
 
 import com.google.firebase.Timestamp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 fun Timestamp.toTimeAgo(): String {
     val currentTime = System.currentTimeMillis()
@@ -16,4 +19,9 @@ fun Timestamp.toTimeAgo(): String {
         difference < 1000L * 60 * 60 * 24 * 365 -> "${difference / (1000 * 60 * 60 * 24 * 30)} months ago"
         else -> "${difference / (1000L * 60 * 60 * 24 * 365)} years ago"
     }
+}
+
+fun formatTimestamp(timestamp: Long): String {
+    val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return sdf.format(Date(timestamp))
 }

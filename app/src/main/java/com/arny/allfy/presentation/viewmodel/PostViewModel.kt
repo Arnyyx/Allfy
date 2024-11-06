@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arny.allfy.domain.model.Comment
 import com.arny.allfy.domain.model.Post
-import com.arny.allfy.domain.usecase.Post.PostUseCases
+import com.arny.allfy.domain.usecase.post.PostUseCases
 import com.arny.allfy.presentation.state.PostState
 import com.arny.allfy.utils.Response
 import dagger.hilt.android.lifecycle.HiltViewModel

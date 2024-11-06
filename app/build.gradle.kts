@@ -60,6 +60,8 @@ dependencies {
     implementation(libs.firebase.storage.ktx)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.runtime.livedata)
+    implementation(libs.firebase.database.ktx)
+    implementation(libs.firebase.database)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -79,7 +81,8 @@ dependencies {
     implementation(libs.material3)
 
     implementation(libs.coil.compose)
-//    implementation 'com.google.android.gms:play-services-location:21.3.0'
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
 }
 kapt {
     correctErrorTypes = true
