@@ -5,5 +5,6 @@ class UserUseCases(
     val setUserDetails: SetUserDetails,
     val followUser: FollowUserUseCase,
     val unfollowUser: UnfollowUserUseCase,
-    val getFollowers: GetFollowersUseCase
+    val getFollowers: GetFollowersUseCase,
+    val getUsersByIDs: GetUsersByIDsUseCase
 )

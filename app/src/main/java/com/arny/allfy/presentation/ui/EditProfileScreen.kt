@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,9 +44,9 @@ fun EditProfileScreen(
     onBackClick: () -> Unit,
     userViewModel: UserViewModel
 ) {
-    userViewModel.getCurrentUser()
+    val currentUser by userViewModel.currentUser.collectAsState()
 
-    when (val response = userViewModel.currentUser.value) {
+    when (currentUser) {
         is Response.Loading -> {
             Spacer(modifier = Modifier.height(16.dp))
             Box(
@@ -58,13 +59,13 @@ fun EditProfileScreen(
         }
 
         is Response.Success -> {
-            EditProfile(onBackClick, response.data, userViewModel)
+            EditProfile(onBackClick, (currentUser as Response.Success<User>).data, userViewModel)
         }
 
         is Response.Error -> {
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = response.message,
+                text = (currentUser as Response.Error).message,
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier

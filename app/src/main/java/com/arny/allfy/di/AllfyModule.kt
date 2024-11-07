@@ -1,14 +1,11 @@
 package com.arny.allfy.di
 
-import com.arny.allfy.data.mapper.ConversationMapper
 import com.arny.allfy.data.mapper.MessageMapper
 import com.arny.allfy.data.remote.AuthenticationRepositoryImpl
-import com.arny.allfy.data.remote.ConversationRepositoryImpl
 import com.arny.allfy.data.remote.MessageRepositoryImpl
 import com.arny.allfy.data.remote.PostRepositoryImpl
 import com.arny.allfy.data.remote.UserRepositoryImpl
 import com.arny.allfy.domain.repository.AuthenticationRepository
-import com.arny.allfy.domain.repository.ConversationRepository
 import com.arny.allfy.domain.repository.MessageRepository
 import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.domain.repository.UserRepository
@@ -19,8 +16,7 @@ import com.arny.allfy.domain.usecase.authentication.FirebaseSignOut
 import com.arny.allfy.domain.usecase.authentication.FirebaseSignUp
 import com.arny.allfy.domain.usecase.authentication.GetCurrentUserID
 import com.arny.allfy.domain.usecase.authentication.IsUserAuthenticated
-import com.arny.allfy.domain.usecase.conversation.GetConversationsUseCase
-import com.arny.allfy.domain.usecase.message.GetMessagesUseCase
+import com.arny.allfy.domain.usecase.message.GetOrCreateConversationUseCase
 import com.arny.allfy.domain.usecase.message.MarkMessageAsReadUseCase
 import com.arny.allfy.domain.usecase.message.SendMessageUseCase
 import com.arny.allfy.domain.usecase.post.AddComment
@@ -33,6 +29,7 @@ import com.arny.allfy.domain.usecase.post.UploadPost
 import com.arny.allfy.domain.usecase.user.FollowUserUseCase
 import com.arny.allfy.domain.usecase.user.GetFollowersUseCase
 import com.arny.allfy.domain.usecase.user.GetUserDetails
+import com.arny.allfy.domain.usecase.user.GetUsersByIDsUseCase
 import com.arny.allfy.domain.usecase.user.SetUserDetails
 import com.arny.allfy.domain.usecase.user.UnfollowUserUseCase
 import com.arny.allfy.domain.usecase.user.UserUseCases
@@ -96,7 +93,8 @@ class AllfyModule {
         setUserDetails = SetUserDetails(repository),
         followUser = FollowUserUseCase(repository),
         unfollowUser = UnfollowUserUseCase(repository),
-        getFollowers = GetFollowersUseCase(repository)
+        getFollowers = GetFollowersUseCase(repository),
+        getUsersByIDs = GetUsersByIDsUseCase(repository)
     )
 
     @Singleton
@@ -128,27 +126,6 @@ class AllfyModule {
         getComments = GetComments(repository)
     )
 
-    @Provides
-    @Singleton
-    fun provideConversationRepository(
-        firebaseDatabase: FirebaseDatabase,
-        conversationMapper: ConversationMapper,
-        messageRepository: MessageRepository
-    ): ConversationRepository {
-        return ConversationRepositoryImpl(
-            firebaseDatabase,
-            conversationMapper,
-            messageRepository
-        )
-    }
-
-    @Singleton
-    @Provides
-    fun provideGetConversationsUseCase(
-        conversationRepository: ConversationRepository
-    ): GetConversationsUseCase {
-        return GetConversationsUseCase(conversationRepository)
-    }
 
     @Singleton
     @Provides
@@ -165,6 +142,7 @@ class AllfyModule {
         return MessageRepositoryImpl(firebaseDatabase, messageMapper)
     }
 
+    @Singleton
     @Provides
     fun provideSendMessageUseCase(
         messageRepository: MessageRepository
@@ -172,17 +150,19 @@ class AllfyModule {
         return SendMessageUseCase(messageRepository)
     }
 
-    @Provides
-    fun provideGetMessagesUseCase(
-        messageRepository: MessageRepository
-    ): GetMessagesUseCase {
-        return GetMessagesUseCase(messageRepository)
-    }
-
+    @Singleton
     @Provides
     fun provideMarkMessageAsReadUseCase(
         messageRepository: MessageRepository
     ): MarkMessageAsReadUseCase {
         return MarkMessageAsReadUseCase(messageRepository)
+    }
+
+    @Provides
+    @Singleton
+    fun provideGetOrCreateConversationUseCase(
+        messageRepository: MessageRepository
+    ): GetOrCreateConversationUseCase {
+        return GetOrCreateConversationUseCase(messageRepository)
     }
 }

@@ -1,6 +1,7 @@
 package com.arny.allfy.data.remote
 
 import android.net.Uri
+import android.util.Log
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.repository.UserRepository
 import com.arny.allfy.utils.Constants
@@ -12,8 +13,10 @@ import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
+import okhttp3.internal.wait
 import javax.inject.Inject
 
 class UserRepositoryImpl @Inject constructor(
@@ -72,44 +75,51 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getUserByID(userID: String): Flow<Response<User>> = callbackFlow {
-        Response.Loading
-        val snapshotListener =
-            firestore.collection(Constants.COLLECTION_NAME_USERS).document(userID)
-                .addSnapshotListener { snapshot, e ->
-                    val response = if (snapshot != null) {
-                        val user = snapshot.toObject(User::class.java)
-                        Response.Success(user!!)
-                    } else {
-                        Response.Error(e?.message ?: e.toString())
-                    }
-                    trySend(response).isSuccess
-                }
-        awaitClose {
-            snapshotListener.remove()
+    override fun getUserByID(userID: String): Flow<Response<User>> = flow {
+        emit(Response.Loading)
+        try {
+            val snapshot = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                .document(userID)
+                .get()
+                .await()
+
+            if (snapshot != null) {
+                val user = snapshot.toObject(User::class.java)
+                emit(Response.Success(user!!))
+            }
+
+        } catch (e: Exception) {
+            emit(Response.Error(e.message ?: e.toString()))
         }
     }
 
-    override fun getFollowers(followerId: List<String>): Flow<Response<List<User>>> =
-        callbackFlow {
-            trySend(Response.Loading)
-
-            firestore.collection(Constants.COLLECTION_NAME_USERS)
+    override fun getFollowers(followerId: List<String>): Flow<Response<List<User>>> = flow {
+        emit(Response.Loading)
+        try {
+            val documents = firestore.collection(Constants.COLLECTION_NAME_USERS)
                 .whereIn(FieldPath.documentId(), followerId)
                 .get()
-                .addOnSuccessListener { documents ->
-                    val followers = documents.mapNotNull { it.toObject(User::class.java) }
-                    trySend(Response.Success(followers))
-                    close()
-                }
-                .addOnFailureListener { exception ->
-                    trySend(Response.Error(exception.localizedMessage ?: "An Unexpected Error"))
-                    close()
-                }.await()
+                .await()
 
-            awaitClose {
-                close()
-            }
+            val followers = documents.mapNotNull { it.toObject(User::class.java) }
+            emit(Response.Success(followers))
+        } catch (exception: Exception) {
+            emit(Response.Error(exception.localizedMessage ?: "An Unexpected Error"))
         }
+    }
 
+    override fun getUsersByIDs(userIDs: List<String>): Flow<Response<List<User>>> = flow {
+        emit(Response.Loading)
+        try {
+            val documents = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                .whereIn(FieldPath.documentId(), userIDs)
+                .get()
+                .await()
+
+            val users = documents.mapNotNull { it.toObject(User::class.java) }
+            emit(Response.Success(users))
+        } catch (exception: Exception) {
+            emit(Response.Error(exception.localizedMessage ?: "An Unexpected Error"))
+        }
+    }
 }

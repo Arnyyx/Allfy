@@ -339,7 +339,6 @@ fun PostsGrid(
                     }
 
                     else -> {
-                        // Post image
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(post.imageUrls.firstOrNull())

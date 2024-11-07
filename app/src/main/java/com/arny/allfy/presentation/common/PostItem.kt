@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -161,7 +163,6 @@ private fun PostHeader(post: Post, navController: NavController) {
         Text(text = post.postOwnerUsername, fontWeight = FontWeight.Bold, fontSize = 16.sp)
     }
 }
-
 @Composable
 private fun PostImages(post: Post) {
     if (post.imageUrls.isNotEmpty()) {
@@ -170,18 +171,27 @@ private fun PostImages(post: Post) {
             initialPageOffsetFraction = 0f,
             pageCount = { post.imageUrls.size }
         )
-        Box {
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.6f)
+        ) {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(300.dp),
+                    .aspectRatio(
+                        ratio = 1f,
+                        matchHeightConstraintsFirst = true
+                    )
             ) { page ->
-                Image(
-                    painter = rememberAsyncImagePainter(post.imageUrls[page]),
+                AsyncImage(
+                    model = post.imageUrls[page],
                     contentDescription = "Post Image",
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Fit,
+                    placeholder = painterResource(R.drawable.placehoder_image)
                 )
             }
 
@@ -202,7 +212,6 @@ private fun PostImages(post: Post) {
         }
     }
 }
-
 @Composable
 private fun PostCaption(caption: String) {
     Text(text = caption, modifier = Modifier.padding(8.dp))

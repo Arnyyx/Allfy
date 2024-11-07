@@ -32,22 +32,22 @@ import com.arny.allfy.utils.Response
 fun PostDetailScreen(
     postID: String,
     navController: NavController,
-    postViewModel: PostViewModel = hiltViewModel(),
-    userViewModel: UserViewModel = hiltViewModel()
+    postViewModel: PostViewModel,
+    userViewModel: UserViewModel
 ) {
     LaunchedEffect(Unit) {
-        userViewModel.getCurrentUser()
         postViewModel.getPostByID(postID)
     }
 
-    when (userViewModel.currentUser.value) {
+    val currentUser by userViewModel.currentUser.collectAsState()
+
+    when (currentUser) {
         is Response.Loading -> CircularProgressIndicator()
         is Response.Error -> {
-            Toast("Error: ${(userViewModel.currentUser.value as Response.Error).message}")
+            Toast("Error: ${(currentUser as Response.Error).message}")
         }
 
         is Response.Success -> {
-            val currentUser = (userViewModel.currentUser.value as Response.Success<User>).data
             val postState by postViewModel.postsState.collectAsState()
             when (postState) {
                 Response.Loading -> {
@@ -64,7 +64,7 @@ fun PostDetailScreen(
                     Scaffold(
                         topBar = {
                             TopAppBar(
-                                title = { Text("Post Detail") },
+                                title = { Text("") },
                                 navigationIcon = {
                                     IconButton(onClick = { navController.popBackStack() }) {
                                         Icon(
@@ -85,7 +85,7 @@ fun PostDetailScreen(
                                 item {
                                     PostItem(
                                         initialPost = post,
-                                        currentUser = currentUser,
+                                        currentUser = (currentUser as Response.Success<User>).data,
                                         navController = navController
                                     )
                                 }

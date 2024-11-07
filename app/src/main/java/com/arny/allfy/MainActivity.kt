@@ -30,7 +30,7 @@ import com.arny.allfy.presentation.ui.SettingsScreen
 import com.arny.allfy.presentation.ui.SignUpScreen
 import com.arny.allfy.presentation.ui.SplashScreen
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
-import com.arny.allfy.presentation.viewmodel.ConversationsViewModel
+import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.ui.theme.AllfyTheme
@@ -48,13 +48,13 @@ class MainActivity : ComponentActivity() {
                     val authViewModel: AuthViewModel = hiltViewModel()
                     val userViewModel: UserViewModel = hiltViewModel()
                     val postViewModel: PostViewModel = hiltViewModel()
-                    val conversationsViewModel: ConversationsViewModel = hiltViewModel()
+                    val chatViewModel: ChatViewModel = hiltViewModel()
                     AllfyApp(
                         navController,
                         authViewModel,
                         userViewModel,
                         postViewModel,
-                        conversationsViewModel
+                        chatViewModel
                     )
                 }
             }
@@ -68,7 +68,7 @@ fun AllfyApp(
     authViewModel: AuthViewModel,
     userViewModel: UserViewModel,
     postViewModel: PostViewModel,
-    conversationsViewModel: ConversationsViewModel
+    chatViewModel: ChatViewModel,
 ) {
     NavHost(
         navController = navHostController,
@@ -120,28 +120,27 @@ fun AllfyApp(
         composable(Screens.ConversationsScreen.route) {
             ConversationsScreen(
                 navHostController,
-                conversationsViewModel,
-                userViewModel
-            ) { participantId ->
-                navHostController.navigate("chat/$participantId")
-            }
+                userViewModel,
+                chatViewModel
+            )
         }
         composable(
-            route = "chat/{participantId}",
+            route = "chat/{currentUserId}/{otherUserId}",
             arguments = listOf(
-                navArgument("participantId") { type = NavType.StringType }
+                navArgument("currentUserId") { type = NavType.StringType },
+                navArgument("otherUserId") { type = NavType.StringType }
             )
         ) { backStackEntry ->
-            val participantId = backStackEntry.arguments?.getString("participantId")
-            requireNotNull(participantId) { "participantId parameter wasn't found" }
-            val user = User(
-                userID = participantId
-            )
-
+            val currentUserId = backStackEntry.arguments?.getString("currentUserId")
+            val otherUserId = backStackEntry.arguments?.getString("otherUserId")
+            requireNotNull(currentUserId) { "currentUserId parameter wasn't found" }
+            requireNotNull(otherUserId) { "otherUserId parameter wasn't found" }
             ChatScreen(
-                viewModel = hiltViewModel(),
-                otherUser = user,
-                onBackClick = { navHostController.popBackStack() }
+                navHostController = navHostController,
+                chatViewModel = chatViewModel,
+                userViewModel = userViewModel,
+                currentUserId = currentUserId,
+                otherUserId = otherUserId
             )
         }
     }

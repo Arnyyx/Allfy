@@ -70,7 +70,6 @@ class UserViewModel @Inject constructor(
             if (currentUserId != null) {
                 userUseCases.followUser(currentUserId, userId).collect { response ->
                     _followStatus.value = response
-                    // Refresh both users' data after follow action
                     if (response is Response.Success && response.data) {
                         getCurrentUser()
                         getUserById(userId)
@@ -113,4 +112,25 @@ class UserViewModel @Inject constructor(
                 }
         }
     }
+
+    private val _users = MutableStateFlow<Response<List<User>>>(Response.Loading)
+    val users: StateFlow<Response<List<User>>> = _users.asStateFlow()
+
+    fun getUsers(userIDs: List<String>) {
+        viewModelScope.launch {
+            _users.value = Response.Loading
+            try {
+                val users = userUseCases.getUsersByIDs(userIDs).collect { response ->
+                    if (response is Response.Success) {
+                        _users.value = Response.Success(response.data)
+                    } else if (response is Response.Error) {
+                        _users.value = Response.Error(response.message)
+                    }
+                }
+            } catch (e: Exception) {
+                _users.value = Response.Error(e.message ?: "Failed to fetch users")
+            }
+        }
+    }
+
 }

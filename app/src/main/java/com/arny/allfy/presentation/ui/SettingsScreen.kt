@@ -13,8 +13,11 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.arny.allfy.R
 import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.utils.Screens
@@ -115,7 +118,7 @@ fun SettingsItem(setting: SettingItem) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = setting.icon,
+            imageVector = ImageVector.vectorResource(id = setting.icon as Int),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurface
         )
@@ -133,23 +136,23 @@ fun SettingsItem(setting: SettingItem) {
     }
 }
 
-data class SettingItem(val title: String, val icon: ImageVector)
+data class SettingItem(val title: String, val icon: Any)
 
 val accountSettings = listOf(
-    SettingItem("Personal Information", Icons.Default.Person),
-    SettingItem("Saved", Icons.Default.Person),
-    SettingItem("Close Friends", Icons.Default.Person),
-    SettingItem("Language", Icons.Default.Person)
+    SettingItem("Personal Information", R.drawable.ic_person),
+    SettingItem("Saved", R.drawable.placehoder_image),
+    SettingItem("Close Friends", R.drawable.ic_star),
+    SettingItem("Language", R.drawable.ic_language)
 )
 
 val privacySettings = listOf(
-    SettingItem("Privacy and Security", Icons.Default.Lock),
-    SettingItem("Ads", Icons.Default.AddCircle),
-    SettingItem("Login Activity", Icons.Default.Person)
+    SettingItem("Privacy and Security", R.drawable.ic_lock),
+    SettingItem("Ads", R.drawable.ic_advertisment),
+    SettingItem("Login Activity", R.drawable.ic_activity)
 )
 
 val helpSettings = listOf(
-    SettingItem("Report a Problem", Icons.Default.Person),
-    SettingItem("Help Center", Icons.Default.Person),
-    SettingItem("About", Icons.Default.Info)
+    SettingItem("Report a Problem", R.drawable.ic_report),
+    SettingItem("Help Center", R.drawable.ic_help),
+    SettingItem("About", R.drawable.ic_info)
 )

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,88 +48,118 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
+import com.arny.allfy.domain.model.Conversation
 import com.arny.allfy.domain.model.Message
+import com.arny.allfy.domain.model.MessageType
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.Toast
-import com.arny.allfy.presentation.state.ChatUiState
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
+import com.arny.allfy.presentation.viewmodel.UserViewModel
+import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.formatTimestamp
 import okhttp3.internal.wait
 
 @Composable
 fun ChatScreen(
-    viewModel: ChatViewModel,
-    otherUser: User,
-    onBackClick: () -> Unit
+    navHostController: NavHostController,
+    chatViewModel: ChatViewModel,
+    userViewModel: UserViewModel,
+    currentUserId: String,
+    otherUserId: String
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val messageInput by viewModel.messageInput.collectAsState()
-    val messages by viewModel.messages.collectAsState()
+    val messageInput by chatViewModel.messageInput.collectAsState()
+    val messages by chatViewModel.messages.collectAsState()
+    val sendMessageState by chatViewModel.sendMessageState.collectAsState()
 
-    LaunchedEffect(otherUser.userID) {
-        viewModel.observeMessages(otherUser.userID)
+    val currentUserSate by userViewModel.currentUser.collectAsState()
+    val currentUser = (currentUserSate as Response.Success<User>).data
+
+
+    LaunchedEffect(Unit) {
+        chatViewModel.initializeChat(currentUserId, otherUserId)
+        userViewModel.getUserById(otherUserId)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        ChatTopBar(user = otherUser, onBackClick = onBackClick)
+    val conversationState by chatViewModel.conversationState.collectAsState()
 
-        Box(modifier = Modifier.weight(1f)) {
-            ChatMessagesList(
-                messages = messages,
-                currentUserId = viewModel.currentUserId,
-                onMessageRead = { messageId ->
-                    viewModel.markMessageAsRead(messageId)
-                }
-            )
-            when (uiState) {
-                is ChatUiState.Initial -> {
-//                    LinearProgressIndicator(
-//                        modifier = Modifier.fillMaxWidth()
-//                    )
-                }
-
-                is ChatUiState.Success -> {
-                    viewModel.observeMessages(otherUser.userID)
-                }
-
-                is ChatUiState.Error -> {
-                    Text(
-                        text = (uiState as ChatUiState.Error).message,
-                        color = MaterialTheme.colorScheme.error,
+    when (conversationState) {
+        is Response.Success -> {
+            val conversation = (conversationState as Response.Success<Conversation>).data
+            LaunchedEffect(conversation.id) {
+                chatViewModel.loadMessages(conversation.id)
+            }
+            conversation.id
+            when (val otherUserState = userViewModel.otherUser.collectAsState().value) {
+                is Response.Success -> {
+                    val otherUser = otherUserState.data
+                    Column(
                         modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(16.dp)
-                    )
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        ChatTopBar(user = otherUser, onBackClick = {
+                            navHostController.popBackStack()
+                        })
+
+                        Box(modifier = Modifier.weight(1f)) {
+                            ChatMessagesList(
+                                messages = messages,
+                                currentUserId = chatViewModel.currentUserId,
+                                onMessageRead = { messageId ->
+                                    chatViewModel.markMessageAsRead(messageId)
+                                }
+                            )
+
+                        }
+
+                        ChatInput(
+                            value = messageInput,
+                            onValueChange = chatViewModel::onMessageInputChanged,
+                            onSendClick = {
+                                if (messageInput.isNotBlank()) {
+                                    val message = Message(
+                                        senderId = currentUser.userID,
+                                        receiverId = otherUser.userID,
+                                        content = messageInput,
+                                        isRead = false,
+                                        type = MessageType.TEXT
+                                    )
+                                    chatViewModel.sendMessage(conversation.id, message)
+                                }
+                            },
+//                    isEnabled = sendMessageState is Response.Success
+                        )
+
+                        if (sendMessageState is Response.Loading) {
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 }
 
-                else -> {}
+                is Response.Error -> {
+                    Toast(otherUserState.message)
+                }
+
+                else -> {
+                }
             }
         }
 
-        ChatInput(
-            value = messageInput,
-            onValueChange = viewModel::onMessageInputChanged,
-            onSendClick = {
-                if (messageInput.isNotBlank()) {
-                    viewModel.sendMessage(otherUser.userID, messageInput)
-                }
-            },
-            isEnabled = uiState !is ChatUiState.SendingMessage
-        )
+        is Response.Loading -> {
+        }
 
-        if (uiState is ChatUiState.SendingMessage) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth()
-            )
+        is Response.Error -> {
         }
     }
+
+
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -149,7 +180,8 @@ fun ChatTopBar(
                     contentDescription = null,
                     modifier = Modifier
                         .size(40.dp)
-                        .clip(CircleShape)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
@@ -173,7 +205,7 @@ fun ChatTopBar(
                 Icon(Icons.Default.Call, "Video Call")
             }
             IconButton(onClick = { /* Handle voice call */ }) {
-                Icon(Icons.Default.Call, "Voice Call")
+                Icon(Icons.Default.MoreVert, "More")
             }
         }
     )

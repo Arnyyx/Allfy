@@ -1,11 +1,9 @@
 package com.arny.allfy.domain.model
 
 data class Conversation(
-    val id: String,
-    val participantId: String,
-    val participantName: String,
-    val participantAvatar: String,
-    val lastMessage: Message?,
-    val unreadCount: Int,
-    val timestamp: Long
+    val id: String = "",
+    val otherUserID: String = "",
+    val lastMessage: Message? = null,
+    val unreadCount: Int = 0,
+    val timestamp: Long = 0
 )

@@ -2,6 +2,7 @@
 package com.arny.allfy.presentation.ui
 
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -37,6 +38,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +54,7 @@ import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
+import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
@@ -65,6 +68,7 @@ fun CreatePostScreen(
 ) {
     var captionText by remember { mutableStateOf("") }
     var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    val currentUser by userViewModel.currentUser.collectAsState()
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
@@ -78,12 +82,9 @@ fun CreatePostScreen(
         pageCount = { selectedImageUris.size }
     )
 
-    LaunchedEffect(Unit) {
-        userViewModel.getCurrentUser()
-    }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        when (val userResponse = userViewModel.currentUser.value) {
+        when (currentUser) {
             is Response.Loading -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -94,7 +95,7 @@ fun CreatePostScreen(
             }
 
             is Response.Success -> {
-                val user = userResponse.data
+                val user = (currentUser as Response.Success<User>).data
                 // Only show create post UI when we have user data
                 TopAppBar(
                     title = { Text("New Post") },
@@ -240,7 +241,6 @@ fun CreatePostScreen(
             }
 
             is Response.Error -> {
-                // Show error state when getting user data fails
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -249,7 +249,7 @@ fun CreatePostScreen(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = userResponse.message,
+                        text = (currentUser as Response.Error).message,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium
                     )

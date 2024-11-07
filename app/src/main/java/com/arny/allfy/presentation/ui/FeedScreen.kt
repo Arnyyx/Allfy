@@ -47,10 +47,6 @@ fun FeedScreen(
         userViewModel.getCurrentUser()
     }
     val currentUser by userViewModel.currentUser.collectAsState()
-    LaunchedEffect(currentUser) {
-        Log.d("FeedScreen", "Current user changed: $currentUser")
-    }
-
 
     when (currentUser) {
         is Response.Loading -> {
@@ -82,7 +78,7 @@ fun LoadPosts(
 ) {
     val state by postViewModel.getFeedPostsState.collectAsState()
 
-    LaunchedEffect(currentUser) {
+    LaunchedEffect(Unit) {
         postViewModel.getFeedPosts(currentUser.userID)
     }
 

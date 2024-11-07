@@ -1,7 +1,7 @@
 package com.arny.allfy.data.model
 
 data class MessageEntity(
-    val id: String = "",
+    var id: String = "",
     val senderId: String = "",
     val receiverId: String = "",
     val content: String = "",
