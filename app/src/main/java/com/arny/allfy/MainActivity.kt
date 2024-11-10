@@ -109,7 +109,13 @@ fun AllfyApp(
             CreatePostScreen(navHostController, postViewModel, userViewModel)
         }
         composable(Screens.SettingsScreen.route) {
-            SettingsScreen(navHostController, authViewModel)
+            SettingsScreen(
+                navHostController,
+                authViewModel,
+                chatViewModel,
+                postViewModel,
+                userViewModel
+            )
         }
         composable("postDetail/{postID}") { backStackEntry ->
             val postID = backStackEntry.arguments?.getString("postID")

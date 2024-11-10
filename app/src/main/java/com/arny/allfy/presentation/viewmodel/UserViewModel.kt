@@ -1,6 +1,7 @@
 package com.arny.allfy.presentation.viewmodel
 
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -29,8 +30,6 @@ class UserViewModel @Inject constructor(
     private val _followStatus = MutableStateFlow<Response<Boolean>>(Response.Success(false))
     val followStatus: StateFlow<Response<Boolean>> = _followStatus.asStateFlow()
 
-    private val _updateProfileStatus = mutableStateOf<Response<Boolean>>(Response.Success(false))
-    val updateProfileStatus: State<Response<Boolean>> = _updateProfileStatus
 
     fun getCurrentUser() {
         viewModelScope.launch {
@@ -56,13 +55,20 @@ class UserViewModel @Inject constructor(
         }
     }
 
+    private val _updateProfileStatus = MutableStateFlow<Response<Boolean>>(Response.Success(true))
+    val updateProfileStatus: StateFlow<Response<Boolean>> = _updateProfileStatus.asStateFlow()
+
     fun updateUserProfile(updatedUser: User, imageUri: Uri?) {
         viewModelScope.launch {
-            userUseCases.setUserDetails(updatedUser, imageUri).collect {
-                _updateProfileStatus.value = it
+            userUseCases.setUserDetails(updatedUser, imageUri).collect { response ->
+                _updateProfileStatus.value = response
+                if (response is Response.Success) {
+                    getCurrentUser()
+                }
             }
         }
     }
+
 
     fun followUser(userId: String) {
         viewModelScope.launch {
@@ -120,7 +126,7 @@ class UserViewModel @Inject constructor(
         viewModelScope.launch {
             _users.value = Response.Loading
             try {
-                val users = userUseCases.getUsersByIDs(userIDs).collect { response ->
+                userUseCases.getUsersByIDs(userIDs).collect { response ->
                     if (response is Response.Success) {
                         _users.value = Response.Success(response.data)
                     } else if (response is Response.Error) {
@@ -133,4 +139,12 @@ class UserViewModel @Inject constructor(
         }
     }
 
+    fun clear() {
+        _currentUser.value = Response.Loading
+        _otherUser.value = Response.Loading
+        _followStatus.value = Response.Success(false)
+        _updateProfileStatus.value = Response.Loading
+        _followers.value = Response.Loading
+        _users.value = Response.Loading
+    }
 }

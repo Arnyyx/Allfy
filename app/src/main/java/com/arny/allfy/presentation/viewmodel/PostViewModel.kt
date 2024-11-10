@@ -28,7 +28,6 @@ class PostViewModel @Inject constructor(
     private var isLoadingMore = false
 
     fun getFeedPosts(currentUserID: String, forceRefresh: Boolean = false) {
-        // Reset pagination state if force refresh
         if (forceRefresh) {
             lastVisiblePost = null
             isLoadingMore = false
@@ -40,7 +39,6 @@ class PostViewModel @Inject constructor(
             )
         }
 
-        // Return if we're at the end or already loading more, unless it's a force refresh
         if (!forceRefresh && (_getFeedPostsState.value.endReached || isLoadingMore)) return
 
         isLoadingMore = true
@@ -179,6 +177,18 @@ class PostViewModel @Inject constructor(
         }
     }
 
+    fun clear() {
+        _getFeedPostsState.value = PostState()
+        lastVisiblePost = null
+        isLoadingMore = false
+        _uploadPostSate.value = Response.Success(false)
+        loadedPosts.clear()
+        _postsState.value = Response.Loading
+        _likeLoadingStates.value = emptyMap()
+        _currentPost.value = null
+        _comments.value = Response.Loading
+        _addCommentState.value = Response.Success(false)
+    }
 
 
 }

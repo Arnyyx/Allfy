@@ -20,6 +20,9 @@ import androidx.navigation.NavController
 import com.arny.allfy.R
 import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
+import com.arny.allfy.presentation.viewmodel.ChatViewModel
+import com.arny.allfy.presentation.viewmodel.PostViewModel
+import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Screens
 import com.google.firebase.auth.FirebaseAuth
 
@@ -27,12 +30,19 @@ import com.google.firebase.auth.FirebaseAuth
 @Composable
 fun SettingsScreen(
     navController: NavController,
-    authViewModel: AuthViewModel
+    authViewModel: AuthViewModel,
+    chatViewModel: ChatViewModel,
+    postViewModel: PostViewModel,
+    userViewModel: UserViewModel
 ) {
     val authState = authViewModel.authState.observeAsState()
     LaunchedEffect(authState.value) {
         when (authState.value) {
             is AuthState.Unauthenticated -> {
+                authViewModel.clear()
+                chatViewModel.clear()
+                postViewModel.clear()
+                userViewModel.clear()
                 navController.navigate(Screens.LoginScreen.route) {
                     popUpTo(Screens.SettingsScreen.route) { inclusive = true }
                 }

@@ -37,7 +37,7 @@ class ChatViewModel @Inject constructor(
         _messageInput.value = input
     }
 
-    private val _sendMessageSate = MutableStateFlow<Response<Boolean>>(Response.Loading)
+    private val _sendMessageSate = MutableStateFlow<Response<Boolean>>(Response.Success(true))
     val sendMessageState: StateFlow<Response<Boolean>> = _sendMessageSate.asStateFlow()
 
     fun sendMessage(conversationID: String, message: Message) {
@@ -47,6 +47,9 @@ class ChatViewModel @Inject constructor(
                 message
             ).collect { response ->
                 _sendMessageSate.value = response
+                if (response is Response.Success) {
+                    _messageInput.value = ""
+                }
             }
         }
     }
@@ -100,7 +103,13 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    fun resetConversationState() {
-        _conversationState.value = Response.Loading
+    fun clear() {
+        viewModelScope.launch {
+            _messageInput.value = ""
+            _sendMessageSate.value = Response.Loading
+            _conversationState.value = Response.Loading
+            _messages.value = emptyList()
+            _loadConversationsState.value = Response.Loading
+        }
     }
 }

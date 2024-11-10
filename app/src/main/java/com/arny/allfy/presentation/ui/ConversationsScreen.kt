@@ -69,45 +69,37 @@ fun ConversationsScreen(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     val followersState by userViewModel.followers.collectAsState()
+
     val currentUserViewModel by userViewModel.currentUser.collectAsState()
-    var currentUser = User()
+    val conversationsState by chatViewModel.loadConversationsState.collectAsState()
+    var currentUser by remember { mutableStateOf(User()) }
 
     when (currentUserViewModel) {
-        is Response.Loading -> {
-            LoadingIndicator()
-        }
-
-        is Response.Error -> {
-            ErrorMessage((currentUserViewModel as Response.Error).message)
-        }
-
+        is Response.Loading -> LoadingIndicator()
+        is Response.Error -> ErrorMessage((currentUserViewModel as Response.Error).message)
         is Response.Success -> {
             currentUser = (currentUserViewModel as Response.Success<User>).data
-            chatViewModel.loadConversations(currentUser.userID)
+            LaunchedEffect(currentUser) {
+                chatViewModel.loadConversations(currentUser.userID)
+            }
         }
     }
-    val conversationsState by chatViewModel.loadConversationsState.collectAsState()
-    val usersState by userViewModel.users.collectAsState()
-    val otherUserIDs = mutableSetOf<String>()
+
 
     when (conversationsState) {
         is Response.Success -> {
             val conversations = (conversationsState as Response.Success<List<Conversation>>).data
+            val otherUserIDs = mutableSetOf<String>()
             conversations.forEach { otherUserIDs.add(it.otherUserID) }
-            userViewModel.getUsers(otherUserIDs.toList())
+            LaunchedEffect(otherUserIDs) {
+                userViewModel.getUsers(otherUserIDs.toList())
+            }
         }
 
-        is Response.Error -> {}
-        Response.Loading -> {}
+        else -> {}
     }
-
-    val userMap = when (usersState) {
-        is Response.Success -> {
-            (usersState as Response.Success<List<User>>).data.associateBy { it.userID }
-        }
-
-        else -> emptyMap()
-    }
+    val usersState by userViewModel.users.collectAsState()
+    val userMap = createUserMap(usersState)
 
     Column(
         modifier = Modifier
@@ -116,18 +108,15 @@ fun ConversationsScreen(
     ) {
         MessagesTopBar(navHostController)
         SearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
-
         LaunchedEffect(currentUser.followers) {
             if (currentUser.followers.isNotEmpty()) {
                 userViewModel.getFollowers(currentUser.followers)
             }
+
         }
 
         when (followersState) {
-            is Response.Loading -> {
-                LoadingIndicator()
-            }
-
+            is Response.Loading -> LoadingIndicator()
             is Response.Success -> {
                 val followers = (followersState as Response.Success<List<User>>).data
                 FollowersSection(followers, navHostController, currentUser, chatViewModel)
@@ -139,99 +128,22 @@ fun ConversationsScreen(
     }
 }
 
-@Composable
-fun FollowersSection(
-    followers: List<User>,
-    navHostController: NavHostController,
-    currentUser: User,
-    chatViewModel: ChatViewModel
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = "Followers",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(followers) { follower ->
-                FollowerItem(
-                    follower,
-                    navHostController,
-                    currentUser,
-                    chatViewModel
-                )
-            }
+private fun createUserMap(usersState: Response<List<User>>): Map<String, User> {
+    return when (usersState) {
+        is Response.Success -> {
+            usersState.data.associateBy { it.userID }
         }
+
+        else -> emptyMap()
     }
 }
 
-@Composable
-fun FollowerItem(
-    follower: User,
-    navHostController: NavHostController,
-    currentUser: User,
-    chatViewModel: ChatViewModel
-) {
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(72.dp)
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.clickable(
-                onClick = {
-                    navHostController.navigate("chat/${currentUser.userID}/${follower.userID}")
-                }
-            )
-        ) {
-            AsyncImage(
-                model = follower.imageUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
-
-            if (follower.isOnline) {
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Color.Green)
-                        .align(Alignment.BottomEnd)
-                        .padding(2.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = follower.userName,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
+/**
+ * UI Components - Top Section
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MessagesTopBar(
-    navHostController: NavHostController
-) {
+fun MessagesTopBar(navHostController: NavHostController) {
     TopAppBar(
         title = {
             Row(
@@ -240,13 +152,11 @@ fun MessagesTopBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = {
-                        navHostController.popBackStack()
-                    }) {
+                    IconButton(onClick = { navHostController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                     Text(
-                        text = "arny cute hehehe",
+                        text = "Messages",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -285,6 +195,128 @@ fun SearchBar(
         shape = RoundedCornerShape(16.dp),
         singleLine = true
     )
+}
+
+/**
+ * UI Components - Followers Section
+ */
+@Composable
+fun FollowersSection(
+    followers: List<User>,
+    navHostController: NavHostController,
+    currentUser: User,
+    chatViewModel: ChatViewModel
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Text(
+            text = "Followers",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(followers) { follower ->
+                FollowerItem(follower, navHostController, currentUser, chatViewModel)
+            }
+        }
+    }
+}
+
+@Composable
+fun FollowerItem(
+    follower: User,
+    navHostController: NavHostController,
+    currentUser: User,
+    chatViewModel: ChatViewModel
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(72.dp)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.clickable {
+                navHostController.navigate("chat/${currentUser.userID}/${follower.userID}")
+            }
+        ) {
+            AsyncImage(
+                model = follower.imageUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+
+            if (follower.isOnline) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Color.Green)
+                        .align(Alignment.BottomEnd)
+                        .padding(2.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = follower.userName,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * UI Components - Conversations Section
+ */
+@Composable
+private fun ConversationsSection(
+    navHostController: NavHostController,
+    chatViewModel: ChatViewModel,
+    userMap: Map<String, User>,
+    currentUser: User
+) {
+    val conversationsState by chatViewModel.loadConversationsState.collectAsState()
+
+    when (conversationsState) {
+        is Response.Success -> {
+            val conversations = (conversationsState as Response.Success<List<Conversation>>).data
+            if (conversations.isEmpty()) {
+                EmptyState("No conversations found")
+            } else {
+                LazyColumn {
+                    items(
+                        items = conversations,
+                        key = { conversation -> conversation.id }
+                    ) { conversation ->
+                        ConversationItem(
+                            conversation = conversation,
+                            userMap = userMap,
+                            onClick = {
+                                navHostController.navigate("chat/${currentUser.userID}/${conversation.otherUserID}")
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        is Response.Error -> ErrorMessage((conversationsState as Response.Error).message)
+        Response.Loading -> LoadingIndicator()
+    }
 }
 
 @Composable
@@ -356,49 +388,9 @@ private fun ConversationItem(
     }
 }
 
-
-@Composable
-private fun ConversationsSection(
-    navHostController: NavHostController,
-    chatViewModel: ChatViewModel,
-    userMap: Map<String, User>,
-    currentUser: User
-) {
-    val conversationsState by chatViewModel.loadConversationsState.collectAsState()
-
-    when (conversationsState) {
-        is Response.Success -> {
-            val conversations = (conversationsState as Response.Success<List<Conversation>>).data
-            if (conversations.isEmpty()) {
-                EmptyState("No conversations found")
-            } else {
-                LazyColumn {
-                    items(
-                        items = conversations,
-                        key = { conversation -> conversation.id }
-                    ) { conversation ->
-                        ConversationItem(
-                            conversation = conversation,
-                            userMap,
-                            onClick = {
-                                navHostController.navigate("chat/${currentUser.userID}/${conversation.otherUserID}")
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        is Response.Error -> {
-            ErrorMessage((conversationsState as Response.Error).message)
-        }
-
-        Response.Loading -> {
-            LoadingIndicator()
-        }
-    }
-}
-
+/**
+ * Common UI Components
+ */
 @Composable
 private fun LoadingIndicator() {
     Box(

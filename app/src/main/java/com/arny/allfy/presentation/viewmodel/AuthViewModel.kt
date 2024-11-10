@@ -66,6 +66,7 @@ class AuthViewModel @Inject constructor(
             authUseCases.firebaseSignOut().collect { it ->
                 if (it is AuthState.Unauthenticated) {
                     _authState.value = it
+                    clear()
                 }
             }
         }
@@ -79,6 +80,14 @@ class AuthViewModel @Inject constructor(
             authUseCases.getCurrentUserID().collect {
                 _userID.value = it
             }
+        }
+    }
+    fun clear() {
+        viewModelScope.launch {
+            _signInState.value = Response.Success(false)
+            _signUpState.value = Response.Success(false)
+            _authState.value = AuthState.Unauthenticated
+            _userID.value = Response.Loading
         }
     }
 }
