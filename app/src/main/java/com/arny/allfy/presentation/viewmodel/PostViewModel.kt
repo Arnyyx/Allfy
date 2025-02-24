@@ -87,7 +87,19 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    private val _postsState = MutableStateFlow<Response<Map<String, Post>>>(Response.Loading)
+    private val _deletePostState = MutableStateFlow<Response<Boolean>>(Response.Success(false))
+    val deletePostState: StateFlow<Response<Boolean>> = _deletePostState
+
+    fun deletePost(postID: String, currentUserID: String) {
+        viewModelScope.launch {
+            postUseCases.deletePost(postID, currentUserID).collect {
+                _deletePostState.value = it
+            }
+        }
+    }
+
+    private val _postsState =
+        MutableStateFlow<Response<Map<String, Post>>>(Response.Loading)
     val postsState: StateFlow<Response<Map<String, Post>>> = _postsState.asStateFlow()
 
     private val loadedPosts = mutableMapOf<String, Post>()
@@ -117,7 +129,8 @@ class PostViewModel @Inject constructor(
 
     //Like
     private val _likeLoadingStates = MutableStateFlow<Map<String, Boolean>>(emptyMap())
-    val likeLoadingStates: StateFlow<Map<String, Boolean>> = _likeLoadingStates.asStateFlow()
+    val likeLoadingStates: StateFlow<Map<String, Boolean>> =
+        _likeLoadingStates.asStateFlow()
 
     private val _currentPost = MutableStateFlow<Post?>(null)
     val currentPost: StateFlow<Post?> = _currentPost.asStateFlow()
@@ -166,7 +179,8 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    private val _addCommentState = mutableStateOf<Response<Boolean>>(Response.Success(false))
+    private val _addCommentState =
+        mutableStateOf<Response<Boolean>>(Response.Success(false))
     val addCommentState: State<Response<Boolean>> = _addCommentState
 
     fun addComment(postID: String, userID: String, content: String) {

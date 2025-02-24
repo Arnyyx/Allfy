@@ -16,6 +16,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.ui.ChatScreen
 import com.arny.allfy.presentation.ui.ConversationsScreen
@@ -36,9 +37,13 @@ import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.ui.theme.AllfyTheme
 import com.arny.allfy.utils.Screens
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var googleAuthClient: GoogleAuthClient
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -54,7 +59,8 @@ class MainActivity : ComponentActivity() {
                         authViewModel,
                         userViewModel,
                         postViewModel,
-                        chatViewModel
+                        chatViewModel,
+                        googleAuthClient
                     )
                 }
             }
@@ -69,6 +75,7 @@ fun AllfyApp(
     userViewModel: UserViewModel,
     postViewModel: PostViewModel,
     chatViewModel: ChatViewModel,
+    googleAuthClient: GoogleAuthClient
 ) {
     NavHost(
         navController = navHostController,
@@ -81,7 +88,7 @@ fun AllfyApp(
         }
     ) {
         composable(Screens.LoginScreen.route) {
-            LoginScreen(navHostController, authViewModel)
+            LoginScreen(navHostController, authViewModel, googleAuthClient)
         }
         composable(Screens.SignUpScreen.route) {
             SignUpScreen(navHostController, authViewModel)

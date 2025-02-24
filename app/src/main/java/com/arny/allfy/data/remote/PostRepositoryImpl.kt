@@ -81,6 +81,28 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun deletePost(postID: String, currentUserID: String): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+
+        try {
+            firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .delete()
+                .await()
+
+            firestore.collection(Constants.COLLECTION_NAME_USERS).document(currentUserID)
+                .update("postsIDs", FieldValue.arrayRemove(postID))
+                .await()
+
+            storage.reference.child(Constants.COLLECTION_NAME_POSTS + "/$postID").delete().await()
+
+            emit(Response.Success(true))
+        } catch (e: Exception) {
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+        }
+
+    }
+
     override fun getPostByID(postID: String): Flow<Response<Post>> = callbackFlow {
         Response.Loading
         val snapshotListener =

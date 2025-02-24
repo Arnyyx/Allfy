@@ -13,7 +13,7 @@ import com.arny.allfy.presentation.common.BottomNavigation
 fun SearchScreen(navController: NavController) {
     Column(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.weight(2f)) {
-            Text(text = "Search Screen")
+//            Text(text = "Search Screen")
         }
         BottomNavigation( BottomNavigationItem.Search,navController)
     }

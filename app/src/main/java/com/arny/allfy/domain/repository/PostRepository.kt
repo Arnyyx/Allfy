@@ -15,6 +15,7 @@ interface PostRepository {
     ): Flow<Response<List<Post>>>
 
     fun uploadPost(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>>
+    fun deletePost(postID: String, currentUserID: String): Flow<Response<Boolean>>
     fun getPostByID(postID: String): Flow<Response<Post>>
 
     fun toggleLikePost(post: Post, userID: String): Flow<Response<Post>>

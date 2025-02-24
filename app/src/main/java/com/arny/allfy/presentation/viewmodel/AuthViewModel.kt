@@ -10,8 +10,6 @@ import com.arny.allfy.domain.usecase.authentication.AuthenticationUseCases
 import com.arny.allfy.utils.Response
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,17 +17,20 @@ import javax.inject.Inject
 class AuthViewModel @Inject constructor(
     private val authUseCases: AuthenticationUseCases
 ) : ViewModel() {
-    val isUserAuthenticated get() = authUseCases.isUserAuthenticated()
-
-    private val _signInState = mutableStateOf<Response<Boolean>>(Response.Success(false))
-    val signInState: State<Response<Boolean>> = _signInState
-
     private val _signUpState = mutableStateOf<Response<Boolean>>(Response.Success(false))
     val signUpState: State<Response<Boolean>> = _signUpState
 
-    fun signIn(email: String, password: String) {
+    fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
             authUseCases.firebaseSignIn(email, password).collect {
+                _authState.value = it
+            }
+        }
+    }
+
+    fun signInWithGoogle(idToken: String) {
+        viewModelScope.launch {
+            authUseCases.signInWithGoogle(idToken).collect {
                 _authState.value = it
             }
         }
@@ -44,7 +45,6 @@ class AuthViewModel @Inject constructor(
     }
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
-
     private val _authState = MutableLiveData<AuthState>()
     val authState: LiveData<AuthState> = _authState
 
@@ -72,22 +72,10 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    private val _userID = MutableStateFlow<Response<String>>(Response.Loading)
-    val userID: StateFlow<Response<String>> = _userID
-
-    fun getCurrentUserID() {
-        viewModelScope.launch {
-            authUseCases.getCurrentUserID().collect {
-                _userID.value = it
-            }
-        }
-    }
     fun clear() {
         viewModelScope.launch {
-            _signInState.value = Response.Success(false)
             _signUpState.value = Response.Success(false)
             _authState.value = AuthState.Unauthenticated
-            _userID.value = Response.Loading
         }
     }
 }

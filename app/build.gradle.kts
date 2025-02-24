@@ -83,6 +83,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
+    implementation(libs.play.services.auth)
+
 }
 kapt {
     correctErrorTypes = true

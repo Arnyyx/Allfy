@@ -1,7 +1,9 @@
 package com.arny.allfy.di
 
+import android.content.Context
 import com.arny.allfy.data.mapper.MessageMapper
 import com.arny.allfy.data.remote.AuthenticationRepositoryImpl
+import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.data.remote.MessageRepositoryImpl
 import com.arny.allfy.data.remote.PostRepositoryImpl
 import com.arny.allfy.data.remote.UserRepositoryImpl
@@ -16,10 +18,12 @@ import com.arny.allfy.domain.usecase.authentication.FirebaseSignOut
 import com.arny.allfy.domain.usecase.authentication.FirebaseSignUp
 import com.arny.allfy.domain.usecase.authentication.GetCurrentUserID
 import com.arny.allfy.domain.usecase.authentication.IsUserAuthenticated
+import com.arny.allfy.domain.usecase.authentication.SignInWithGoogle
 import com.arny.allfy.domain.usecase.message.GetOrCreateConversationUseCase
 import com.arny.allfy.domain.usecase.message.MarkMessageAsReadUseCase
 import com.arny.allfy.domain.usecase.message.SendMessageUseCase
 import com.arny.allfy.domain.usecase.post.AddComment
+import com.arny.allfy.domain.usecase.post.DeletePost
 import com.arny.allfy.domain.usecase.post.GetComments
 import com.arny.allfy.domain.usecase.post.GetFeedPosts
 import com.arny.allfy.domain.usecase.post.GetPostByID
@@ -40,6 +44,7 @@ import com.google.firebase.storage.FirebaseStorage
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -83,7 +88,8 @@ class AllfyModule {
         firebaseSignOut = FirebaseSignOut(repositoryImpl),
         firebaseSignIn = FirebaseSignIn(repositoryImpl),
         firebaseSignUp = FirebaseSignUp(repositoryImpl),
-        getCurrentUserID = GetCurrentUserID(repositoryImpl)
+        getCurrentUserID = GetCurrentUserID(repositoryImpl),
+        signInWithGoogle = SignInWithGoogle(repositoryImpl)
     )
 
     @Singleton
@@ -120,6 +126,7 @@ class AllfyModule {
     fun providePostUseCases(repository: PostRepository) = PostUseCases(
         getFeedPosts = GetFeedPosts(repository),
         uploadPost = UploadPost(repository),
+        deletePost = DeletePost(repository),
         getPostByID = GetPostByID(repository),
         toggleLikePost = ToggleLikePost(repository),
         addComment = AddComment(repository),
@@ -164,5 +171,13 @@ class AllfyModule {
         messageRepository: MessageRepository
     ): GetOrCreateConversationUseCase {
         return GetOrCreateConversationUseCase(messageRepository)
+    }
+
+    @Provides
+    @Singleton
+    fun provideGoogleAuthClient(
+        @ApplicationContext context: Context
+    ): GoogleAuthClient {
+        return GoogleAuthClient(context)
     }
 }

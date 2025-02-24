@@ -11,4 +11,5 @@ interface AuthenticationRepository {
     fun firebaseSignOut(): Flow<AuthState>
     fun firebaseSignIn(email: String, password: String): Flow<AuthState>
     fun firebaseSignUp(userName: String, email: String, password: String): Flow<AuthState>
+    fun signInWithGoogle(idToken: String): Flow<AuthState>
 }

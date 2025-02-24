@@ -1,5 +1,6 @@
 package com.arny.allfy.presentation.common
 
+import android.util.Log
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -26,12 +27,17 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,10 +72,11 @@ import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.viewmodel.PostViewModel
+import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.Screens
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostItem(
     initialPost: Post,
@@ -98,11 +105,22 @@ fun PostItem(
     }
     val showComments = remember { mutableStateOf(false) }
 
+    val deletePostState by postViewModel.deletePostState.collectAsState()
+    LaunchedEffect(deletePostState) {
+        if (deletePostState is Response.Success && (deletePostState as Response.Success).data) {
+            navController.navigate(Screens.FeedScreen.route) {
+                popUpTo(Screens.FeedScreen.route) {
+                    inclusive = true
+                }
+            }
+            Log.d("AAA", "Post deleted successfully")
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clickable {}
             .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = {
@@ -114,7 +132,15 @@ fun PostItem(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            PostHeader(post, navController)
+            PostHeader(
+                post, navController, currentUser,
+                onEditPost = {
+                    //Todo edit post
+                },
+                onDeletePost = {
+                    postViewModel.deletePost(post.postID, post.postOwnerID)
+                }
+            )
             PostImages(post)
             if (post.caption.isNotBlank()) PostCaption(post.caption)
             PostActions(
@@ -140,29 +166,91 @@ fun PostItem(
 }
 
 @Composable
-private fun PostHeader(post: Post, navController: NavController) {
+private fun PostHeader(
+    post: Post,
+    navController: NavController,
+    currentUser: User,
+    onEditPost: () -> Unit = {},
+    onDeletePost: () -> Unit = {}
+) {
+    var showMenu by remember { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .padding(8.dp)
-            .clickable(onClick = {
+
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable(onClick = {
                 navController.navigate("profile/${post.postOwnerID}")
             }
+            )) {
+            AsyncImage(
+                model = post.postOwnerImageUrl,
+                contentDescription = "User Avatar",
+                placeholder = painterResource(R.drawable.ic_user),
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
             )
-    ) {
-        AsyncImage(
-            model = post.postOwnerImageUrl,
-            contentDescription = "User Avatar",
-            placeholder = painterResource(R.drawable.ic_user),
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text = post.postOwnerUsername, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = post.postOwnerUsername, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+        Box {
+            IconButton(onClick = { showMenu = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "More Options"
+                )
+            }
+
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false }
+            ) {
+                if (post.postOwnerID == currentUser.userID) {
+                    DropdownMenuItem(
+                        text = { Text("Edit Post") },
+                        onClick = {
+                            onEditPost()
+                            showMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Post"
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete Post") },
+                        onClick = {
+                            onDeletePost()
+                            showMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Post"
+                            )
+                        }
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("Report Post") },
+                    onClick = {
+                        showMenu = false
+                    }
+                )
+            }
+        }
     }
 }
+
 @Composable
 private fun PostImages(post: Post) {
     if (post.imageUrls.isNotEmpty()) {
@@ -212,6 +300,7 @@ private fun PostImages(post: Post) {
         }
     }
 }
+
 @Composable
 private fun PostCaption(caption: String) {
     Text(text = caption, modifier = Modifier.padding(8.dp))
@@ -262,18 +351,6 @@ private fun LikeButton(
     isLoading: Boolean,
     onClick: () -> Unit
 ) {
-//    var scale by remember { mutableStateOf(1f) }
-//    val animatedScale by animateFloatAsState(
-//        targetValue = scale,
-//        animationSpec = spring(
-//            dampingRatio = Spring.DampingRatioMediumBouncy,
-//            stiffness = Spring.StiffnessLow
-//        ),
-//        finishedListener = {
-//            scale = 1f
-//        }
-//    )
-
     var scale by remember { mutableStateOf(1f) }
     val animatedScale by animateFloatAsState(
         targetValue = scale,

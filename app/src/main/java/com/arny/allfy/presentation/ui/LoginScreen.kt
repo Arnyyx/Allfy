@@ -1,30 +1,19 @@
 package com.arny.allfy.presentation.ui
 
+import android.app.Activity
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -38,20 +27,58 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.arny.allfy.R
+import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.utils.AutofillTextField
-import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screens
+import com.google.android.gms.auth.api.identity.Identity
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun LoginScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel
+    authViewModel: AuthViewModel,
+    googleAuthClient: GoogleAuthClient
 ) {
     val authState = authViewModel.authState.observeAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            scope.launch {
+                val signInResult = googleAuthClient.getSignInResultFromIntent(
+                    result.data ?: return@launch
+                )
+                signInResult.data?.let { userData ->
+                    try {
+                        val signInCredential = Identity.getSignInClient(context)
+                            .getSignInCredentialFromIntent(result.data)
+                        val idToken = signInCredential.googleIdToken
+                        if (idToken != null) {
+                            authViewModel.signInWithGoogle(idToken)
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "Google Sign In failed: No ID token",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(
+                            context,
+                            e.message ?: "Google Sign In failed",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
 
     when (authState.value) {
         is AuthState.Authenticated -> {
@@ -62,7 +89,8 @@ fun LoginScreen(
 
         is AuthState.Error -> Toast.makeText(
             context,
-            (authState.value as AuthState.Error).message, Toast.LENGTH_SHORT
+            (authState.value as AuthState.Error).message,
+            Toast.LENGTH_SHORT
         ).show()
 
         else -> {}
@@ -136,6 +164,7 @@ fun LoginScreen(
                 color = Color.Gray,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
+
             Spacer(modifier = Modifier.height(16.dp))
 
             when (authState.value) {
@@ -143,7 +172,7 @@ fun LoginScreen(
                 else -> {
                     Button(
                         onClick = {
-                            authViewModel.signIn(emailState.value, passwordState.value)
+                            authViewModel.signInWithEmail(emailState.value, passwordState.value)
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -152,6 +181,61 @@ fun LoginScreen(
                     ) {
                         Text("Log In", color = Color.White)
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Divider(
+                    modifier = Modifier.weight(1f),
+                    color = Color.LightGray
+                )
+                Text(
+                    text = "OR",
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = Color.Gray
+                )
+                Divider(
+                    modifier = Modifier.weight(1f),
+                    color = Color.LightGray
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val signInIntentSender = googleAuthClient.signIn()
+                        launcher.launch(
+                            IntentSenderRequest.Builder(
+                                signInIntentSender ?: return@launch
+                            ).build()
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                colors = ButtonDefaults.outlinedButtonColors()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_google),
+                        contentDescription = "Google Icon",
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Continue with Google")
                 }
             }
 
@@ -176,5 +260,3 @@ fun LoginScreen(
         )
     }
 }
-
-

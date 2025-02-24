@@ -27,8 +27,7 @@ class ChatViewModel @Inject constructor(
     private val markMessageAsReadUseCase: MarkMessageAsReadUseCase,
     private val getOrCreateConversationUseCase: GetOrCreateConversationUseCase
 ) : ViewModel() {
-    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
-        ?: ""
+    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
     private val _messageInput = MutableStateFlow("")
     val messageInput: StateFlow<String> = _messageInput.asStateFlow()
