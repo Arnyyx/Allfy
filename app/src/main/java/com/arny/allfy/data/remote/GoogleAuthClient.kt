@@ -1,71 +1,83 @@
 package com.arny.allfy.data.remote
 
+import android.app.Activity
 import android.content.Context
-import android.content.Intent
-import android.content.IntentSender
-import com.google.android.gms.auth.api.identity.BeginSignInRequest
-import com.google.android.gms.auth.api.identity.SignInClient
-import com.google.firebase.auth.GoogleAuthProvider
-import com.google.android.gms.auth.api.identity.Identity
-import kotlinx.coroutines.tasks.await
-import java.util.concurrent.CancellationException
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetCredentialResponse
+import androidx.credentials.exceptions.GetCredentialException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class GoogleAuthClient @Inject constructor(
     private val context: Context
 ) {
-    private val oneTapClient: SignInClient = Identity.getSignInClient(context)
+    private val credentialManager = CredentialManager.create(context)
 
-    suspend fun signIn(): IntentSender? {
-        try {
-            val result = oneTapClient.beginSignIn(
-                buildSignInRequest()
-            ).await()
-            return result.pendingIntent.intentSender
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            return null
-        }
+    fun buildSignInRequest(): GetCredentialRequest {
+        val googleIdOption = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId("535920978835-vf64ef426k8va6mudsejh35abttc4u3j.apps.googleusercontent.com")
+            .setAutoSelectEnabled(false)
+            .build()
+
+        return GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
     }
 
-    suspend fun getSignInResultFromIntent(intent: Intent): SignInResult {
-        return try {
-            val credential = oneTapClient.getSignInCredentialFromIntent(intent)
-            val googleIdToken = credential.googleIdToken
-            if (googleIdToken == null) {
-                return SignInResult(
-                    data = null,
-                    errorMessage = "Google ID token is null"
-                )
-            }
-            SignInResult(
-                data = UserData(
-                    userId = credential.id,
-                    username = credential.displayName ?: "",
-                    profilePictureUrl = credential.profilePictureUri?.toString(),
-                    email = credential.id  // Using ID as email since we need it for Firebase
-                ),
-                errorMessage = null
+    suspend fun signIn(activity: Activity): SignInResult = withContext(Dispatchers.Main) {
+        try {
+            val request = buildSignInRequest()
+            val result = credentialManager.getCredential(
+                request = request,
+                context = activity
             )
-        } catch (e: Exception) {
+            handleSignInResult(result)
+        } catch (e: GetCredentialException) {
             SignInResult(
                 data = null,
-                errorMessage = e.message
+                googleIdToken = null,
+                errorMessage = e.message ?: "Failed to sign in with Google"
             )
         }
     }
 
-    private fun buildSignInRequest(): BeginSignInRequest {
-        return BeginSignInRequest.Builder()
-            .setGoogleIdTokenRequestOptions(
-                BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
-                    .setSupported(true)
-                    .setFilterByAuthorizedAccounts(false)
-                    .setServerClientId("535920978835-vf64ef426k8va6mudsejh35abttc4u3j.apps.googleusercontent.com")
-                    .build()
-            )
-            .setAutoSelectEnabled(true)
-            .build()
+    private fun handleSignInResult(result: GetCredentialResponse): SignInResult {
+        return when (val credential = result.credential) {
+            is CustomCredential -> {
+                if (credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                    SignInResult(
+                        data = UserData(
+                            userId = googleIdTokenCredential.id,
+                            username = googleIdTokenCredential.displayName ?: "",
+                            profilePictureUrl = googleIdTokenCredential.profilePictureUri?.toString(),
+                            email = googleIdTokenCredential.id
+                        ),
+                        googleIdToken = googleIdTokenCredential.idToken,
+                        errorMessage = null
+                    )
+                } else {
+                    SignInResult(
+                        data = null,
+                        googleIdToken = null,
+                        errorMessage = "Unsupported credential type"
+                    )
+                }
+            }
+            else -> {
+                SignInResult(
+                    data = null,
+                    googleIdToken = null,
+                    errorMessage = "Unexpected credential type"
+                )
+            }
+        }
     }
 }
 
@@ -78,5 +90,6 @@ data class UserData(
 
 data class SignInResult(
     val data: UserData?,
+    val googleIdToken: String?,
     val errorMessage: String?
 )

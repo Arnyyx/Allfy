@@ -6,7 +6,11 @@ import javax.inject.Inject
 class MarkMessageAsReadUseCase @Inject constructor(
     private val messageRepository: MessageRepository
 ) {
-    suspend operator fun invoke(messageId: String): Result<Unit> {
-        return messageRepository.markMessageAsRead(messageId)
+    suspend operator fun invoke(
+        conversationId: String,
+        currentUserId: String,
+        messageId: String
+    ): Result<Unit> {
+        return messageRepository.markMessageAsRead(conversationId, currentUserId, messageId)
     }
 }

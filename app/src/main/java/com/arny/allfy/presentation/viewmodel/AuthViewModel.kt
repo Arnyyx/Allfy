@@ -6,6 +6,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.domain.usecase.authentication.AuthenticationUseCases
 import com.arny.allfy.utils.Response
 import com.google.firebase.auth.FirebaseAuth
@@ -15,10 +16,19 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authUseCases: AuthenticationUseCases
+    private val authUseCases: AuthenticationUseCases,
+    val googleAuthClient: GoogleAuthClient
 ) : ViewModel() {
     private val _signUpState = mutableStateOf<Response<Boolean>>(Response.Success(false))
     val signUpState: State<Response<Boolean>> = _signUpState
+
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val _authState = MutableLiveData<AuthState>()
+    val authState: LiveData<AuthState> = _authState
+
+    init {
+        checkAuthStatus()
+    }
 
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
@@ -40,16 +50,13 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             authUseCases.firebaseSignUp(userName, email, password).collect {
                 _authState.value = it
+                if (it is AuthState.Authenticated) {
+                    _signUpState.value = Response.Success(true)
+                } else if (it is AuthState.Error) {
+                    _signUpState.value = Response.Error(it.message)
+                }
             }
         }
-    }
-
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
-    private val _authState = MutableLiveData<AuthState>()
-    val authState: LiveData<AuthState> = _authState
-
-    init {
-        checkAuthStatus()
     }
 
     private fun checkAuthStatus() {
@@ -59,7 +66,6 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Authenticated
         }
     }
-
 
     fun signOut() {
         viewModelScope.launch {

@@ -2,9 +2,6 @@ package com.arny.allfy.presentation.ui
 
 import android.app.Activity
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,9 +27,7 @@ import com.arny.allfy.R
 import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
-import com.arny.allfy.utils.AutofillTextField
 import com.arny.allfy.utils.Screens
-import com.google.android.gms.auth.api.identity.Identity
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -46,52 +41,22 @@ fun LoginScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            scope.launch {
-                val signInResult = googleAuthClient.getSignInResultFromIntent(
-                    result.data ?: return@launch
-                )
-                signInResult.data?.let { userData ->
-                    try {
-                        val signInCredential = Identity.getSignInClient(context)
-                            .getSignInCredentialFromIntent(result.data)
-                        val idToken = signInCredential.googleIdToken
-                        if (idToken != null) {
-                            authViewModel.signInWithGoogle(idToken)
-                        } else {
-                            Toast.makeText(
-                                context,
-                                "Google Sign In failed: No ID token",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(
-                            context,
-                            e.message ?: "Google Sign In failed",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
+    when (authState.value) {
+        is AuthState.Authenticated -> {
+            LaunchedEffect(Unit) {
+                navController.navigate(Screens.FeedScreen.route) {
+                    popUpTo(Screens.LoginScreen.route) { inclusive = true }
                 }
             }
         }
-    }
 
-    when (authState.value) {
-        is AuthState.Authenticated -> {
-            navController.navigate(Screens.FeedScreen.route) {
-                popUpTo(Screens.LoginScreen.route) { inclusive = true }
-            }
+        is AuthState.Error -> LaunchedEffect(authState.value) {
+            Toast.makeText(
+                context,
+                (authState.value as AuthState.Error).message,
+                Toast.LENGTH_SHORT
+            ).show()
         }
-
-        is AuthState.Error -> Toast.makeText(
-            context,
-            (authState.value as AuthState.Error).message,
-            Toast.LENGTH_SHORT
-        ).show()
 
         else -> {}
     }
@@ -120,41 +85,31 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            AutofillTextField(
+            OutlinedTextField(
                 value = emailState.value,
                 onValueChange = { emailState.value = it },
                 label = { Text("Phone number, username, or email") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF3897F0),
-                    unfocusedBorderColor = Color.LightGray
-                ),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next
-                ),
-                autofillTypes = listOf(AutofillType.EmailAddress)
+                )
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            AutofillTextField(
+            OutlinedTextField(
                 value = passwordState.value,
                 onValueChange = { passwordState.value = it },
                 label = { Text("Password") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF3897F0),
-                    unfocusedBorderColor = Color.LightGray
-                ),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done
                 ),
-                visualTransformation = PasswordVisualTransformation(),
-                autofillTypes = listOf(AutofillType.Password)
+                visualTransformation = PasswordVisualTransformation()
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -208,16 +163,19 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-
             OutlinedButton(
                 onClick = {
                     scope.launch {
-                        val signInIntentSender = googleAuthClient.signIn()
-                        launcher.launch(
-                            IntentSenderRequest.Builder(
-                                signInIntentSender ?: return@launch
-                            ).build()
-                        )
+                        val result = googleAuthClient.signIn(context as Activity)
+                        result.googleIdToken?.let { idToken ->
+                            authViewModel.signInWithGoogle(idToken)
+                        } ?: run {
+                            Toast.makeText(
+                                context,
+                                result.errorMessage ?: "Google Sign In failed",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
                 },
                 modifier = Modifier

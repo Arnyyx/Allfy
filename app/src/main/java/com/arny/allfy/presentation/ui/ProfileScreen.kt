@@ -239,30 +239,46 @@ fun ProfileContent(
                     Text("Edit Profile")
                 }
             } else {
-                Button(
-                    onClick = {
-                        if (isFollowing) {
-                            userViewModel.unfollowUser(user.userID)
-                        } else {
-                            userViewModel.followUser(user.userID)
-                        }
-                        isFollowing = !isFollowing
-                    },
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isFollowing)
-                            MaterialTheme.colorScheme.surface
-                        else
-                            MaterialTheme.colorScheme.primary
-                    )
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        if (isFollowing) "Following" else "Follow",
-                        color = if (isFollowing)
-                            MaterialTheme.colorScheme.onSurface
-                        else
-                            MaterialTheme.colorScheme.onPrimary
-                    )
+                    OutlinedButton(
+                        onClick = {
+                            if (isFollowing) {
+                                userViewModel.unfollowUser(user.userID)
+                            } else {
+                                userViewModel.followUser(user.userID)
+                            }
+                            isFollowing = !isFollowing
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isFollowing)
+                                MaterialTheme.colorScheme.surface
+                            else
+                                MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            if (isFollowing) "Following" else "Follow",
+                            color = if (isFollowing)
+                                MaterialTheme.colorScheme.onSurface
+                            else
+                                MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            if (currentUserState is Response.Success) {
+                                val currentUser = (currentUserState as Response.Success<User>).data
+                                navController.navigate("chat/${currentUser.userID}/${user.userID}")
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Message")
+                    }
                 }
             }
 

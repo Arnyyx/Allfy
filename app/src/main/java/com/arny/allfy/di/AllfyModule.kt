@@ -1,7 +1,6 @@
 package com.arny.allfy.di
 
 import android.content.Context
-import com.arny.allfy.data.mapper.MessageMapper
 import com.arny.allfy.data.remote.AuthenticationRepositoryImpl
 import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.data.remote.MessageRepositoryImpl
@@ -21,6 +20,7 @@ import com.arny.allfy.domain.usecase.authentication.IsUserAuthenticated
 import com.arny.allfy.domain.usecase.authentication.SignInWithGoogle
 import com.arny.allfy.domain.usecase.message.GetOrCreateConversationUseCase
 import com.arny.allfy.domain.usecase.message.MarkMessageAsReadUseCase
+import com.arny.allfy.domain.usecase.message.SendImagesUseCase
 import com.arny.allfy.domain.usecase.message.SendMessageUseCase
 import com.arny.allfy.domain.usecase.post.AddComment
 import com.arny.allfy.domain.usecase.post.DeletePost
@@ -144,9 +144,9 @@ class AllfyModule {
     @Singleton
     fun provideMessageRepository(
         firebaseDatabase: FirebaseDatabase,
-        messageMapper: MessageMapper
+        storage: FirebaseStorage
     ): MessageRepository {
-        return MessageRepositoryImpl(firebaseDatabase, messageMapper)
+        return MessageRepositoryImpl(firebaseDatabase, storage)
     }
 
     @Singleton
@@ -155,6 +155,14 @@ class AllfyModule {
         messageRepository: MessageRepository
     ): SendMessageUseCase {
         return SendMessageUseCase(messageRepository)
+    }
+
+    @Singleton
+    @Provides
+    fun provideSendImagesUseCase(
+        messageRepository: MessageRepository
+    ): SendImagesUseCase {
+        return SendImagesUseCase(messageRepository)
     }
 
     @Singleton

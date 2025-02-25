@@ -85,7 +85,6 @@ fun ConversationsScreen(
         }
     }
 
-
     when (conversationsState) {
         is Response.Success -> {
             val conversations = (conversationsState as Response.Success<List<Conversation>>).data
@@ -108,22 +107,36 @@ fun ConversationsScreen(
     ) {
         MessagesTopBar(navHostController)
         SearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
+
+        // Load followers if there are any
         LaunchedEffect(currentUser.followers) {
             if (currentUser.followers.isNotEmpty()) {
                 userViewModel.getFollowers(currentUser.followers)
             }
-
         }
 
         when (followersState) {
-            is Response.Loading -> LoadingIndicator()
+            is Response.Loading -> {
+                if (currentUser.followers.isNotEmpty()) {
+                    LoadingIndicator()
+                } else {
+                    // If no followers, show conversations directly
+                    ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
+                }
+            }
+
             is Response.Success -> {
                 val followers = (followersState as Response.Success<List<User>>).data
-                FollowersSection(followers, navHostController, currentUser, chatViewModel)
+                if (followers.isNotEmpty()) {
+                    FollowersSection(followers, navHostController, currentUser, chatViewModel)
+                }
                 ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
             }
 
-            is Response.Error -> ErrorMessage((followersState as Response.Error).message)
+            is Response.Error -> {
+                ErrorMessage((followersState as Response.Error).message)
+                ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
+            }
         }
     }
 }
@@ -224,7 +237,7 @@ fun FollowersSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(followers) { follower ->
-                FollowerItem(follower, navHostController, currentUser, chatViewModel)
+                FollowerItem(follower, navHostController, currentUser)
             }
         }
     }
@@ -235,7 +248,6 @@ fun FollowerItem(
     follower: User,
     navHostController: NavHostController,
     currentUser: User,
-    chatViewModel: ChatViewModel
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -289,6 +301,7 @@ private fun ConversationsSection(
     userMap: Map<String, User>,
     currentUser: User
 ) {
+
     val conversationsState by chatViewModel.loadConversationsState.collectAsState()
 
     when (conversationsState) {
@@ -356,7 +369,9 @@ private fun ConversationItem(
                 )
 
                 Text(
-                    text = formatTimestamp(conversation.timestamp),
+                    text = formatTimestamp(
+                        conversation.lastMessage?.timestamp ?: conversation.timestamp
+                    ),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
