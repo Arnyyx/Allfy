@@ -1,8 +1,6 @@
 package com.arny.allfy.presentation.viewmodel
 
 import android.net.Uri
-import android.util.Log
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arny.allfy.domain.model.User
@@ -10,11 +8,11 @@ import com.arny.allfy.domain.usecase.user.UserUseCases
 import com.arny.allfy.utils.Response
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import androidx.compose.runtime.State
 import kotlinx.coroutines.flow.asStateFlow
 
 @HiltViewModel
@@ -29,7 +27,6 @@ class UserViewModel @Inject constructor(
 
     private val _followStatus = MutableStateFlow<Response<Boolean>>(Response.Success(false))
     val followStatus: StateFlow<Response<Boolean>> = _followStatus.asStateFlow()
-
 
     fun getCurrentUser() {
         viewModelScope.launch {
@@ -55,15 +52,17 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    private val _updateProfileStatus = MutableStateFlow<Response<Boolean>>(Response.Success(true))
+    private val _updateProfileStatus = MutableStateFlow<Response<Boolean>>(Response.Success(false))
     val updateProfileStatus: StateFlow<Response<Boolean>> = _updateProfileStatus.asStateFlow()
 
     fun updateUserProfile(updatedUser: User, imageUri: Uri?) {
         viewModelScope.launch {
-            userUseCases.setUserDetails(updatedUser, imageUri).collect { response ->
+            _updateProfileStatus.value = Response.Loading
+            userUseCases.setUserDetailsUseCase(updatedUser, imageUri).collect { response ->
                 _updateProfileStatus.value = response
                 if (response is Response.Success) {
                     getCurrentUser()
+                    _updateProfileStatus.value = Response.Success(false)
                 }
             }
         }
@@ -100,22 +99,14 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    fun isFollowingUser(userId: String): Boolean {
-        return when (val user = _currentUser.value) {
-            is Response.Success -> user.data.following.contains(userId)
-            else -> false
-        }
-    }
-
     private val _followers = MutableStateFlow<Response<List<User>>>(Response.Loading)
     val followers: StateFlow<Response<List<User>>> = _followers.asStateFlow()
 
-    fun getFollowers(followerId: List<String>) {
+    fun getFollowersFromSubcollection(userId: String) {
         viewModelScope.launch {
-            userUseCases.getFollowers(followerId)
-                .collect { response ->
-                    _followers.value = response
-                }
+            userUseCases.getFollowersFromSubcollection(userId).collect { response ->
+                _followers.value = response
+            }
         }
     }
 
@@ -137,6 +128,43 @@ class UserViewModel @Inject constructor(
                 _users.value = Response.Error(e.message ?: "Failed to fetch users")
             }
         }
+    }
+
+    private val _followingCount = MutableStateFlow<Response<Int>>(Response.Loading)
+    val followingCount: StateFlow<Response<Int>> = _followingCount.asStateFlow()
+
+    private val _followersCount = MutableStateFlow<Response<Int>>(Response.Loading)
+    val followersCount: StateFlow<Response<Int>> = _followersCount.asStateFlow()
+
+    private val _postsIds = MutableStateFlow<Response<List<String>>>(Response.Loading)
+    val postsIds: StateFlow<Response<List<String>>> = _postsIds.asStateFlow()
+
+    fun getFollowingCount(userId: String) {
+        viewModelScope.launch {
+            userUseCases.getFollowingCount(userId).collect { response ->
+                _followingCount.value = response
+            }
+        }
+    }
+
+    fun getFollowersCount(userId: String) {
+        viewModelScope.launch {
+            userUseCases.getFollowersCount(userId).collect { response ->
+                _followersCount.value = response
+            }
+        }
+    }
+
+    fun getPostsIdsFromSubcollection(userId: String) {
+        viewModelScope.launch {
+            userUseCases.getPostsIdsFromSubcollection(userId).collect { response ->
+                _postsIds.value = response
+            }
+        }
+    }
+
+    fun checkIfFollowing(currentUserId: String, targetUserId: String): Flow<Response<Boolean>> {
+        return userUseCases.checkIfFollowing(currentUserId, targetUserId)
     }
 
     fun clear() {

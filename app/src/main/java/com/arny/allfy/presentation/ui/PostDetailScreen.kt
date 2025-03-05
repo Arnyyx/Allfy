@@ -1,5 +1,6 @@
 package com.arny.allfy.presentation.ui
 
+import android.util.Log
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,66 +33,111 @@ import com.arny.allfy.utils.Response
 fun PostDetailScreen(
     postID: String,
     navController: NavController,
-    postViewModel: PostViewModel,
-    userViewModel: UserViewModel
+    postViewModel: PostViewModel = hiltViewModel(),
+    userViewModel: UserViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(Unit) {
+    LaunchedEffect(postID) {
         postViewModel.getPostByID(postID)
+        Log.d("AAA", postViewModel.postsState.value.toString())
     }
 
-    val currentUser by userViewModel.currentUser.collectAsState()
+    val postState by postViewModel.postsState.collectAsState()
+    val currentUserState by userViewModel.currentUser.collectAsState()
+    val postOwnerState by userViewModel.otherUser.collectAsState()
 
-    when (currentUser) {
-        is Response.Loading -> CircularProgressIndicator()
-        is Response.Error -> {
-            Toast("Error: ${(currentUser as Response.Error).message}")
+    LaunchedEffect(postState) {
+        if (postState is Response.Success) {
+            val post = (postState as Response.Success<Map<String, Post>>).data[postID]
+            post?.postOwnerID?.let { userViewModel.getUserById(it) }
         }
 
-        is Response.Success -> {
-            val postState by postViewModel.postsState.collectAsState()
-            when (postState) {
-                Response.Loading -> {
-                    CircularProgressIndicator()
-                }
+    }
 
-                is Response.Error -> {
-                    Toast("Error: ${(postState as Response.Error).message}")
-                }
+    LaunchedEffect(Unit) {
+        userViewModel.getCurrentUser()
+    }
 
-                is Response.Success -> {
-                    val post =
-                        (postState as? Response.Success<Map<String, Post>>)?.data?.get(postID)
-                    Scaffold(
-                        topBar = {
-                            TopAppBar(
-                                title = { Text("") },
-                                navigationIcon = {
-                                    IconButton(onClick = { navController.popBackStack() }) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                            contentDescription = "Back"
-                                        )
-                                    }
-                                }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    when (postOwnerState) {
+                        is Response.Success -> Text((postOwnerState as Response.Success<User>).data.username)
+                        else -> Text("Loading...")
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        when (currentUserState) {
+            is Response.Loading -> {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(paddingValues)
+                )
+            }
+
+            is Response.Error -> {
+                Toast("Error: ${(currentUserState as Response.Error).message}")
+            }
+
+            is Response.Success -> {
+                val currentUser = (currentUserState as Response.Success<User>).data
+                when (postState) {
+                    is Response.Loading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(paddingValues)
+                        )
+                    }
+
+                    is Response.Error -> {
+                        Toast("Error: ${(postState as Response.Error).message}")
+                    }
+
+                    is Response.Success -> {
+                        val post = (postState as Response.Success<Map<String, Post>>).data[postID]
+                        if (post == null) {
+                            Text(
+                                text = "Post not found",
+                                modifier = Modifier.padding(paddingValues)
                             )
-                        }
-                    ) { paddingValues ->
-                        if (post != null) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(paddingValues)
-                            ) {
-                                item {
-                                    PostItem(
-                                        initialPost = post,
-                                        currentUser = (currentUser as Response.Success<User>).data,
-                                        navController = navController
+                        } else {
+                            when (postOwnerState) {
+                                is Response.Loading -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.padding(paddingValues)
                                     )
                                 }
+
+                                is Response.Error -> {
+                                    Toast("Error loading post owner: ${(postOwnerState as Response.Error).message}")
+                                }
+
+                                is Response.Success -> {
+                                    val postOwner = (postOwnerState as Response.Success<User>).data
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(paddingValues)
+                                    ) {
+                                        item {
+                                            PostItem(
+                                                initialPost = post,
+                                                currentUser = currentUser,
+                                                navController = navController,
+                                                postOwner = postOwner
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                        } else {
-                            Text("Post not found")
                         }
                     }
                 }

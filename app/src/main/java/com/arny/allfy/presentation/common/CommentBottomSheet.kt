@@ -247,7 +247,7 @@ fun CommentBottomSheet(
                                             if (commentText.value.isNotBlank()) {
                                                 postViewModel.addComment(
                                                     postID = post.postID,
-                                                    userID = currentUser.userID,
+                                                    userID = currentUser.userId,
                                                     content = commentText.value
                                                 )
                                             }

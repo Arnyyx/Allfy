@@ -7,7 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arny.allfy.domain.model.Comment
 import com.arny.allfy.domain.model.Post
+import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.usecase.post.PostUseCases
+import com.arny.allfy.domain.usecase.user.UserUseCases
 import com.arny.allfy.presentation.state.PostState
 import com.arny.allfy.utils.Response
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,10 +21,13 @@ import javax.inject.Inject
 
 @HiltViewModel
 class PostViewModel @Inject constructor(
-    private val postUseCases: PostUseCases
+    private val postUseCases: PostUseCases,
+    private val userUseCases: UserUseCases
 ) : ViewModel() {
     private val _getFeedPostsState = MutableStateFlow(PostState())
     val getFeedPostsState: StateFlow<PostState> = _getFeedPostsState.asStateFlow()
+    private val _users = MutableStateFlow<Map<String, User>>(emptyMap())
+    val users: StateFlow<Map<String, User>> = _users.asStateFlow()
 
     private var lastVisiblePost: Post? = null
     private var isLoadingMore = false
@@ -54,9 +59,12 @@ class PostViewModel @Inject constructor(
                         val newPosts = response.data
                         lastVisiblePost = newPosts.lastOrNull()
 
+                        // Lấy danh sách userIDs duy nhất từ các bài đăng
+                        val userIds = newPosts.map { it.postOwnerID }.distinct()
+                        fetchUsers(userIds) // Tải thông tin người dùng
+
                         _getFeedPostsState.value = _getFeedPostsState.value.copy(
                             isLoading = false,
-                            // If force refresh, use only new posts, otherwise append
                             posts = if (forceRefresh) newPosts else _getFeedPostsState.value.posts + newPosts,
                             endReached = newPosts.size < 10,
                             error = ""
@@ -71,6 +79,27 @@ class PostViewModel @Inject constructor(
                         )
                         isLoadingMore = false
                     }
+                }
+            }
+        }
+    }
+
+    private fun fetchUsers(userIds: List<String>) {
+        viewModelScope.launch {
+            userUseCases.getUsersByIDs(userIds).collect { response ->
+                when (response) {
+                    is Response.Success -> {
+                        val newUsers = response.data.associateBy { it.userId }
+                        _users.value = _users.value + newUsers // Cập nhật cache
+                    }
+
+                    is Response.Error -> {
+                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
+                            error = response.message
+                        )
+                    }
+
+                    is Response.Loading -> {}
                 }
             }
         }
@@ -104,24 +133,19 @@ class PostViewModel @Inject constructor(
 
     private val loadedPosts = mutableMapOf<String, Post>()
 
-    fun getPostByID(postID: String) {
+    fun getPostByID(postId: String) {
         viewModelScope.launch {
-            postUseCases.getPostByID(postID).collect { response ->
+            postUseCases.getPostByID(postId).collect { response ->
                 when (response) {
                     is Response.Success -> {
-                        response.data?.let { post ->
-                            loadedPosts[postID] = post
-                            _postsState.value = Response.Success(loadedPosts.toMap())
-                        }
+                        val currentPosts =
+                            (_postsState.value as? Response.Success)?.data ?: emptyMap()
+                        _postsState.value =
+                            Response.Success(currentPosts + (postId to response.data))
                     }
 
-                    is Response.Error -> {
-                        _postsState.value = response
-                    }
-
-                    is Response.Loading -> {
-                        _postsState.value = response
-                    }
+                    is Response.Error -> _postsState.value = Response.Error(response.message)
+                    is Response.Loading -> _postsState.value = Response.Loading
                 }
             }
         }

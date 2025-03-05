@@ -111,8 +111,8 @@ fun CreatePostScreen(
                             onClick = {
                                 if (selectedImageUris.isNotEmpty()) {
                                     val post = Post(
-                                        postOwnerID = user.userID,
-                                        postOwnerUsername = user.userName,
+                                        postOwnerID = user.userId,
+                                        postOwnerUsername = user.username,
                                         postOwnerImageUrl = user.imageUrl,
                                         caption = captionText
                                     )

@@ -3,18 +3,7 @@ package com.arny.allfy.presentation.ui
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -25,23 +14,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Badge
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,12 +30,19 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.arny.allfy.domain.model.Conversation
+import com.arny.allfy.domain.model.MessageType
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.formatTimestamp
-
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 @Composable
 fun ConversationsScreen(
     navHostController: NavHostController,
@@ -68,37 +50,39 @@ fun ConversationsScreen(
     chatViewModel: ChatViewModel
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    val followersState by userViewModel.followers.collectAsState()
-
-    val currentUserViewModel by userViewModel.currentUser.collectAsState()
+    val currentUserState by userViewModel.currentUser.collectAsState()
     val conversationsState by chatViewModel.loadConversationsState.collectAsState()
     var currentUser by remember { mutableStateOf(User()) }
 
-    when (currentUserViewModel) {
+    // Load current user
+    when (currentUserState) {
         is Response.Loading -> LoadingIndicator()
-        is Response.Error -> ErrorMessage((currentUserViewModel as Response.Error).message)
+        is Response.Error -> ErrorMessage((currentUserState as Response.Error).message)
         is Response.Success -> {
-            currentUser = (currentUserViewModel as Response.Success<User>).data
+            currentUser = (currentUserState as Response.Success<User>).data
             LaunchedEffect(currentUser) {
-                chatViewModel.loadConversations(currentUser.userID)
+                chatViewModel.loadConversations(currentUser.userId)
             }
         }
     }
 
-    when (conversationsState) {
-        is Response.Success -> {
+    // Load conversations and users
+    LaunchedEffect(conversationsState) {
+        if (conversationsState is Response.Success) {
             val conversations = (conversationsState as Response.Success<List<Conversation>>).data
-            val otherUserIDs = mutableSetOf<String>()
-            conversations.forEach { otherUserIDs.add(it.otherUserID) }
-            LaunchedEffect(otherUserIDs) {
-                userViewModel.getUsers(otherUserIDs.toList())
-            }
+            val participantIds = conversations.flatMap { it.participants }.toSet() - currentUser.userId
+            userViewModel.getUsers(participantIds.toList())
         }
-
-        else -> {}
     }
     val usersState by userViewModel.users.collectAsState()
-    val userMap = createUserMap(usersState)
+    val userMap by remember(usersState) {
+        derivedStateOf {
+            when (usersState) {
+                is Response.Success -> (usersState as Response.Success<List<User>>).data.associateBy { it.userId }
+                else -> emptyMap()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -108,23 +92,13 @@ fun ConversationsScreen(
         MessagesTopBar(navHostController)
         SearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
 
-        // Load followers if there are any
-        LaunchedEffect(currentUser.followers) {
-            if (currentUser.followers.isNotEmpty()) {
-                userViewModel.getFollowers(currentUser.followers)
-            }
+        val followersState by userViewModel.followers.collectAsState()
+        LaunchedEffect(currentUser.userId) {
+            userViewModel.getFollowersFromSubcollection(currentUser.userId)
         }
 
         when (followersState) {
-            is Response.Loading -> {
-                if (currentUser.followers.isNotEmpty()) {
-                    LoadingIndicator()
-                } else {
-                    // If no followers, show conversations directly
-                    ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
-                }
-            }
-
+            is Response.Loading -> LoadingIndicator()
             is Response.Success -> {
                 val followers = (followersState as Response.Success<List<User>>).data
                 if (followers.isNotEmpty()) {
@@ -132,7 +106,6 @@ fun ConversationsScreen(
                 }
                 ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
             }
-
             is Response.Error -> {
                 ErrorMessage((followersState as Response.Error).message)
                 ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
@@ -141,19 +114,6 @@ fun ConversationsScreen(
     }
 }
 
-private fun createUserMap(usersState: Response<List<User>>): Map<String, User> {
-    return when (usersState) {
-        is Response.Success -> {
-            usersState.data.associateBy { it.userID }
-        }
-
-        else -> emptyMap()
-    }
-}
-
-/**
- * UI Components - Top Section
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessagesTopBar(navHostController: NavHostController) {
@@ -203,16 +163,13 @@ fun SearchBar(
         leadingIcon = { Icon(Icons.Default.Search, "Search") },
         colors = TextFieldDefaults.colors(
             unfocusedContainerColor = Color.Transparent,
-            focusedContainerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent
         ),
         shape = RoundedCornerShape(16.dp),
         singleLine = true
     )
 }
 
-/**
- * UI Components - Followers Section
- */
 @Composable
 fun FollowersSection(
     followers: List<User>,
@@ -247,8 +204,10 @@ fun FollowersSection(
 fun FollowerItem(
     follower: User,
     navHostController: NavHostController,
-    currentUser: User,
+    currentUser: User
 ) {
+    val isOnlineState by getOnlineStatus(follower.userId).collectAsState(initial = false)
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(72.dp)
@@ -256,7 +215,7 @@ fun FollowerItem(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.clickable {
-                navHostController.navigate("chat/${currentUser.userID}/${follower.userID}")
+                navHostController.navigate("chat/${currentUser.userId}/${follower.userId}")
             }
         ) {
             AsyncImage(
@@ -267,8 +226,7 @@ fun FollowerItem(
                     .clip(CircleShape),
                 contentScale = ContentScale.Crop
             )
-
-            if (follower.isOnline) {
+            if (isOnlineState) {
                 Box(
                     modifier = Modifier
                         .size(16.dp)
@@ -282,7 +240,7 @@ fun FollowerItem(
 
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = follower.userName,
+            text = follower.username,
             style = MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -291,9 +249,6 @@ fun FollowerItem(
     }
 }
 
-/**
- * UI Components - Conversations Section
- */
 @Composable
 private fun ConversationsSection(
     navHostController: NavHostController,
@@ -301,7 +256,6 @@ private fun ConversationsSection(
     userMap: Map<String, User>,
     currentUser: User
 ) {
-
     val conversationsState by chatViewModel.loadConversationsState.collectAsState()
 
     when (conversationsState) {
@@ -315,18 +269,19 @@ private fun ConversationsSection(
                         items = conversations,
                         key = { conversation -> conversation.id }
                     ) { conversation ->
+                        val otherUserId = conversation.participants.firstOrNull { it != currentUser.userId } ?: ""
                         ConversationItem(
                             conversation = conversation,
                             userMap = userMap,
+                            currentUserId = currentUser.userId,
                             onClick = {
-                                navHostController.navigate("chat/${currentUser.userID}/${conversation.otherUserID}")
+                                navHostController.navigate("chat/${currentUser.userId}/$otherUserId")
                             }
                         )
                     }
                 }
             }
         }
-
         is Response.Error -> ErrorMessage((conversationsState as Response.Error).message)
         Response.Loading -> LoadingIndicator()
     }
@@ -336,8 +291,14 @@ private fun ConversationsSection(
 private fun ConversationItem(
     conversation: Conversation,
     userMap: Map<String, User>,
+    currentUserId: String,
     onClick: () -> Unit
 ) {
+    val otherUserId = conversation.participants.firstOrNull { it != currentUserId } ?: ""
+    val otherUser = userMap[otherUserId]
+    val lastMessage = conversation.lastMessage
+    val unreadCountForCurrentUser = conversation.unreadCount[currentUserId] ?: 0
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -346,12 +307,12 @@ private fun ConversationItem(
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         AsyncImage(
-            model = userMap[conversation.otherUserID]?.imageUrl ?: "",
+            model = otherUser?.imageUrl ?: "",
             contentDescription = null,
             modifier = Modifier
                 .size(48.dp)
-                .fillMaxSize()
-                .clip(CircleShape)
+                .clip(CircleShape),
+            contentScale = ContentScale.Crop
         )
 
         Column(
@@ -363,15 +324,12 @@ private fun ConversationItem(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = userMap[conversation.otherUserID]?.userName ?: "",
+                    text = otherUser?.username ?: "",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium
                 )
-
                 Text(
-                    text = formatTimestamp(
-                        conversation.lastMessage?.timestamp ?: conversation.timestamp
-                    ),
+                    text = formatTimestamp(lastMessage?.timestamp ?: conversation.timestamp),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -382,7 +340,21 @@ private fun ConversationItem(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = conversation.lastMessage?.content ?: "",
+                    text = when (lastMessage?.type) {
+                        MessageType.IMAGE -> {
+                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi ảnh"
+                            else "${otherUser?.username ?: ""} đã gửi ảnh"
+                        }
+                        MessageType.VIDEO -> {
+                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi video"
+                            else "${otherUser?.username ?: ""} đã gửi video"
+                        }
+                        MessageType.FILE -> {
+                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi tệp"
+                            else "${otherUser?.username ?: ""} đã gửi tệp"
+                        }
+                        else -> lastMessage?.content ?: ""
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     maxLines = 1,
@@ -390,12 +362,12 @@ private fun ConversationItem(
                     modifier = Modifier.weight(1f)
                 )
 
-                if (conversation.unreadCount > 0) {
+                if (unreadCountForCurrentUser > 0) {
                     Badge(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     ) {
-                        Text(text = conversation.unreadCount.toString())
+                        Text(text = unreadCountForCurrentUser.toString())
                     }
                 }
             }
@@ -403,9 +375,6 @@ private fun ConversationItem(
     }
 }
 
-/**
- * Common UI Components
- */
 @Composable
 private fun LoadingIndicator() {
     Box(
@@ -435,4 +404,21 @@ private fun EmptyState(message: String) {
     ) {
         Text(text = message)
     }
+}
+
+fun getOnlineStatus(userId: String): Flow<Boolean> = callbackFlow {
+    val db = FirebaseDatabase.getInstance().reference.child("onlineStatus").child(userId)
+    val listener = object : ValueEventListener {
+        override fun onDataChange(snapshot: DataSnapshot) {
+            val isOnline = snapshot.child("isOnline").getValue(Boolean::class.java) ?: false
+            trySend(isOnline)
+        }
+
+        override fun onCancelled(error: DatabaseError) {
+            Log.e("RealtimeDB", "Error fetching online status: ${error.message}")
+            trySend(false)
+        }
+    }
+    db.addValueEventListener(listener)
+    awaitClose { db.removeEventListener(listener) }
 }

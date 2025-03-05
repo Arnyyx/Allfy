@@ -32,18 +32,18 @@ exports.sendChatNotification = onValueCreated({
     const senderId = message.senderId;
     const recipientIds = participants.filter(id => id !== senderId);
 
-    // Lấy tên người dùng từ senderId
-    const senderSnapshot = await admin.database().ref(`/users/${senderId}/username`).once('value');
-    const senderUsername = senderSnapshot.val() || 'Unknown';
+    const senderDoc = await admin.firestore().collection('users').doc(senderId).get();
+    const senderUsername = senderDoc.exists ? senderDoc.data().username || 'Unknown' : 'Unknown';
 
     const tokens = [];
     for (const recipientId of recipientIds) {
-        const userSnapshot = await admin.database().ref(`/users/${recipientId}/fcmToken`).once('value');
-        const token = userSnapshot.val();
-        if (token) {
-            tokens.push(token);
+        const userDoc = await admin.firestore().collection('users').doc(recipientId).get();
+        if (userDoc.exists) {
+            const token = userDoc.data().fcmToken;
+            if (token) tokens.push(token);
+            else functions.logger.warn(`No FCM token for user: ${recipientId}`);
         } else {
-            functions.logger.warn(`No FCM token for user: ${recipientId}`);
+            functions.logger.warn(`User document not found for: ${recipientId}`);
         }
     }
 
@@ -54,21 +54,38 @@ exports.sendChatNotification = onValueCreated({
         return null;
     }
 
-    const truncatedBody = message.content && message.content.length > 50
-        ? message.content.substring(0, 47) + "..."
-        : (message.content || "New message");
+    const messageType = message.type || 'TEXT';
+    let notificationBody;
+    switch (messageType) {
+        case 'IMAGE':
+            notificationBody = `${senderUsername} đã gửi ảnh`;
+            break;
+        case 'VIDEO':
+            notificationBody = `${senderUsername} đã gửi video`;
+            break;
+        case 'FILE':
+            notificationBody = `${senderUsername} đã gửi tệp`;
+            break;
+        case 'TEXT':
+        default:
+            notificationBody = message.content && message.content.length > 50
+                ? message.content.substring(0, 47) + "..."
+                : (message.content || "New message");
+            break;
+    }
 
     const sendPromises = tokens.map(token => {
         const payload = {
             token: token,
             notification: {
                 title: senderUsername,
-                body: truncatedBody
+                body: notificationBody
             },
             data: {
                 conversationId: conversationId,
                 messageId: event.params.messageId,
-                senderUsername: senderUsername
+                senderUsername: senderUsername,
+                type: messageType
             }
         };
 

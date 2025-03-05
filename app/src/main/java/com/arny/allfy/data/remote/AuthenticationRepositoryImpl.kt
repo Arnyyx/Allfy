@@ -73,7 +73,7 @@ class AuthenticationRepositoryImpl @Inject constructor(
             emit(AuthState.Loading)
             val authResult = auth.createUserWithEmailAndPassword(email, password).await()
             val userID = authResult.user?.uid ?: throw Exception("Failed to get user ID")
-            val user = User(userID = userID, userName = userName, email = email)
+            val user = User(userId = userID, username = userName, email = email)
             firestore.collection(Constants.COLLECTION_NAME_USERS).document(userID).set(user).await()
             emit(AuthState.Authenticated)
         } catch (e: Exception) {
@@ -91,12 +91,13 @@ class AuthenticationRepositoryImpl @Inject constructor(
 
             if (isNewUser) {
                 val user = User(
-                    userID = firebaseUser.uid,
-                    userName = firebaseUser.displayName ?: "",
+                    userId = firebaseUser.uid,
+                    username = firebaseUser.email ?: "",
+                    name = firebaseUser.displayName ?: "",
                     email = firebaseUser.email ?: ""
                 )
                 firestore.collection(Constants.COLLECTION_NAME_USERS)
-                    .document(user.userID)
+                    .document(user.userId)
                     .set(user)
                     .await()
             }

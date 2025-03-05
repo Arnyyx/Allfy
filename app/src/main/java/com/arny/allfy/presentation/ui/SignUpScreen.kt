@@ -2,9 +2,6 @@ package com.arny.allfy.presentation.ui
 
 import android.app.Activity
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,9 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.autofill.AutofillType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -25,9 +20,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.exceptions.GetCredentialException
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.arny.allfy.R
@@ -36,10 +28,8 @@ import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screens
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SignUpScreen(
     navController: NavHostController,
@@ -49,6 +39,12 @@ fun SignUpScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val authState = authViewModel.authState.observeAsState()
+    val signUpState = authViewModel.signUpState.observeAsState()
+
+    val nameState = remember { mutableStateOf("") }
+    val usernameState = remember { mutableStateOf("") }
+    val emailState = remember { mutableStateOf("") }
+    val passwordState = remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -61,10 +57,6 @@ fun SignUpScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            val userNameState = remember { mutableStateOf("") }
-            val emailState = remember { mutableStateOf("") }
-            val passwordState = remember { mutableStateOf("") }
-
             Spacer(modifier = Modifier.height(48.dp))
 
             Image(
@@ -76,8 +68,22 @@ fun SignUpScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             OutlinedTextField(
-                value = userNameState.value,
-                onValueChange = { userNameState.value = it },
+                value = nameState.value,
+                onValueChange = { nameState.value = it },
+                label = { Text("Full Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Next
+                )
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = usernameState.value,
+                onValueChange = { usernameState.value = it },
                 label = { Text("Username") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -109,7 +115,6 @@ fun SignUpScreen(
                 label = { Text("Password") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done
@@ -121,7 +126,12 @@ fun SignUpScreen(
 
             Button(
                 onClick = {
-                    authViewModel.signUp(userNameState.value, emailState.value, passwordState.value)
+                    authViewModel.signUp(
+                        usernameState.value,
+                        nameState.value,
+                        emailState.value,
+                        passwordState.value
+                    )
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -174,13 +184,13 @@ fun SignUpScreen(
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
 
-            when (val response = authViewModel.signUpState.value) {
+            when (val response = signUpState.value) {
                 is Response.Loading -> {
                     CircularProgressIndicator(modifier = Modifier.padding(8.dp))
                 }
 
-                is Response.Success -> {
-                    if (response.data) {
+                is Response.Success<*> -> {
+                    if (response.data as Boolean) {
                         LaunchedEffect(Unit) {
                             navController.navigate(Screens.ProfileScreen.route) {
                                 popUpTo(Screens.SignUpScreen.route) { inclusive = true }
@@ -194,12 +204,15 @@ fun SignUpScreen(
                         Toast.makeText(context, response.message, Toast.LENGTH_SHORT).show()
                     }
                 }
+
+                null -> TODO()
             }
 
             when (val state = authState.value) {
                 is AuthState.Loading -> {
                     CircularProgressIndicator(modifier = Modifier.padding(8.dp))
                 }
+
                 is AuthState.Authenticated -> {
                     LaunchedEffect(Unit) {
                         navController.navigate(Screens.ProfileScreen.route) {
@@ -207,11 +220,13 @@ fun SignUpScreen(
                         }
                     }
                 }
+
                 is AuthState.Error -> {
                     LaunchedEffect(state.message) {
                         Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
                     }
                 }
+
                 else -> {}
             }
         }

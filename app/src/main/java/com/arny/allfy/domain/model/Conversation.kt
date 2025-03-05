@@ -2,8 +2,9 @@ package com.arny.allfy.domain.model
 
 data class Conversation(
     val id: String = "",
-    val otherUserID: String = "",
+    val participants: List<String> = emptyList(),
     val lastMessage: Message? = null,
-    val unreadCount: Int = 0,
-    val timestamp: Long = 0
+    val unreadCount: Map<String, Int> = emptyMap(),
+    val timestamp: Long = 0,
+    val createdAt: Long = 0
 )

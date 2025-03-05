@@ -77,9 +77,10 @@ fun LoadPosts(
     navController: NavController
 ) {
     val state by postViewModel.getFeedPostsState.collectAsState()
+    val users by postViewModel.users.collectAsState() // Lấy danh sách người dùng từ cache
 
     LaunchedEffect(Unit) {
-        postViewModel.getFeedPosts(currentUser.userID)
+        postViewModel.getFeedPosts(currentUser.userId)
     }
 
     Scaffold(
@@ -135,7 +136,6 @@ fun LoadPosts(
             }
 
             else -> {
-
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -145,11 +145,25 @@ fun LoadPosts(
                         items = state.posts,
                         key = { post -> post.postID }
                     ) { post ->
-                        PostItem(
-                            initialPost = post,
-                            currentUser = currentUser,
-                            navController = navController
-                        )
+                        val postOwner = users[post.postOwnerID]
+                        if (postOwner != null) {
+                            PostItem(
+                                initialPost = post,
+                                currentUser = currentUser,
+                                postOwner = postOwner,
+                                navController = navController,
+                                postViewModel = postViewModel
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
                     }
 
                     if (!state.endReached) {
@@ -163,7 +177,7 @@ fun LoadPosts(
                                 CircularProgressIndicator()
                             }
                             LaunchedEffect(Unit) {
-                                postViewModel.getFeedPosts(currentUser.userID)
+                                postViewModel.getFeedPosts(currentUser.userId)
                             }
                         }
                     }

@@ -33,23 +33,35 @@ class MessageRepositoryImpl @Inject constructor(
             val listener = conversationRef.addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val conversations = snapshot.children.mapNotNull { convoSnapshot ->
-                        val participants = convoSnapshot.child("participants").children.map { it.value as String }
-                        if (participants.contains(userId)) {
-                            val otherUserId = participants.firstOrNull { it != userId } ?: return@mapNotNull null
-                            val conversationId = convoSnapshot.key ?: return@mapNotNull null
-                            val lastMessageSnapshot = convoSnapshot.child("lastMessage")
-                            val lastMessage = lastMessageSnapshot.getValue(Message::class.java)?.apply {
-                                type = MessageType.valueOf(lastMessageSnapshot.child("type").getValue(String::class.java) ?: "TEXT")
-                            }
-                            val timestamp = convoSnapshot.child("timestamp").getValue(Long::class.java) ?: 0L
+                        val participants = convoSnapshot.child("participants")
+                            .children.map { it.value as String }
+                        if (!participants.contains(userId)) return@mapNotNull null
 
-                            Conversation(
-                                id = conversationId,
-                                otherUserID = otherUserId,
-                                lastMessage = lastMessage,
-                                timestamp = timestamp
+                        val conversationId = convoSnapshot.key ?: return@mapNotNull null
+                        val lastMessageSnapshot = convoSnapshot.child("lastMessage")
+                        val lastMessage = lastMessageSnapshot.getValue(Message::class.java)?.apply {
+                            type = MessageType.valueOf(
+                                lastMessageSnapshot.child("type").getValue(String::class.java)
+                                    ?: "TEXT"
                             )
-                        } else null
+                        }
+                        val timestamp =
+                            convoSnapshot.child("timestamp").getValue(Long::class.java) ?: 0L
+                        val createdAt =
+                            convoSnapshot.child("createdAt").getValue(Long::class.java) ?: 0L
+                        val unreadCountSnapshot = convoSnapshot.child("unreadCount")
+                        val unreadCount = unreadCountSnapshot.children.associate {
+                            it.key!! to (it.getValue(Int::class.java) ?: 0)
+                        }
+
+                        Conversation(
+                            id = conversationId,
+                            participants = participants,
+                            lastMessage = lastMessage,
+                            unreadCount = unreadCount,
+                            timestamp = timestamp,
+                            createdAt = createdAt
+                        )
                     }.sortedByDescending { it.timestamp }
 
                     trySend(Response.Success(conversations))
@@ -74,7 +86,9 @@ class MessageRepositoryImpl @Inject constructor(
                     .child("messages")
                     .push()
 
-                val messageWithId = message.copy(id = messageRef.key ?: throw Exception("Failed to generate message ID"))
+                val messageWithId = message.copy(
+                    id = messageRef.key ?: throw Exception("Failed to generate message ID")
+                )
 
                 firebaseDatabase.reference
                     .child("conversations")
@@ -93,21 +107,26 @@ class MessageRepositoryImpl @Inject constructor(
             }
         }
 
-    override fun sendImages(conversationID: String, imageUris: List<Uri>): Flow<Response<List<String>>> =
+    override fun sendImages(
+        conversationID: String,
+        imageUris: List<Uri>
+    ): Flow<Response<List<String>>> =
         flow {
             emit(Response.Loading)
             try {
                 val imageUrls = mutableListOf<String>()
-                val senderId = FirebaseAuth.getInstance().currentUser?.uid ?: throw Exception("User not authenticated")
+                val senderId = FirebaseAuth.getInstance().currentUser?.uid
+                    ?: throw Exception("User not authenticated")
                 for (uri in imageUris) {
-                    val storageRef = storage.reference.child("chat_images/${System.currentTimeMillis()}_${uri.lastPathSegment}")
+                    val storageRef =
+                        storage.reference.child("chat_images/${System.currentTimeMillis()}_${uri.lastPathSegment}")
                     val uploadTask = storageRef.putFile(uri).await()
                     val downloadUrl = uploadTask.storage.downloadUrl.await().toString()
                     imageUrls.add(downloadUrl)
 
                     val message = Message(
                         id = "",
-                        senderId = senderId, // Lấy senderId từ Firebase Auth
+                        senderId = senderId,
                         content = downloadUrl,
                         timestamp = System.currentTimeMillis(),
                         type = MessageType.IMAGE
@@ -118,7 +137,9 @@ class MessageRepositoryImpl @Inject constructor(
                         .child("messages")
                         .push()
 
-                    val messageWithId = message.copy(id = messageRef.key ?: throw Exception("Failed to generate message ID"))
+                    val messageWithId = message.copy(
+                        id = messageRef.key ?: throw Exception("Failed to generate message ID")
+                    )
 
                     firebaseDatabase.reference
                         .child("conversations")
@@ -156,7 +177,9 @@ class MessageRepositoryImpl @Inject constructor(
                     }
                     val messages = snapshot.children.mapNotNull { messageSnapshot ->
                         messageSnapshot.getValue(Message::class.java)?.apply {
-                            type = MessageType.valueOf(messageSnapshot.child("type").getValue(String::class.java) ?: "TEXT")
+                            type = MessageType.valueOf(
+                                messageSnapshot.child("type").getValue(String::class.java) ?: "TEXT"
+                            )
                         }
                     }
                     trySend(messages)
@@ -172,7 +195,11 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun markMessageAsRead(conversationId: String, userId: String, messageId: String): Result<Unit> {
+    override suspend fun markMessageAsRead(
+        conversationId: String,
+        userId: String,
+        messageId: String
+    ): Result<Unit> {
         return try {
             firebaseDatabase.reference
                 .child("conversations")
@@ -219,13 +246,19 @@ class MessageRepositoryImpl @Inject constructor(
             if (!snapshot.exists()) {
                 val newConversation = mapOf(
                     "participants" to participants,
-                    "createdAt" to ServerValue.TIMESTAMP
+                    "createdAt" to ServerValue.TIMESTAMP,
+                    "unreadCount" to mapOf(currentUserId to 0, recipientId to 0) // Khởi tạo unreadCount
                 )
                 conversationRef.setValue(newConversation).await()
             }
+
             val conversation = Conversation(
                 id = conversationId,
-                otherUserID = recipientId
+                participants = participants,
+                unreadCount = snapshot.child("unreadCount").children.associate {
+                    it.key!! to (it.getValue(Int::class.java) ?: 0)
+                },
+                createdAt = snapshot.child("createdAt").getValue(Long::class.java) ?: System.currentTimeMillis()
             )
 
             emit(Response.Success(conversation))
@@ -234,7 +267,9 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
+
     private fun createConversationId(participants: List<String>): String {
         return participants.sorted().joinToString("_")
     }
+
 }

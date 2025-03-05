@@ -30,11 +30,16 @@ import com.arny.allfy.domain.usecase.post.GetPostByID
 import com.arny.allfy.domain.usecase.post.PostUseCases
 import com.arny.allfy.domain.usecase.post.ToggleLikePost
 import com.arny.allfy.domain.usecase.post.UploadPost
+import com.arny.allfy.domain.usecase.user.CheckIfFollowingUseCase
 import com.arny.allfy.domain.usecase.user.FollowUserUseCase
+import com.arny.allfy.domain.usecase.user.GetFollowersCountUseCase
+import com.arny.allfy.domain.usecase.user.GetFollowersFromSubcollectionUseCase
 import com.arny.allfy.domain.usecase.user.GetFollowersUseCase
+import com.arny.allfy.domain.usecase.user.GetFollowingCountUseCase
+import com.arny.allfy.domain.usecase.user.GetPostsIdsFromSubcollectionUseCase
 import com.arny.allfy.domain.usecase.user.GetUserDetails
 import com.arny.allfy.domain.usecase.user.GetUsersByIDsUseCase
-import com.arny.allfy.domain.usecase.user.SetUserDetails
+import com.arny.allfy.domain.usecase.user.SetUserDetailsUseCase
 import com.arny.allfy.domain.usecase.user.UnfollowUserUseCase
 import com.arny.allfy.domain.usecase.user.UserUseCases
 import com.google.firebase.auth.FirebaseAuth
@@ -96,11 +101,15 @@ class AllfyModule {
     @Provides
     fun provideUserUseCases(repository: UserRepository) = UserUseCases(
         getUserDetails = GetUserDetails(repository),
-        setUserDetails = SetUserDetails(repository),
+        setUserDetailsUseCase = SetUserDetailsUseCase(repository),
         followUser = FollowUserUseCase(repository),
         unfollowUser = UnfollowUserUseCase(repository),
-        getFollowers = GetFollowersUseCase(repository),
-        getUsersByIDs = GetUsersByIDsUseCase(repository)
+        getUsersByIDs = GetUsersByIDsUseCase(repository),
+        getFollowersFromSubcollection = GetFollowersFromSubcollectionUseCase(repository),
+        getFollowingCount = GetFollowingCountUseCase(repository),
+        getFollowersCount = GetFollowersCountUseCase(repository),
+        getPostsIdsFromSubcollection = GetPostsIdsFromSubcollectionUseCase(repository),
+        checkIfFollowing = CheckIfFollowingUseCase(repository)
     )
 
     @Singleton

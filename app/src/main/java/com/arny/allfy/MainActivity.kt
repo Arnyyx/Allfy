@@ -34,6 +34,7 @@ import com.arny.allfy.ui.theme.AllfyTheme
 import com.arny.allfy.utils.Screens
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -43,28 +44,20 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var googleAuthClient: GoogleAuthClient
 
-    // Khai báo requestPermissionLauncher
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
                 // Quyền được cấp
-            } else {
-                // Quyền bị từ chối, có thể hiển thị thông báo giải thích nếu cần
             }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                val token = task.result
-                FirebaseDatabase.getInstance().reference
-                    .child("users")
-                    .child(FirebaseAuth.getInstance().currentUser?.uid ?: "")
-                    .child("fcmToken")
-                    .setValue(token)
-            }
-        }
+        val auth = FirebaseAuth.getInstance()
+        val db = FirebaseFirestore.getInstance()
+
+        updateFcmToken(auth, db)
+
         requestNotificationPermission()
 
         setContent {
@@ -83,6 +76,44 @@ class MainActivity : ComponentActivity() {
                         chatViewModel,
                         googleAuthClient
                     )
+                }
+            }
+        }
+    }
+
+    private fun updateFcmToken(auth: FirebaseAuth, db: FirebaseFirestore) {
+        val preferences = getSharedPreferences("FCMPrefs", MODE_PRIVATE)
+        val editor = preferences.edit()
+
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) return@addOnCompleteListener
+
+            val newToken = task.result
+            val storedToken = preferences.getString("fcmToken", null)
+            val user = auth.currentUser
+
+            if (user != null && newToken != storedToken) {
+                editor.putString("fcmToken", newToken).apply()
+                val userId = user.uid
+                val userDocRef = db.collection("users").document(userId)
+                userDocRef.get().addOnSuccessListener { document ->
+                    if (document.exists()) {
+                        userDocRef.update("fcmToken", newToken)
+                    } else {
+                        val username =
+                            user.email?.substringBefore("@")?.replace(".", "") ?: "user_$userId"
+                        val name = user.displayName ?: "User ${userId.take(5)}"
+                        val userData = mapOf(
+                            "userId" to userId,
+                            "username" to username,
+                            "name" to name,
+                            "email" to user.email,
+                            "imageUrl" to "",
+                            "bio" to "",
+                            "fcmToken" to newToken
+                        )
+                        userDocRef.set(userData)
+                    }
                 }
             }
         }

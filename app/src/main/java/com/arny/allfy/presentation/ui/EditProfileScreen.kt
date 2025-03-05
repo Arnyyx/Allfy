@@ -1,6 +1,7 @@
 package com.arny.allfy.presentation.ui
 
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -35,14 +36,36 @@ fun EditProfileScreen(
     val currentUser by userViewModel.currentUser.collectAsState()
     val updateStatus by userViewModel.updateProfileStatus.collectAsState()
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
+    var toastMessage by remember { mutableStateOf<String?>(null) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedImageUri = uri
     }
-    if (updateStatus is Response.Error) {
-        Text((updateStatus as Response.Error).message)
+
+    var lastUpdateStatus by remember { mutableStateOf<Response<Boolean>?>(null) }
+    var user by remember(currentUser) {
+        mutableStateOf(
+            if (currentUser is Response.Success) (currentUser as Response.Success<User>).data
+            else User()
+        )
+    }
+
+    LaunchedEffect(updateStatus) {
+        if (updateStatus != lastUpdateStatus && updateStatus is Response.Success && (updateStatus as Response.Success).data) {
+            toastMessage = "Profile updated successfully"
+            onBackClick()
+            lastUpdateStatus = updateStatus
+        } else if (updateStatus is Response.Error) {
+            toastMessage = "Error: ${(updateStatus as Response.Error).message}"
+            lastUpdateStatus = updateStatus
+        }
+    }
+
+    toastMessage?.let { message ->
+        Toast(message)
+        LaunchedEffect(message) {
+            kotlinx.coroutines.delay(2000)
+            toastMessage = null
+        }
     }
 
     Scaffold(
@@ -50,12 +73,7 @@ fun EditProfileScreen(
             EditProfileTopBar(
                 onBackClick = onBackClick,
                 onSaveClick = {
-                    if (currentUser is Response.Success) {
-                        userViewModel.updateUserProfile(
-                            (currentUser as Response.Success<User>).data,
-                            selectedImageUri
-                        )
-                    }
+                    userViewModel.updateUserProfile(user, selectedImageUri)
                 },
                 isLoading = updateStatus is Response.Loading
             )
@@ -66,106 +84,27 @@ fun EditProfileScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Loading indicator under TopAppBar
             if (currentUser is Response.Loading || updateStatus is Response.Loading) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth()
-                )
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            // Main content
             when (currentUser) {
                 is Response.Success -> {
-                    var user by remember { mutableStateOf((currentUser as Response.Success<User>).data) }
-
-
                     Column(
                         modifier = Modifier
                             .verticalScroll(rememberScrollState())
                             .padding(16.dp)
                     ) {
-                        ProfileImageSection(
-                            currentUser = user,
-                            selectedImageUri = selectedImageUri,
-                            onImageClick = { launcher.launch("image/*") }
-                        )
-
+                        ProfileImageSection(user, selectedImageUri) { launcher.launch("image/*") }
                         Spacer(modifier = Modifier.height(16.dp))
-
-                        ProfileFieldsSection(
-                            currentUser = user,
-                            onUserUpdate = { updatedUser ->
-                                user = updatedUser
-                            }
-                        )
+                        ProfileFieldsSection(user) { user = it }
                     }
-
                 }
 
-                is Response.Error -> {
-                    ErrorContent(errorMessage = (currentUser as Response.Error).message)
-                }
-
-                is Response.Loading -> {
-                    // Show skeleton loading state
-                    EditProfileSkeleton()
-                }
+                is Response.Error -> ErrorContent((currentUser as Response.Error).message)
+                is Response.Loading -> EditProfileSkeleton()
             }
         }
-    }
-}
-
-@Composable
-private fun EditProfileSkeleton() {
-    // Show loading state while maintaining the UI structure
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Profile image placeholder
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(CircleShape),
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {}
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Field placeholders
-        repeat(3) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(vertical = 8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {}
-        }
-    }
-}
-
-@Composable
-private fun ErrorContent(errorMessage: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = errorMessage,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodyMedium
-        )
     }
 }
 
@@ -180,27 +119,14 @@ private fun EditProfileTopBar(
         title = { Text("Edit Profile") },
         navigationIcon = {
             IconButton(onClick = onBackClick) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    "Back"
+                )
             }
         },
-        actions = {
-            TextButton(
-                onClick = onSaveClick,
-                enabled = !isLoading
-            ) {
-                Text("Save")
-            }
-        }
+        actions = { TextButton(onClick = onSaveClick, enabled = !isLoading) { Text("Save") } }
     )
-}
-
-@Composable
-private fun EditProfileContent(
-    user: User,
-    userViewModel: UserViewModel,
-    updateStatus: Response<Boolean>
-) {
-
 }
 
 @Composable
@@ -218,8 +144,10 @@ private fun ProfileImageSection(
     ) {
         Image(
             painter = rememberAsyncImagePainter(
-                model = selectedImageUri ?: currentUser.imageUrl,
-                placeholder = rememberAsyncImagePainter(R.drawable.ic_user)
+                model = selectedImageUri
+                    ?: if (currentUser.imageUrl.isNotEmpty()) currentUser.imageUrl else R.drawable.ic_user,
+                placeholder = rememberAsyncImagePainter(R.drawable.ic_user),
+                error = rememberAsyncImagePainter(R.drawable.ic_user)
             ),
             contentDescription = "Profile Picture",
             modifier = Modifier
@@ -235,14 +163,17 @@ private fun ProfileFieldsSection(
     currentUser: User,
     onUserUpdate: (User) -> Unit
 ) {
-    EditProfileField("Username", currentUser.userName) {
-        onUserUpdate(currentUser.copy(userName = it))
+    EditProfileField("Username", currentUser.username) {
+        if (it.matches(Regex("^[a-zA-Z0-9_]*$"))) onUserUpdate(currentUser.copy(username = it))
     }
+    EditProfileField("Name", currentUser.name) { onUserUpdate(currentUser.copy(name = it)) }
+    EditProfileField("Email", currentUser.email) { onUserUpdate(currentUser.copy(email = it)) }
     EditProfileField("Bio", currentUser.bio) {
-        onUserUpdate(currentUser.copy(bio = it))
-    }
-    EditProfileField("Email", currentUser.email) {
-        onUserUpdate(currentUser.copy(email = it))
+        if (it.length <= 100) onUserUpdate(
+            currentUser.copy(
+                bio = it
+            )
+        )
     }
 }
 
@@ -263,7 +194,52 @@ private fun EditProfileField(
             focusedContainerColor = Color.Transparent,
             unfocusedContainerColor = Color.Transparent,
             disabledContainerColor = Color.Transparent,
-            errorContainerColor = Color.Transparent,
+            errorContainerColor = Color.Transparent
         )
     )
+}
+
+@Composable
+private fun EditProfileSkeleton() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp), contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(CircleShape), color = MaterialTheme.colorScheme.surfaceVariant
+            ) {}
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        repeat(4) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surfaceVariant
+            ) {}
+        }
+    }
+}
+
+@Composable
+private fun ErrorContent(errorMessage: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp), contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = errorMessage,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
 }

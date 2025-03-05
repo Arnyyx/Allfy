@@ -64,17 +64,18 @@ fun ChatTopBar(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = user.userName,
+                        text = user.username,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    if (user.isOnline) {
-                        Text(
-                            text = "Active now",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+//                    if (user.isOnline) {
+//                        Text(
+//                            text = "Active now",
+//                            style = MaterialTheme.typography.bodySmall,
+//                            color = MaterialTheme.colorScheme.primary
+//                        )
+//                    }
+                    //Todo isOnline
                 }
             }
         },

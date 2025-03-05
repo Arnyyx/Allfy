@@ -13,6 +13,7 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
@@ -35,6 +36,7 @@ fun SettingsScreen(
     postViewModel: PostViewModel,
     userViewModel: UserViewModel
 ) {
+    val context = LocalContext.current
     val authState = authViewModel.authState.observeAsState()
     LaunchedEffect(authState.value) {
         when (authState.value) {
@@ -94,7 +96,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
-                        authViewModel.signOut()
+                        authViewModel.signOut(context)
                     },
                     modifier = Modifier
                         .fillMaxWidth()

@@ -8,7 +8,6 @@ import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
 import com.google.firebase.Timestamp
-import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -64,15 +63,24 @@ class PostRepositoryImpl @Inject constructor(
                 imageUrls.add(imageUrl)
             }
 
-            val postWithImages = post.copy(imageUrls = imageUrls)
+            val postWithImages = post.copy(imageUrls = imageUrls, postID = postID)
 
+            // Lưu bài đăng vào collection posts
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
-                .set(postWithImages.copy(postID = postID))
+                .set(postWithImages)
                 .await()
 
-            firestore.collection(Constants.COLLECTION_NAME_USERS).document(post.postOwnerID)
-                .update("postsIDs", FieldValue.arrayUnion(postID))
+            // Thêm postID vào subcollection posts của người dùng
+            val postRef = mapOf(
+                "postId" to postID,
+                "timestamp" to postWithImages.timestamp
+            )
+            firestore.collection(Constants.COLLECTION_NAME_USERS)
+                .document(post.postOwnerID)
+                .collection("posts")
+                .document(postID)
+                .set(postRef)
                 .await()
 
             emit(Response.Success(true))
@@ -83,39 +91,43 @@ class PostRepositoryImpl @Inject constructor(
 
     override fun deletePost(postID: String, currentUserID: String): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
-
         try {
+            // Xóa bài đăng từ collection posts
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
                 .delete()
                 .await()
 
-            firestore.collection(Constants.COLLECTION_NAME_USERS).document(currentUserID)
-                .update("postsIDs", FieldValue.arrayRemove(postID))
+            // Xóa postID khỏi subcollection posts của người dùng
+            firestore.collection(Constants.COLLECTION_NAME_USERS)
+                .document(currentUserID)
+                .collection("posts")
+                .document(postID)
+                .delete()
                 .await()
 
-            storage.reference.child(Constants.COLLECTION_NAME_POSTS + "/$postID").delete().await()
+            // Xóa hình ảnh từ storage
+            storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID").delete().await()
 
             emit(Response.Success(true))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
-
     }
 
     override fun getPostByID(postID: String): Flow<Response<Post>> = callbackFlow {
-        Response.Loading
-        val snapshotListener =
-            firestore.collection(Constants.COLLECTION_NAME_POSTS).document(postID)
-                .addSnapshotListener { snapshot, e ->
-                    val response = if (snapshot != null) {
-                        val post = snapshot.toObject(Post::class.java)
-                        Response.Success(post!!)
-                    } else {
-                        Response.Error(e?.message ?: e.toString())
-                    }
-                    trySend(response).isSuccess
+        trySend(Response.Loading)
+        val snapshotListener = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+            .document(postID)
+            .addSnapshotListener { snapshot, e ->
+                val response = if (snapshot != null && snapshot.exists()) {
+                    val post = snapshot.toObject(Post::class.java)
+                    Response.Success(post!!)
+                } else {
+                    Response.Error(e?.message ?: "Post not found")
                 }
+                trySend(response)
+            }
         awaitClose {
             snapshotListener.remove()
         }
@@ -130,13 +142,13 @@ class PostRepositoryImpl @Inject constructor(
             } else {
                 post.likes + userID
             }
-            val uploadPost = post.copy(likes = updatedLikes)
+            val updatedPost = post.copy(likes = updatedLikes)
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(post.postID)
-                .set(uploadPost)
+                .set(updatedPost)
                 .await()
 
-            emit(Response.Success(uploadPost))
+            emit(Response.Success(updatedPost))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
@@ -145,7 +157,10 @@ class PostRepositoryImpl @Inject constructor(
     override fun getComments(postID: String): Flow<Response<List<Comment>>> = flow {
         emit(Response.Loading)
         try {
-            val snapshot = firestore.collection("posts").document(postID).get().await()
+            val snapshot = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .get()
+                .await()
 
             if (snapshot.exists()) {
                 val commentsData =
@@ -167,8 +182,7 @@ class PostRepositoryImpl @Inject constructor(
                                     ?: return@mapNotNull null,
                                 content = commentMap["content"] as? String
                                     ?: return@mapNotNull null,
-                                timestamp = commentMap["timestamp"] as? Timestamp
-                                    ?: Timestamp.now()
+                                timestamp = commentMap["timestamp"] as? Timestamp ?: Timestamp.now()
                             )
                         )
                     } catch (e: Exception) {
@@ -185,15 +199,15 @@ class PostRepositoryImpl @Inject constructor(
 
                 val userDataMap = userSnapshots.documents.associate { doc ->
                     doc.id to Pair(
-                        doc.getString("userName"),
+                        doc.getString("username"),
                         doc.getString("imageUrl")
                     )
                 }
 
                 val fullComments = baseComments.map { (_, userId, baseComment) ->
-                    val (userName, imageUrl) = userDataMap[userId] ?: ("" to "")
+                    val (username, imageUrl) = userDataMap[userId] ?: ("" to "")
                     baseComment.copy(
-                        commentOwnerUserName = userName ?: "",
+                        commentOwnerUserName = username ?: "",
                         commentOwnerProfilePicture = imageUrl ?: ""
                     )
                 }.sortedByDescending { it.timestamp }
@@ -212,7 +226,6 @@ class PostRepositoryImpl @Inject constructor(
         content: String
     ): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
-
         try {
             val newComment = hashMapOf(
                 "commentID" to UUID.randomUUID().toString(),
@@ -229,14 +242,12 @@ class PostRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
-
     }
-
 
     private suspend fun uploadImageToFirebase(postID: String, uri: Uri): String {
         try {
             val storageRef =
-                storage.reference.child(Constants.COLLECTION_NAME_POSTS + "/$postID/${System.currentTimeMillis()}_${uri.lastPathSegment}")
+                storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID/${System.currentTimeMillis()}_${uri.lastPathSegment}")
             storageRef.putFile(uri).await()
             return storageRef.downloadUrl.await().toString()
         } catch (e: Exception) {
