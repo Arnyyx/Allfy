@@ -12,6 +12,9 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ServerValue
 import com.google.firebase.database.ValueEventListener
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.messaging.RemoteMessage
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -247,7 +250,10 @@ class MessageRepositoryImpl @Inject constructor(
                 val newConversation = mapOf(
                     "participants" to participants,
                     "createdAt" to ServerValue.TIMESTAMP,
-                    "unreadCount" to mapOf(currentUserId to 0, recipientId to 0) // Khởi tạo unreadCount
+                    "unreadCount" to mapOf(
+                        currentUserId to 0,
+                        recipientId to 0
+                    ) // Khởi tạo unreadCount
                 )
                 conversationRef.setValue(newConversation).await()
             }
@@ -258,12 +264,63 @@ class MessageRepositoryImpl @Inject constructor(
                 unreadCount = snapshot.child("unreadCount").children.associate {
                     it.key!! to (it.getValue(Int::class.java) ?: 0)
                 },
-                createdAt = snapshot.child("createdAt").getValue(Long::class.java) ?: System.currentTimeMillis()
+                createdAt = snapshot.child("createdAt").getValue(Long::class.java)
+                    ?: System.currentTimeMillis()
             )
 
             emit(Response.Success(conversation))
         } catch (e: Exception) {
             emit(Response.Error(e.message ?: "Unknown error"))
+        }
+    }
+
+    override fun sendVoiceMessage(
+        conversationID: String,
+        audioUri: Uri
+    ): Flow<Response<String>> = flow {
+        emit(Response.Loading)
+        try {
+            val senderId = FirebaseAuth.getInstance().currentUser?.uid
+                ?: throw Exception("User not authenticated")
+
+            val storageRef =
+                storage.reference.child("chat_audio/${System.currentTimeMillis()}_${audioUri.lastPathSegment}")
+            val uploadTask = storageRef.putFile(audioUri).await()
+            val downloadUrl = uploadTask.storage.downloadUrl.await().toString()
+
+            val message = Message(
+                id = "",
+                senderId = senderId,
+                content = downloadUrl, // URL của file âm thanh
+                timestamp = System.currentTimeMillis(),
+                type = MessageType.VOICE
+            )
+
+            val messageRef = firebaseDatabase.reference
+                .child("conversations")
+                .child(conversationID)
+                .child("messages")
+                .push()
+
+            val messageWithId = message.copy(
+                id = messageRef.key ?: throw Exception("Failed to generate message ID")
+            )
+
+            // Cập nhật lastMessage và timestamp
+            firebaseDatabase.reference
+                .child("conversations")
+                .child(conversationID)
+                .updateChildren(
+                    mapOf(
+                        "lastMessage" to messageWithId,
+                        "timestamp" to ServerValue.TIMESTAMP
+                    )
+                ).await()
+
+            messageRef.setValue(messageWithId).await()
+            emit(Response.Success(downloadUrl))
+        } catch (e: Exception) {
+            emit(Response.Error(e.message ?: "Failed to send voice message"))
         }
     }
 

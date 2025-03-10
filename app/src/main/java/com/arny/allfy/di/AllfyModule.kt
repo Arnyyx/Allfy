@@ -42,6 +42,7 @@ import com.arny.allfy.domain.usecase.user.GetUsersByIDsUseCase
 import com.arny.allfy.domain.usecase.user.SetUserDetailsUseCase
 import com.arny.allfy.domain.usecase.user.UnfollowUserUseCase
 import com.arny.allfy.domain.usecase.user.UserUseCases
+import com.arny.allfy.utils.WebRTCCallManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
@@ -51,6 +52,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import org.webrtc.PeerConnectionFactory
 import javax.inject.Singleton
 
 @Module
@@ -197,4 +199,6 @@ class AllfyModule {
     ): GoogleAuthClient {
         return GoogleAuthClient(context)
     }
+
+
 }

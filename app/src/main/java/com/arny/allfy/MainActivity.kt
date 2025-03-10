@@ -1,6 +1,9 @@
 package com.arny.allfy
 
 import android.Manifest
+import android.app.NotificationManager
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -15,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -24,7 +28,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.arny.allfy.data.remote.GoogleAuthClient
-import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.ui.*
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
@@ -33,7 +36,6 @@ import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.ui.theme.AllfyTheme
 import com.arny.allfy.utils.Screens
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.AndroidEntryPoint
@@ -47,9 +49,12 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
-                // Quyền được cấp
+                Log.d("NotificationPermission", "Permission granted")
             }
         }
+
+    private lateinit var navController: NavHostController
+    private lateinit var chatViewModel: ChatViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,29 +62,31 @@ class MainActivity : ComponentActivity() {
         val db = FirebaseFirestore.getInstance()
 
         updateFcmToken(auth, db)
-
         requestNotificationPermission()
 
         setContent {
             AllfyTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    val navController = rememberNavController()
+                    navController = rememberNavController()
+                    chatViewModel = hiltViewModel()
                     val authViewModel: AuthViewModel = hiltViewModel()
                     val userViewModel: UserViewModel = hiltViewModel()
                     val postViewModel: PostViewModel = hiltViewModel()
-                    val chatViewModel: ChatViewModel = hiltViewModel()
+
                     AllfyApp(
-                        navController,
-                        authViewModel,
-                        userViewModel,
-                        postViewModel,
-                        chatViewModel,
-                        googleAuthClient
+                        navHostController = navController,
+                        authViewModel = authViewModel,
+                        userViewModel = userViewModel,
+                        postViewModel = postViewModel,
+                        chatViewModel = chatViewModel,
+                        googleAuthClient = googleAuthClient
                     )
                 }
             }
         }
     }
+
+
 
     private fun updateFcmToken(auth: FirebaseAuth, db: FirebaseFirestore) {
         val preferences = getSharedPreferences("FCMPrefs", MODE_PRIVATE)

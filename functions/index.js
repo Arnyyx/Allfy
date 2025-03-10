@@ -66,6 +66,9 @@ exports.sendChatNotification = onValueCreated({
         case 'FILE':
             notificationBody = `${senderUsername} đã gửi tệp`;
             break;
+        case 'VOICE':
+            notificationBody = `${senderUsername} đã gửi tin nhắn thoại`;
+            break;
         case 'TEXT':
         default:
             notificationBody = message.content && message.content.length > 50

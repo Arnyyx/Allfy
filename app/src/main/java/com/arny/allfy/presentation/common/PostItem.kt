@@ -305,12 +305,6 @@ private fun PostActions(
                 )
             }
         }
-        IconButton(onClick = { /* TODO: Implement Share */ }) {
-            Icon(
-                imageVector = Icons.Filled.Share,
-                contentDescription = "Share"
-            )
-        }
     }
 }
 

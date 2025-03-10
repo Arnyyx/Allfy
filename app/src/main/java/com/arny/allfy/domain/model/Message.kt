@@ -5,9 +5,9 @@ data class Message(
     val senderId: String = "",
     val content: String = "",
     val timestamp: Long = System.currentTimeMillis(),
-    var type: MessageType = MessageType.TEXT
+    var type: MessageType = MessageType.TEXT,
 )
 
 enum class MessageType {
-    TEXT, IMAGE, VIDEO, FILE
+    TEXT, IMAGE, VIDEO, FILE, VOICE, VOICE_CALL, VIDEO_CALL
 }

@@ -43,6 +43,7 @@ import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+
 @Composable
 fun ConversationsScreen(
     navHostController: NavHostController,
@@ -70,7 +71,8 @@ fun ConversationsScreen(
     LaunchedEffect(conversationsState) {
         if (conversationsState is Response.Success) {
             val conversations = (conversationsState as Response.Success<List<Conversation>>).data
-            val participantIds = conversations.flatMap { it.participants }.toSet() - currentUser.userId
+            val participantIds =
+                conversations.flatMap { it.participants }.toSet() - currentUser.userId
             userViewModel.getUsers(participantIds.toList())
         }
     }
@@ -106,6 +108,7 @@ fun ConversationsScreen(
                 }
                 ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
             }
+
             is Response.Error -> {
                 ErrorMessage((followersState as Response.Error).message)
                 ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
@@ -269,7 +272,8 @@ private fun ConversationsSection(
                         items = conversations,
                         key = { conversation -> conversation.id }
                     ) { conversation ->
-                        val otherUserId = conversation.participants.firstOrNull { it != currentUser.userId } ?: ""
+                        val otherUserId =
+                            conversation.participants.firstOrNull { it != currentUser.userId } ?: ""
                         ConversationItem(
                             conversation = conversation,
                             userMap = userMap,
@@ -282,6 +286,7 @@ private fun ConversationsSection(
                 }
             }
         }
+
         is Response.Error -> ErrorMessage((conversationsState as Response.Error).message)
         Response.Loading -> LoadingIndicator()
     }
@@ -345,14 +350,31 @@ private fun ConversationItem(
                             if (lastMessage.senderId == currentUserId) "Bạn đã gửi ảnh"
                             else "${otherUser?.username ?: ""} đã gửi ảnh"
                         }
+
                         MessageType.VIDEO -> {
                             if (lastMessage.senderId == currentUserId) "Bạn đã gửi video"
                             else "${otherUser?.username ?: ""} đã gửi video"
                         }
+
                         MessageType.FILE -> {
                             if (lastMessage.senderId == currentUserId) "Bạn đã gửi tệp"
                             else "${otherUser?.username ?: ""} đã gửi tệp"
                         }
+
+                        MessageType.VOICE -> {
+                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi tin nhắn thoại"
+                            else "${otherUser?.username ?: ""} đã gửi tin nhắn thoại"
+                        }
+
+                        MessageType.VOICE_CALL -> {
+                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi cuộc gọi thoại"
+                            else "${otherUser?.username ?: ""} đã gửi cuộc gọi thoại"
+                        }
+                        MessageType.VIDEO_CALL -> {
+                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi cuộc gọi video"
+                            else "${otherUser?.username ?: ""} đã gửi cuộc gọi video"
+                        }
+
                         else -> lastMessage?.content ?: ""
                     },
                     style = MaterialTheme.typography.bodyMedium,
