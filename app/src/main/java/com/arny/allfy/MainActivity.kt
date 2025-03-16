@@ -33,6 +33,7 @@ import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
+import com.arny.allfy.service.FirebaseMessagingServiceImpl
 import com.arny.allfy.ui.theme.AllfyTheme
 import com.arny.allfy.utils.Screens
 import com.google.firebase.auth.FirebaseAuth
@@ -81,12 +82,56 @@ class MainActivity : ComponentActivity() {
                         chatViewModel = chatViewModel,
                         googleAuthClient = googleAuthClient
                     )
+                    LaunchedEffect(intent) {
+                        handleIncomingCall(intent)
+                    }
+
                 }
             }
         }
+
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingCall(intent)
+    }
 
+    private fun handleIncomingCall(intent: Intent) {
+        Log.d(
+            "AAA",
+            "Raw intent extras: ${
+                intent.extras?.keySet()
+                    ?.joinToString { "$it=${intent.getStringExtra(it)}" } ?: "No extras"
+            }")
+        val action = intent.action
+        val callerId = intent.getStringExtra("callerId")
+        val calleeId = intent.getStringExtra("calleeId")
+        val callId = intent.getStringExtra("callId")
+        Log.d(
+            "AAA",
+            "Handling intent - action=$action, callerId=$callerId, calleeId=$calleeId, callId=$callId"
+        )
+
+        when (action) {
+            "INCOMING_CALL" -> {
+                if (callerId != null && calleeId != null && callId != null) {
+                    navController.navigate("incoming_call/$callerId/$calleeId/$callId")
+                }
+            }
+
+            "START_CALL" -> {
+                if (callerId != null && calleeId != null) {
+                    navController.navigate("call/$callerId/$calleeId")
+                } else {
+                }
+            }
+
+            else -> {
+            }
+        }
+    }
 
     private fun updateFcmToken(auth: FirebaseAuth, db: FirebaseFirestore) {
         val preferences = getSharedPreferences("FCMPrefs", MODE_PRIVATE)
@@ -237,6 +282,48 @@ fun AllfyApp(
                 navHostController = navHostController,
                 chatViewModel = chatViewModel,
                 userViewModel = userViewModel,
+                currentUserId = currentUserId,
+                otherUserId = otherUserId
+            )
+        }
+        composable(
+            route = "incoming_call/{callerId}/{calleeId}",
+            arguments = listOf(
+                navArgument("callerId") { type = NavType.StringType },
+                navArgument("calleeId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val callerId = backStackEntry.arguments?.getString("callerId") ?: return@composable
+            val calleeId = backStackEntry.arguments?.getString("calleeId") ?: return@composable
+            IncomingCallScreen(
+                callerId = callerId,
+                calleeId = calleeId,
+                userViewModel = userViewModel,
+                chatViewModel = chatViewModel,
+                onAccept = {
+                    navHostController.navigate("call/$callerId/$calleeId")
+                },
+                onReject = {
+                    navHostController.popBackStack()
+                }
+            )
+        }
+
+        composable(
+            route = "call/{currentUserId}/{otherUserId}",
+            arguments = listOf(
+                navArgument("currentUserId") { type = NavType.StringType },
+                navArgument("otherUserId") { type = NavType.StringType },
+            )
+        ) { backStackEntry ->
+            val currentUserId = backStackEntry.arguments?.getString("currentUserId")
+            val otherUserId = backStackEntry.arguments?.getString("otherUserId")
+            requireNotNull(currentUserId) { "currentUserId parameter wasn't found" }
+            requireNotNull(otherUserId) { "otherUserId parameter wasn't found" }
+            CallScreen(
+                navHostController = navHostController,
+                userViewModel = userViewModel,
+                chatViewModel = chatViewModel,
                 currentUserId = currentUserId,
                 otherUserId = otherUserId
             )

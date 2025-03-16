@@ -174,5 +174,8 @@ class UserViewModel @Inject constructor(
         _updateProfileStatus.value = Response.Loading
         _followers.value = Response.Loading
         _users.value = Response.Loading
+        _followingCount.value = Response.Loading
+        _followersCount.value = Response.Loading
+        _postsIds.value = Response.Loading
     }
 }

@@ -46,6 +46,7 @@ import com.arny.allfy.utils.WebRTCCallManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
 import dagger.Module
 import dagger.Provides
@@ -74,6 +75,12 @@ class AllfyModule {
     @Provides
     fun provideStorage(): FirebaseStorage {
         return FirebaseStorage.getInstance()
+    }
+
+    @Singleton
+    @Provides
+    fun provideFunctions(): FirebaseFunctions {
+        return FirebaseFunctions.getInstance()
     }
 
     @Singleton
@@ -127,9 +134,10 @@ class AllfyModule {
     @Provides
     fun providePostRepository(
         firestore: FirebaseFirestore,
-        storage: FirebaseStorage
+        storage: FirebaseStorage,
+        @ApplicationContext context: Context
     ): PostRepository {
-        return PostRepositoryImpl(firestore, storage)
+        return PostRepositoryImpl(firestore, storage, context)
     }
 
     @Singleton
@@ -155,9 +163,11 @@ class AllfyModule {
     @Singleton
     fun provideMessageRepository(
         firebaseDatabase: FirebaseDatabase,
-        storage: FirebaseStorage
+        storage: FirebaseStorage,
+        firestore: FirebaseFirestore,
+        functions: FirebaseFunctions
     ): MessageRepository {
-        return MessageRepositoryImpl(firebaseDatabase, storage)
+        return MessageRepositoryImpl(firebaseDatabase, storage, firestore, functions)
     }
 
     @Singleton

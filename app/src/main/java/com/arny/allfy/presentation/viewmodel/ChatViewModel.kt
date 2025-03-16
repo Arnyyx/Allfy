@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavHostController
 import com.arny.allfy.domain.model.Conversation
 import com.arny.allfy.domain.model.Message
 import com.arny.allfy.domain.model.MessageType
@@ -31,7 +32,14 @@ class ChatViewModel @Inject constructor(
     private val getOrCreateConversationUseCase: GetOrCreateConversationUseCase,
     private val sendImagesUseCase: SendImagesUseCase,
     private val sendVoiceMessageUseCase: SendVoiceMessageUseCase,
-    private val loadConversationsUseCase: LoadConversationsUseCase
+    private val loadConversationsUseCase: LoadConversationsUseCase,
+
+    private val sendCallInvitationUseCase: SendCallInvitationUseCase,
+    private val cancelCallUseCase: CancelCallUseCase,
+    private val acceptCallUseCase: AcceptCallUseCase,
+    private val rejectCallUseCase: RejectCallUseCase,
+    private val endCallUseCase: EndCallUseCase,
+    private val listenCallStateUseCase: ListenCallStateUseCase
 ) : ViewModel() {
     val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
@@ -80,6 +88,7 @@ class ChatViewModel @Inject constructor(
                 _conversationState.value = response
                 if (response is Response.Success) {
                     loadMessages(response.data.id)
+                    listenCallState(response.data.id)
                 }
             }
         }
@@ -88,7 +97,7 @@ class ChatViewModel @Inject constructor(
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages.asStateFlow()
 
-    fun loadMessages(conversationId: String) {
+    private fun loadMessages(conversationId: String) {
         viewModelScope.launch {
             getMessagesByConversationIdUseCase(conversationId).collect { messages ->
                 _messages.value = messages
@@ -108,6 +117,8 @@ class ChatViewModel @Inject constructor(
         _conversationState.value = Response.Loading
         _messages.value = emptyList()
         _loadConversationsState.value = Response.Loading
+        _callState.value = "idle"
+        currentCallId = null
     }
 
     private val _loadConversationsState =
@@ -128,6 +139,7 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+
     fun loadConversations(userId: String) {
         viewModelScope.launch {
             loadConversationsUseCase(userId).collect { response ->
@@ -136,6 +148,92 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    private var currentCallId: String? = null
+    private val _callState = MutableStateFlow("idle")
+    val callState: StateFlow<String> = _callState.asStateFlow()
+
+
+    private fun listenCallState(conversationId: String) {
+        viewModelScope.launch {
+            listenCallStateUseCase(conversationId).collect { state ->
+                _callState.value = state
+                when (state) {
+                    "rejected" -> {
+                        currentCallId = null
+//                        navHostController.popBackStack()
+                    }
+
+                    "idle" -> currentCallId = null
+                }
+            }
+        }
+    }
+
+    fun sendCallInvitation(callerId: String, calleeId: String) {
+        viewModelScope.launch {
+            sendCallInvitationUseCase(callerId, calleeId).collect { response ->
+                when (response) {
+                    is Response.Success -> {
+                        currentCallId = response.data
+                        _callState.value = "pending"
+//                        navHostController.navigate("call/$callerId/$calleeId")
+                    }
+
+                    is Response.Error -> {}
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    fun cancelCall(conversationId: String) {
+        viewModelScope.launch {
+            currentCallId?.let { callId ->
+                cancelCallUseCase(conversationId, callId).collect { response ->
+                    if (response is Response.Success) {
+                        currentCallId = null
+                        _callState.value = "idle"
+                    }
+                }
+            }
+        }
+    }
+
+    fun acceptCall(conversationId: String, callId: String) {
+        viewModelScope.launch {
+            acceptCallUseCase(conversationId, callId).collect { response ->
+                if (response is Response.Success) {
+                    _callState.value = "accepted"
+                    currentCallId = callId
+//                    navHostController.navigate("call/${FirebaseAuth.getInstance().currentUser?.uid}/$conversationId.split('_').first()")
+                }
+            }
+        }
+    }
+
+    fun rejectCall(conversationId: String, callId: String) {
+        viewModelScope.launch {
+            rejectCallUseCase(conversationId, callId).collect { response ->
+                if (response is Response.Success) {
+                    _callState.value = "rejected"
+                    currentCallId = null
+                }
+            }
+        }
+    }
+
+    fun endCall(conversationId: String, duration: Long) {
+        viewModelScope.launch {
+            currentCallId?.let { callId ->
+                endCallUseCase(conversationId, callId, duration).collect { response ->
+                    if (response is Response.Success) {
+                        currentCallId = null
+                        _callState.value = "idle"
+                    }
+                }
+            }
+        }
+    }
 }
 
 

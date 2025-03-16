@@ -1,11 +1,13 @@
 package com.arny.allfy.data.remote
 
 import android.net.Uri
+import android.util.Log
 import com.arny.allfy.domain.model.Conversation
 import com.arny.allfy.domain.model.Message
 import com.arny.allfy.domain.model.MessageType
 import com.arny.allfy.domain.repository.MessageRepository
 import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.formatDuration
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -13,6 +15,7 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ServerValue
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.RemoteMessage
 import com.google.firebase.storage.FirebaseStorage
@@ -25,7 +28,9 @@ import javax.inject.Inject
 
 class MessageRepositoryImpl @Inject constructor(
     private val firebaseDatabase: FirebaseDatabase,
-    private val storage: FirebaseStorage
+    private val storage: FirebaseStorage,
+    private val firestore: FirebaseFirestore,
+    private val functions: FirebaseFunctions
 ) : MessageRepository {
 
     override fun loadConversations(userId: String): Flow<Response<List<Conversation>>> =
@@ -72,10 +77,9 @@ class MessageRepositoryImpl @Inject constructor(
 
                 override fun onCancelled(error: DatabaseError) {
                     trySend(Response.Error(error.message))
-                    close(error.toException())
+//                    close(error.toException())
                 }
             })
-
             awaitClose { conversationRef.removeEventListener(listener) }
         }
 
@@ -189,7 +193,8 @@ class MessageRepositoryImpl @Inject constructor(
                 }
 
                 override fun onCancelled(error: DatabaseError) {
-                    close(error.toException())
+                    trySend(emptyList())
+//                    close(error.toException())
                 }
             })
 
@@ -305,8 +310,6 @@ class MessageRepositoryImpl @Inject constructor(
             val messageWithId = message.copy(
                 id = messageRef.key ?: throw Exception("Failed to generate message ID")
             )
-
-            // Cập nhật lastMessage và timestamp
             firebaseDatabase.reference
                 .child("conversations")
                 .child(conversationID)
@@ -322,6 +325,178 @@ class MessageRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             emit(Response.Error(e.message ?: "Failed to send voice message"))
         }
+    }
+
+    override suspend fun sendCallInvitation(
+        callerId: String,
+        calleeId: String
+    ): Flow<Response<String>> = flow {
+        emit(Response.Loading)
+        try {
+            val participants = listOf(callerId, calleeId).sorted()
+            val conversationId = participants.joinToString("_")
+            val conversationRef =
+                firebaseDatabase.reference.child("conversations").child(conversationId)
+
+            val snapshot = conversationRef.child("callState").get().await()
+            val currentState = snapshot.getValue(String::class.java) ?: "idle"
+            if (currentState != "idle") {
+                emit(Response.Error("A call is already in progress"))
+                Log.d("CallRepository", "A call is already in progress")
+                return@flow
+            }
+
+            val callRef = conversationRef.child("calls").push()
+            val callId = callRef.key ?: throw Exception("Failed to generate call ID")
+            val callData = mapOf(
+                "callId" to callId,
+                "callerId" to callerId,
+                "calleeId" to calleeId,
+                "timestamp" to ServerValue.TIMESTAMP,
+                "status" to "pending"
+            )
+
+            val updates = mapOf(
+                "callState" to "pending",
+                "calls/$callId" to callData,
+                "timestamp" to ServerValue.TIMESTAMP
+            )
+            conversationRef.updateChildren(updates).await()
+
+            emit(Response.Success(callId))
+        } catch (e: Exception) {
+            emit(Response.Error(e.message ?: "Failed to send call invitation"))
+        }
+    }
+
+    override suspend fun cancelCall(
+        conversationId: String,
+        callId: String
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+        try {
+            Log.d("CallRepository", "cancelCall: $conversationId, $callId")
+            val conversationRef =
+                firebaseDatabase.reference.child("conversations").child(conversationId)
+            val updates = mapOf(
+                "calls/$callId" to null,
+                "callState" to "idle",
+                "timestamp" to ServerValue.TIMESTAMP
+            )
+            conversationRef.updateChildren(updates).await()
+            emit(Response.Success(true))
+        } catch (e: Exception) {
+            emit(Response.Error(e.message ?: "Failed to cancel call"))
+        }
+    }
+
+    override suspend fun acceptCall(
+        conversationId: String,
+        callId: String
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+        try {
+            val conversationRef =
+                firebaseDatabase.reference.child("conversations").child(conversationId)
+            val snapshot = conversationRef.child("callState").get().await()
+            val currentState = snapshot.getValue(String::class.java) ?: "idle"
+            if (currentState != "pending") {
+                emit(Response.Error("Call is not in pending state"))
+                return@flow
+            }
+
+            val updates = mapOf(
+                "callState" to "accepted",
+                "calls/$callId/status" to "accepted",
+                "timestamp" to ServerValue.TIMESTAMP
+            )
+            conversationRef.updateChildren(updates).await()
+            emit(Response.Success(true))
+        } catch (e: Exception) {
+            emit(Response.Error(e.message ?: "Failed to accept call"))
+        }
+    }
+
+    override suspend fun rejectCall(
+        conversationId: String,
+        callId: String
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+        try {
+            val conversationRef =
+                firebaseDatabase.reference.child("conversations").child(conversationId)
+            val snapshot = conversationRef.child("callState").get().await()
+            val currentState = snapshot.getValue(String::class.java) ?: "idle"
+            if (currentState != "pending") {
+                emit(Response.Error("Call is not in pending state"))
+                return@flow
+            }
+
+            val updates = mapOf(
+                "calls/$callId" to null,
+                "callState" to "rejected",
+                "timestamp" to ServerValue.TIMESTAMP
+            )
+            conversationRef.updateChildren(updates).await()
+            emit(Response.Success(true))
+        } catch (e: Exception) {
+            emit(Response.Error(e.message ?: "Failed to reject call"))
+        }
+    }
+
+    override suspend fun endCall(
+        conversationId: String,
+        callId: String,
+        duration: Long
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+        try {
+            val conversationRef =
+                firebaseDatabase.reference.child("conversations").child(conversationId)
+            val callSnapshot = conversationRef.child("calls").child(callId).get().await()
+            val callData = callSnapshot.value as? Map<*, *> ?: throw Exception("Call not found")
+            val callerId = callData["callerId"] as? String ?: throw Exception("CallerId not found")
+
+            val messageRef = conversationRef.child("messages").push()
+            val messageId = messageRef.key ?: throw Exception("Failed to generate message ID")
+            val durationText = formatDuration(duration)
+            val callMessage = Message(
+                id = messageId,
+                senderId = callerId,
+                content = "Cuộc gọi kết thúc (duration: $durationText)",
+                timestamp = System.currentTimeMillis(),
+                type = MessageType.VOICE_CALL
+            )
+
+            val updates = mapOf(
+                "calls/$callId" to null,
+                "callState" to "idle",
+                "messages/$messageId" to callMessage,
+                "lastMessage" to callMessage,
+                "timestamp" to ServerValue.TIMESTAMP
+            )
+            conversationRef.updateChildren(updates).await()
+            emit(Response.Success(true))
+        } catch (e: Exception) {
+            emit(Response.Error(e.message ?: "Failed to end call"))
+        }
+    }
+
+    override fun listenCallState(conversationId: String): Flow<String> = callbackFlow {
+        val ref = firebaseDatabase.reference.child("conversations").child(conversationId)
+            .child("callState")
+        val listener = ref.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val state = snapshot.getValue(String::class.java) ?: "idle"
+                trySend(state)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                trySend(Response.Error(error.message).toString())
+//                close(error.toException())
+            }
+        })
+        awaitClose { ref.removeEventListener(listener) }
     }
 
 

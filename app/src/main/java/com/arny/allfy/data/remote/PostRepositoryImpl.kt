@@ -1,8 +1,10 @@
 package com.arny.allfy.data.remote
 
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.arny.allfy.domain.model.Comment
+import com.arny.allfy.domain.model.MediaItem
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.utils.Constants
@@ -23,7 +25,8 @@ import javax.inject.Inject
 
 class PostRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val storage: FirebaseStorage
+    private val storage: FirebaseStorage,
+    private val context: Context
 ) : PostRepository {
 
     override fun getFeedPosts(
@@ -52,29 +55,42 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
+
     override fun uploadPost(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
         try {
             val postID = firestore.collection(Constants.COLLECTION_NAME_POSTS).document().id
 
-            val imageUrls = mutableListOf<String>()
-            for (uri in imageUris) {
-                val imageUrl = uploadImageToFirebase(postID, uri)
-                imageUrls.add(imageUrl)
-            }
-
-            val postWithImages = post.copy(imageUrls = imageUrls, postID = postID)
-
-            // Lưu bài đăng vào collection posts
+            val initialPost = post.copy(
+                postID = postID,
+                mediaItems = emptyList()
+            )
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
-                .set(postWithImages)
+                .set(initialPost)
                 .await()
 
-            // Thêm postID vào subcollection posts của người dùng
+            val mediaItems = imageUris.map { uri ->
+                val mimeType = context.contentResolver.getType(uri)
+                val mediaType = when {
+                    mimeType?.startsWith("image/") == true -> "image"
+                    mimeType?.startsWith("video/") == true -> "video"
+                    mimeType?.startsWith("audio/") == true -> "audio"
+                    else -> "image"
+                }
+                val mediaUrl = uploadImageToFirebase(postID, uri)
+                MediaItem(url = mediaUrl, mediaType = mediaType, thumbnailUrl = null)
+            }
+
+            val postWithMedia = initialPost.copy(mediaItems = mediaItems)
+            firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .set(postWithMedia)
+                .await()
+
             val postRef = mapOf(
                 "postId" to postID,
-                "timestamp" to postWithImages.timestamp
+                "timestamp" to postWithMedia.timestamp
             )
             firestore.collection(Constants.COLLECTION_NAME_USERS)
                 .document(post.postOwnerID)
@@ -92,13 +108,11 @@ class PostRepositoryImpl @Inject constructor(
     override fun deletePost(postID: String, currentUserID: String): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
         try {
-            // Xóa bài đăng từ collection posts
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
                 .delete()
                 .await()
 
-            // Xóa postID khỏi subcollection posts của người dùng
             firestore.collection(Constants.COLLECTION_NAME_USERS)
                 .document(currentUserID)
                 .collection("posts")
@@ -106,7 +120,6 @@ class PostRepositoryImpl @Inject constructor(
                 .delete()
                 .await()
 
-            // Xóa hình ảnh từ storage
             storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID").delete().await()
 
             emit(Response.Success(true))
@@ -115,21 +128,21 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getPostByID(postID: String): Flow<Response<Post>> = callbackFlow {
-        trySend(Response.Loading)
-        val snapshotListener = firestore.collection(Constants.COLLECTION_NAME_POSTS)
-            .document(postID)
-            .addSnapshotListener { snapshot, e ->
-                val response = if (snapshot != null && snapshot.exists()) {
-                    val post = snapshot.toObject(Post::class.java)
-                    Response.Success(post!!)
-                } else {
-                    Response.Error(e?.message ?: "Post not found")
-                }
-                trySend(response)
+    override fun getPostByID(postID: String): Flow<Response<Post>> = flow {
+        emit(Response.Loading)
+        try {
+            val snapshot =
+                firestore.collection(Constants.COLLECTION_NAME_POSTS).document(postID).get().await()
+
+            val response = if (snapshot.exists()) {
+                val post = snapshot.toObject(Post::class.java)
+                Response.Success(post!!)
+            } else {
+                Response.Error("Post not found")
             }
-        awaitClose {
-            snapshotListener.remove()
+            emit(response)
+        } catch (e: Exception) {
+            emit(Response.Error(e.localizedMessage ?: "An unexpected error occurred"))
         }
     }
 
@@ -246,8 +259,16 @@ class PostRepositoryImpl @Inject constructor(
 
     private suspend fun uploadImageToFirebase(postID: String, uri: Uri): String {
         try {
+            val mimeType = context.contentResolver.getType(uri)
+            val extension = when {
+                mimeType?.startsWith("image/") == true -> ".jpg"
+                mimeType?.startsWith("video/") == true -> ".mp4"
+                mimeType?.startsWith("audio/") == true -> ".mp3"
+                else -> ".jpg"
+            }
+            val fileName = "${System.currentTimeMillis()}$extension"
             val storageRef =
-                storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID/${System.currentTimeMillis()}_${uri.lastPathSegment}")
+                storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID/$fileName")
             storageRef.putFile(uri).await()
             return storageRef.downloadUrl.await().toString()
         } catch (e: Exception) {

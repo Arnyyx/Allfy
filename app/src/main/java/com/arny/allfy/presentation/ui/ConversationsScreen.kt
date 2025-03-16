@@ -1,12 +1,18 @@
 package com.arny.allfy.presentation.ui
 
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,19 +22,20 @@ import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import com.arny.allfy.R
 import com.arny.allfy.domain.model.Conversation
 import com.arny.allfy.domain.model.MessageType
 import com.arny.allfy.domain.model.User
@@ -43,40 +50,44 @@ import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsScreen(
     navHostController: NavHostController,
     userViewModel: UserViewModel,
     chatViewModel: ChatViewModel
 ) {
-    var searchQuery by remember { mutableStateOf("") }
     val currentUserState by userViewModel.currentUser.collectAsState()
     val conversationsState by chatViewModel.loadConversationsState.collectAsState()
+    val followersState by userViewModel.followers.collectAsState()
+    val usersState by userViewModel.users.collectAsState()
+
+    var searchQuery by remember { mutableStateOf("") }
     var currentUser by remember { mutableStateOf(User()) }
 
-    // Load current user
-    when (currentUserState) {
-        is Response.Loading -> LoadingIndicator()
-        is Response.Error -> ErrorMessage((currentUserState as Response.Error).message)
-        is Response.Success -> {
-            currentUser = (currentUserState as Response.Success<User>).data
-            LaunchedEffect(currentUser) {
+    // Load dữ liệu ban đầu
+    LaunchedEffect(currentUserState) {
+        when (currentUserState) {
+            is Response.Success -> {
+                currentUser = (currentUserState as Response.Success<User>).data
                 chatViewModel.loadConversations(currentUser.userId)
+                userViewModel.getFollowersFromSubcollection(currentUser.userId)
             }
+            else -> Unit
         }
     }
 
-    // Load conversations and users
+    // Load users từ conversations
     LaunchedEffect(conversationsState) {
         if (conversationsState is Response.Success) {
             val conversations = (conversationsState as Response.Success<List<Conversation>>).data
-            val participantIds =
-                conversations.flatMap { it.participants }.toSet() - currentUser.userId
+            val participantIds = conversations.flatMap { it.participants }.toSet() - currentUser.userId
             userViewModel.getUsers(participantIds.toList())
         }
     }
-    val usersState by userViewModel.users.collectAsState()
+
     val userMap by remember(usersState) {
         derivedStateOf {
             when (usersState) {
@@ -86,32 +97,47 @@ fun ConversationsScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        MessagesTopBar(navHostController)
-        SearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
+    val isLoading = currentUserState is Response.Loading || conversationsState is Response.Loading || followersState is Response.Loading
 
-        val followersState by userViewModel.followers.collectAsState()
-        LaunchedEffect(currentUser.userId) {
-            userViewModel.getFollowersFromSubcollection(currentUser.userId)
-        }
-
-        when (followersState) {
-            is Response.Loading -> LoadingIndicator()
-            is Response.Success -> {
-                val followers = (followersState as Response.Success<List<User>>).data
-                if (followers.isNotEmpty()) {
-                    FollowersSection(followers, navHostController, currentUser, chatViewModel)
+    Scaffold(
+        topBar = {
+            Column {
+                MessagesTopBar(navHostController = navHostController)
+                if (isLoading) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
-                ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
             }
-
-            is Response.Error -> {
-                ErrorMessage((followersState as Response.Error).message)
-                ConversationsSection(navHostController, chatViewModel, userMap, currentUser)
+        },
+        modifier = Modifier.fillMaxSize()
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(paddingValues)
+        ) {
+            SearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
+            when (currentUserState) {
+                is Response.Error -> ErrorMessage((currentUserState as Response.Error).message)
+                is Response.Success -> {
+                    FollowersSection(
+                        followersState = followersState,
+                        navHostController = navHostController,
+                        currentUser = currentUser,
+                        chatViewModel = chatViewModel
+                    )
+                    ConversationsSection(
+                        navHostController = navHostController,
+                        chatViewModel = chatViewModel,
+                        userMap = userMap,
+                        currentUser = currentUser,
+                        searchQuery = searchQuery
+                    )
+                }
+                else -> Unit
             }
         }
     }
@@ -119,7 +145,7 @@ fun ConversationsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MessagesTopBar(navHostController: NavHostController) {
+private fun MessagesTopBar(navHostController: NavHostController) {
     TopAppBar(
         title = {
             Row(
@@ -129,30 +155,46 @@ fun MessagesTopBar(navHostController: NavHostController) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { navHostController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                     Text(
                         text = "Messages",
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 Row {
-                    IconButton(onClick = { /* Handle video call */ }) {
-                        Icon(Icons.Default.Call, "Video Call")
+                    IconButton(onClick = { /* TODO: Handle video call */ }) {
+                        Icon(
+                            imageVector = Icons.Default.Call,
+                            contentDescription = "Video Call",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
-                    IconButton(onClick = { /* Handle new message */ }) {
-                        Icon(Icons.Default.Create, "New Message")
+                    IconButton(onClick = { /* TODO: Handle new message */ }) {
+                        Icon(
+                            imageVector = Icons.Default.Create,
+                            contentDescription = "New Message",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             }
         },
-        modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface
+        )
     )
 }
 
 @Composable
-fun SearchBar(
+private fun SearchBar(
     query: String,
     onQueryChange: (String) -> Unit
 ) {
@@ -161,50 +203,78 @@ fun SearchBar(
         onValueChange = onQueryChange,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        placeholder = { Text("Search") },
-        leadingIcon = { Icon(Icons.Default.Search, "Search") },
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        placeholder = { Text("Search conversations") },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Search",
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        },
         colors = TextFieldDefaults.colors(
-            unfocusedContainerColor = Color.Transparent,
-            focusedContainerColor = Color.Transparent
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent
         ),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         singleLine = true
     )
 }
 
 @Composable
-fun FollowersSection(
-    followers: List<User>,
+private fun FollowersSection(
+    followersState: Response<List<User>>,
     navHostController: NavHostController,
     currentUser: User,
     chatViewModel: ChatViewModel
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = "Followers",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(followers) { follower ->
-                FollowerItem(follower, navHostController, currentUser)
+    when (followersState) {
+        is Response.Success -> {
+            val followers = followersState.data
+            if (followers.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "Followers",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    val listState = rememberLazyListState()
+                    LazyRow(
+                        state = listState,
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(followers, key = { it.userId }) { follower ->
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
+                            ) {
+                                FollowerItem(
+                                    follower = follower,
+                                    navHostController = navHostController,
+                                    currentUser = currentUser
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
+        is Response.Error -> ErrorMessage(followersState.message)
+        Response.Loading -> Unit
     }
 }
 
 @Composable
-fun FollowerItem(
+private fun FollowerItem(
     follower: User,
     navHostController: NavHostController,
     currentUser: User
@@ -221,13 +291,11 @@ fun FollowerItem(
                 navHostController.navigate("chat/${currentUser.userId}/${follower.userId}")
             }
         ) {
-            AsyncImage(
-                model = follower.imageUrl,
-                contentDescription = null,
+            AsyncImageWithPlaceholder(
+                imageUrl = follower.imageUrl,
                 modifier = Modifier
                     .size(64.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
+                    .clip(CircleShape)
             )
             if (isOnlineState) {
                 Box(
@@ -236,11 +304,9 @@ fun FollowerItem(
                         .clip(CircleShape)
                         .background(Color.Green)
                         .align(Alignment.BottomEnd)
-                        .padding(2.dp)
                 )
             }
         }
-
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = follower.username,
@@ -253,42 +319,85 @@ fun FollowerItem(
 }
 
 @Composable
+private fun AsyncImageWithPlaceholder(
+    imageUrl: String,
+    modifier: Modifier = Modifier
+) {
+    val painter = rememberAsyncImagePainter(
+        ImageRequest.Builder(LocalContext.current)
+            .data(imageUrl)
+            .crossfade(true)
+            .placeholder(R.drawable.ic_user) // Placeholder khi đang load
+            .error(R.drawable.ic_user) // Hiển thị khi lỗi
+            .build()
+    )
+    Image(
+        painter = painter,
+        contentDescription = "User avatar",
+        modifier = modifier,
+        contentScale = ContentScale.Crop
+    )
+}
+
+@Composable
 private fun ConversationsSection(
     navHostController: NavHostController,
     chatViewModel: ChatViewModel,
     userMap: Map<String, User>,
-    currentUser: User
+    currentUser: User,
+    searchQuery: String
 ) {
     val conversationsState by chatViewModel.loadConversationsState.collectAsState()
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     when (conversationsState) {
         is Response.Success -> {
             val conversations = (conversationsState as Response.Success<List<Conversation>>).data
+                .filter {
+                    val otherUserId = it.participants.firstOrNull { id -> id != currentUser.userId } ?: ""
+                    val otherUser = userMap[otherUserId]
+                    otherUser?.username?.contains(searchQuery, ignoreCase = true) ?: true
+                }
             if (conversations.isEmpty()) {
                 EmptyState("No conversations found")
             } else {
-                LazyColumn {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     items(
                         items = conversations,
-                        key = { conversation -> conversation.id }
+                        key = { it.id }
                     ) { conversation ->
-                        val otherUserId =
-                            conversation.participants.firstOrNull { it != currentUser.userId } ?: ""
-                        ConversationItem(
-                            conversation = conversation,
-                            userMap = userMap,
-                            currentUserId = currentUser.userId,
-                            onClick = {
-                                navHostController.navigate("chat/${currentUser.userId}/$otherUserId")
-                            }
-                        )
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
+                        ) {
+                            val otherUserId = conversation.participants.firstOrNull { it != currentUser.userId } ?: ""
+                            ConversationItem(
+                                conversation = conversation,
+                                userMap = userMap,
+                                currentUserId = currentUser.userId,
+                                onClick = {
+                                    navHostController.navigate("chat/${currentUser.userId}/$otherUserId")
+                                }
+                            )
+                        }
+                    }
+                }
+                LaunchedEffect(conversations.size) {
+                    if (conversations.isNotEmpty() && listState.firstVisibleItemIndex <= 1) {
+                        scope.launch {
+                            listState.animateScrollToItem(0)
+                        }
                     }
                 }
             }
         }
-
         is Response.Error -> ErrorMessage((conversationsState as Response.Error).message)
-        Response.Loading -> LoadingIndicator()
+        Response.Loading -> Unit
     }
 }
 
@@ -308,18 +417,16 @@ private fun ConversationItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = otherUser?.imageUrl ?: "",
-            contentDescription = null,
+        AsyncImageWithPlaceholder(
+            imageUrl = otherUser?.imageUrl ?: "",
             modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop
+                .size(56.dp)
+                .clip(CircleShape)
         )
-
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -329,52 +436,28 @@ private fun ConversationItem(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = otherUser?.username ?: "",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = otherUser?.username ?: "Unknown",
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = formatTimestamp(lastMessage?.timestamp ?: conversation.timestamp),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
-
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = when (lastMessage?.type) {
-                        MessageType.IMAGE -> {
-                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi ảnh"
-                            else "${otherUser?.username ?: ""} đã gửi ảnh"
-                        }
-
-                        MessageType.VIDEO -> {
-                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi video"
-                            else "${otherUser?.username ?: ""} đã gửi video"
-                        }
-
-                        MessageType.FILE -> {
-                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi tệp"
-                            else "${otherUser?.username ?: ""} đã gửi tệp"
-                        }
-
-                        MessageType.VOICE -> {
-                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi tin nhắn thoại"
-                            else "${otherUser?.username ?: ""} đã gửi tin nhắn thoại"
-                        }
-
-                        MessageType.VOICE_CALL -> {
-                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi cuộc gọi thoại"
-                            else "${otherUser?.username ?: ""} đã gửi cuộc gọi thoại"
-                        }
-                        MessageType.VIDEO_CALL -> {
-                            if (lastMessage.senderId == currentUserId) "Bạn đã gửi cuộc gọi video"
-                            else "${otherUser?.username ?: ""} đã gửi cuộc gọi video"
-                        }
-
+                        MessageType.IMAGE -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi ảnh" else "${otherUser?.username ?: ""} đã gửi ảnh"
+                        MessageType.VIDEO -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi video" else "${otherUser?.username ?: ""} đã gửi video"
+                        MessageType.FILE -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi tệp" else "${otherUser?.username ?: ""} đã gửi tệp"
+                        MessageType.VOICE -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi tin nhắn thoại" else "${otherUser?.username ?: ""} đã gửi tin nhắn thoại"
+                        MessageType.VOICE_CALL -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi cuộc gọi thoại" else "${otherUser?.username ?: ""} đã gửi cuộc gọi thoại"
+                        MessageType.VIDEO_CALL -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi cuộc gọi video" else "${otherUser?.username ?: ""} đã gửi cuộc gọi video"
                         else -> lastMessage?.content ?: ""
                     },
                     style = MaterialTheme.typography.bodyMedium,
@@ -383,7 +466,6 @@ private fun ConversationItem(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-
                 if (unreadCountForCurrentUser > 0) {
                     Badge(
                         containerColor = MaterialTheme.colorScheme.primary,
@@ -398,24 +480,18 @@ private fun ConversationItem(
 }
 
 @Composable
-private fun LoadingIndicator() {
+private fun ErrorMessage(message: String) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        CircularProgressIndicator()
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
     }
-}
-
-@Composable
-private fun ErrorMessage(message: String) {
-    Spacer(modifier = Modifier.height(16.dp))
-    Text(
-        text = message,
-        color = MaterialTheme.colorScheme.error,
-        style = MaterialTheme.typography.bodySmall,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp)
-    )
 }
 
 @Composable
@@ -424,7 +500,11 @@ private fun EmptyState(message: String) {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = message)
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
     }
 }
 

@@ -33,39 +33,44 @@ class PostViewModel @Inject constructor(
     private var isLoadingMore = false
 
     fun getFeedPosts(currentUserID: String, forceRefresh: Boolean = false) {
+        if (!forceRefresh && (_getFeedPostsState.value.endReached || isLoadingMore)) {
+            return
+        }
+
         if (forceRefresh) {
             lastVisiblePost = null
             isLoadingMore = false
-            _getFeedPostsState.value = _getFeedPostsState.value.copy(
-                posts = emptyList(),
-                endReached = false,
-                isLoading = true,
-                error = ""
-            )
+            _getFeedPostsState.value = PostState(isLoading = true)
+        } else if (_getFeedPostsState.value.posts.isNotEmpty()) {
+            isLoadingMore = true
+        } else {
+            _getFeedPostsState.value = _getFeedPostsState.value.copy(isLoading = true)
         }
-
-        if (!forceRefresh && (_getFeedPostsState.value.endReached || isLoadingMore)) return
-
-        isLoadingMore = true
 
         viewModelScope.launch {
             postUseCases.getFeedPosts(currentUserID, lastVisiblePost).collect { response ->
                 when (response) {
                     is Response.Loading -> {
-                        _getFeedPostsState.value = _getFeedPostsState.value.copy(isLoading = true)
+                        if (forceRefresh || _getFeedPostsState.value.posts.isEmpty()) {
+                            _getFeedPostsState.value =
+                                _getFeedPostsState.value.copy(isLoading = true)
+                        }
                     }
 
                     is Response.Success -> {
                         val newPosts = response.data
                         lastVisiblePost = newPosts.lastOrNull()
 
-                        // Lấy danh sách userIDs duy nhất từ các bài đăng
                         val userIds = newPosts.map { it.postOwnerID }.distinct()
-                        fetchUsers(userIds) // Tải thông tin người dùng
+                        fetchUsers(userIds)
 
                         _getFeedPostsState.value = _getFeedPostsState.value.copy(
                             isLoading = false,
-                            posts = if (forceRefresh) newPosts else _getFeedPostsState.value.posts + newPosts,
+                            posts = if (forceRefresh || _getFeedPostsState.value.posts.isEmpty()) {
+                                newPosts
+                            } else {
+                                _getFeedPostsState.value.posts + newPosts
+                            },
                             endReached = newPosts.size < 10,
                             error = ""
                         )
@@ -83,6 +88,7 @@ class PostViewModel @Inject constructor(
             }
         }
     }
+
 
     private fun fetchUsers(userIds: List<String>) {
         viewModelScope.launch {
@@ -105,13 +111,16 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    private val _uploadPostSate = mutableStateOf<Response<Boolean>>(Response.Success(false))
-    val uploadPostSate: State<Response<Boolean>> = _uploadPostSate
+    private val _uploadPostSate = MutableStateFlow<Response<Boolean>>(Response.Success(false))
+    val uploadPostSate: StateFlow<Response<Boolean>> = _uploadPostSate
 
     fun uploadPost(post: Post, imageUris: List<Uri>) {
         viewModelScope.launch {
             postUseCases.uploadPost(post, imageUris).collect {
                 _uploadPostSate.value = it
+                if (it is Response.Success) {
+                    _uploadPostSate.value = Response.Success(false)
+                }
             }
         }
     }
@@ -151,10 +160,8 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    //Like
     private val _likeLoadingStates = MutableStateFlow<Map<String, Boolean>>(emptyMap())
-    val likeLoadingStates: StateFlow<Map<String, Boolean>> =
-        _likeLoadingStates.asStateFlow()
+    val likeLoadingStates: StateFlow<Map<String, Boolean>> = _likeLoadingStates.asStateFlow()
 
     private val _currentPost = MutableStateFlow<Post?>(null)
     val currentPost: StateFlow<Post?> = _currentPost.asStateFlow()

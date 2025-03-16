@@ -1,6 +1,8 @@
 package com.arny.allfy.presentation.common
 
 import android.util.Log
+import android.widget.FrameLayout
+import androidx.annotation.OptIn
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -33,20 +35,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screens
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.launch
 
 @Composable
@@ -76,6 +85,9 @@ fun PostItem(
     val likeCount by remember(post) {
         derivedStateOf { post.likes.size }
     }
+    val commentCount by remember(post) {
+        derivedStateOf { post.comments?.size ?: 0 } // Giả sử Post có thuộc tính comments
+    }
     val showComments = remember { mutableStateOf(false) }
 
     val deletePostState by postViewModel.deletePostState.collectAsState()
@@ -84,7 +96,6 @@ fun PostItem(
             navController.navigate(Screens.FeedScreen.route) {
                 popUpTo(Screens.FeedScreen.route) { inclusive = true }
             }
-            Log.d("AAA", "Post deleted successfully")
         }
     }
 
@@ -105,7 +116,7 @@ fun PostItem(
         Column(modifier = Modifier.fillMaxWidth()) {
             PostHeader(
                 post = post,
-                postOwner = postOwner, // Truyền người đăng
+                postOwner = postOwner,
                 navController = navController,
                 currentUser = currentUser,
                 onEditPost = { /* TODO: Implement edit post */ },
@@ -116,10 +127,11 @@ fun PostItem(
             PostActions(
                 isLiked = isLiked,
                 isLikeLoading = isLikeLoading,
+                likeCount = likeCount,
+                commentCount = commentCount,
                 showComments = showComments,
                 onLikeClick = { postViewModel.toggleLikePost(post, currentUser.userId) }
             )
-            if (likeCount > 0) LikeCount(likeCount)
         }
     }
 
@@ -136,7 +148,7 @@ fun PostItem(
 @Composable
 private fun PostHeader(
     post: Post,
-    postOwner: User, // Thông tin người đăng
+    postOwner: User,
     navController: NavController,
     currentUser: User,
     onEditPost: () -> Unit = {},
@@ -154,7 +166,12 @@ private fun PostHeader(
             }
         ) {
             AsyncImage(
-                model = postOwner.imageUrl, // Dùng imageUrl từ postOwner
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(postOwner.imageUrl.ifEmpty { null })
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_user)
+                    .error(R.drawable.ic_user)
+                    .build(),
                 contentDescription = "User Avatar",
                 placeholder = painterResource(R.drawable.ic_user),
                 modifier = Modifier
@@ -164,7 +181,7 @@ private fun PostHeader(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = postOwner.username, // Dùng username từ postOwner
+                text = postOwner.username,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
@@ -224,11 +241,11 @@ private fun PostHeader(
 
 @Composable
 private fun PostImages(post: Post) {
-    if (post.imageUrls.isNotEmpty()) {
+    if (post.mediaItems.isNotEmpty()) {
         val pagerState = rememberPagerState(
             initialPage = 0,
             initialPageOffsetFraction = 0f,
-            pageCount = { post.imageUrls.size }
+            pageCount = { post.mediaItems.size }
         )
 
         Box(
@@ -245,18 +262,38 @@ private fun PostImages(post: Post) {
                         matchHeightConstraintsFirst = true
                     )
             ) { page ->
-                AsyncImage(
-                    model = post.imageUrls[page],
-                    contentDescription = "Post Image",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                    placeholder = painterResource(R.drawable.placehoder_image)
-                )
+                val mediaItem = post.mediaItems[page]
+                when (mediaItem.mediaType) {
+                    "video" -> {
+                        VideoPlayer(
+                            url = mediaItem.url,
+                            thumbnailUrl = mediaItem.thumbnailUrl, // Truyền thumbnailUrl
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    "image" -> {
+                        AsyncImage(
+                            model = mediaItem.url,
+                            contentDescription = "Post Image",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
+                            placeholder = painterResource(R.drawable.placehoder_image)
+                        )
+                    }
+
+                    "audio" -> {
+                        Text(
+                            text = "Audio not supported yet",
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                }
             }
 
-            if (post.imageUrls.size > 1) {
+            if (post.mediaItems.size > 1) {
                 Text(
-                    text = "${pagerState.currentPage + 1}/${post.imageUrls.size}",
+                    text = "${pagerState.currentPage + 1}/${post.mediaItems.size}",
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -277,10 +314,89 @@ private fun PostCaption(caption: String) {
     Text(text = caption, modifier = Modifier.padding(8.dp))
 }
 
+@OptIn(UnstableApi::class)
+@Composable
+fun VideoPlayer(
+    url: String,
+    thumbnailUrl: String? = null,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(url))
+            prepare()
+            playWhenReady = true
+            repeatMode = Player.REPEAT_MODE_ONE
+        }
+    }
+
+    var isVideoReady by remember { mutableStateOf(false) }
+
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying) {
+                    isVideoReady = true
+                }
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) {
+                    isVideoReady = true
+                }
+            }
+        }
+        exoPlayer.addListener(listener)
+        exoPlayer.playWhenReady = true
+
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.release()
+        }
+    }
+
+    Box(modifier = modifier) {
+        if (!isVideoReady && thumbnailUrl != null) {
+            AsyncImage(
+                model = thumbnailUrl,
+                contentDescription = "Video Thumbnail",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
+                placeholder = painterResource(R.drawable.placehoder_image)
+            )
+        }
+        AndroidView(
+            factory = {
+                PlayerView(context).apply {
+                    player = exoPlayer
+                    useController = true
+                    controllerAutoShow = false
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (!isVideoReady) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter),
+            )
+        }
+    }
+}
+
 @Composable
 private fun PostActions(
     isLiked: Boolean,
     isLikeLoading: Boolean,
+    likeCount: Int,
+    commentCount: Int,
     showComments: MutableState<Boolean>,
     onLikeClick: () -> Unit
 ) {
@@ -290,25 +406,49 @@ private fun PostActions(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row {
-            LikeButton(
-                isLiked = isLiked,
-                isLoading = isLikeLoading,
-                onClick = onLikeClick
-            )
-            IconButton(onClick = {
-                showComments.value = true
-            }) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_comment),
-                    contentDescription = "Comment"
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                LikeButton(
+                    isLiked = isLiked,
+                    isLoading = isLikeLoading,
+                    onClick = onLikeClick
                 )
+                if (likeCount > 0) {
+                    Text(
+                        text = likeCount.toString(),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                IconButton(onClick = { showComments.value = true }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_comment),
+                        contentDescription = "Comment"
+                    )
+                }
+                if (commentCount > 0) {
+                    Text(
+                        text = commentCount.toString(),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }
 }
 
-@OptIn(DelicateCoroutinesApi::class)
 @Composable
 private fun LikeButton(
     isLiked: Boolean,
@@ -375,16 +515,5 @@ private fun LikeButton(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun LikeCount(count: Int) {
-    Row(
-        modifier = Modifier.padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = "$count", fontWeight = FontWeight.Bold)
-        Text(text = " likes", fontWeight = FontWeight.Bold)
     }
 }

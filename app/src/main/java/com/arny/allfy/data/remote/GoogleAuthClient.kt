@@ -14,7 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class GoogleAuthClient @Inject constructor(
-    private val context: Context
+    context: Context
 ) {
     private val credentialManager = CredentialManager.create(context)
 

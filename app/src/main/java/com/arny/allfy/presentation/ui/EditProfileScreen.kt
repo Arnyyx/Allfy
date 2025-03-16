@@ -1,14 +1,19 @@
 package com.arny.allfy.presentation.ui
 
 import android.net.Uri
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -20,14 +25,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
     onBackClick: () -> Unit,
@@ -35,13 +43,9 @@ fun EditProfileScreen(
 ) {
     val currentUser by userViewModel.currentUser.collectAsState()
     val updateStatus by userViewModel.updateProfileStatus.collectAsState()
+
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        selectedImageUri = uri
-    }
-
-    var lastUpdateStatus by remember { mutableStateOf<Response<Boolean>?>(null) }
     var user by remember(currentUser) {
         mutableStateOf(
             if (currentUser is Response.Success) (currentUser as Response.Success<User>).data
@@ -49,14 +53,21 @@ fun EditProfileScreen(
         )
     }
 
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        selectedImageUri = uri
+    }
+
     LaunchedEffect(updateStatus) {
-        if (updateStatus != lastUpdateStatus && updateStatus is Response.Success && (updateStatus as Response.Success).data) {
-            toastMessage = "Profile updated successfully"
-            onBackClick()
-            lastUpdateStatus = updateStatus
-        } else if (updateStatus is Response.Error) {
-            toastMessage = "Error: ${(updateStatus as Response.Error).message}"
-            lastUpdateStatus = updateStatus
+        when (updateStatus) {
+            is Response.Success -> {
+                if ((updateStatus as Response.Success<Boolean>).data) {
+                    toastMessage = "Profile updated successfully"
+                    onBackClick()
+                }
+            }
+
+            is Response.Error -> toastMessage = "Error: ${(updateStatus as Response.Error).message}"
+            else -> Unit
         }
     }
 
@@ -68,36 +79,50 @@ fun EditProfileScreen(
         }
     }
 
+    val isLoading = currentUser is Response.Loading || updateStatus is Response.Loading
+
     Scaffold(
         topBar = {
-            EditProfileTopBar(
-                onBackClick = onBackClick,
-                onSaveClick = {
-                    userViewModel.updateUserProfile(user, selectedImageUri)
-                },
-                isLoading = updateStatus is Response.Loading
-            )
-        }
+            Column {
+                EditProfileTopBar(
+                    onBackClick = onBackClick,
+                    onSaveClick = { userViewModel.updateUserProfile(user, selectedImageUri) },
+                    isLoading = isLoading
+                )
+                if (isLoading) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        },
+        modifier = Modifier.fillMaxSize()
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
         ) {
-            if (currentUser is Response.Loading || updateStatus is Response.Loading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
-
             when (currentUser) {
                 is Response.Success -> {
-                    Column(
-                        modifier = Modifier
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp)
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
                     ) {
-                        ProfileImageSection(user, selectedImageUri) { launcher.launch("image/*") }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        ProfileFieldsSection(user) { user = it }
+                        Column(
+                            modifier = Modifier
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp)
+                        ) {
+                            ProfileImageSection(
+                                user,
+                                selectedImageUri
+                            ) { launcher.launch("image/*") }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            ProfileFieldsSection(user) { user = it }
+                        }
                     }
                 }
 
@@ -116,16 +141,40 @@ private fun EditProfileTopBar(
     isLoading: Boolean
 ) {
     TopAppBar(
-        title = { Text("Edit Profile") },
+        title = {
+            Text(
+                text = "Edit Profile",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
         navigationIcon = {
             IconButton(onClick = onBackClick) {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    "Back"
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
         },
-        actions = { TextButton(onClick = onSaveClick, enabled = !isLoading) { Text("Save") } }
+        actions = {
+            TextButton(
+                onClick = onSaveClick,
+                enabled = !isLoading
+            ) {
+                Text(
+                    text = "Save",
+                    fontWeight = FontWeight.Bold,
+                    color = if (!isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = 0.5f
+                    )
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface
+        )
     )
 }
 
@@ -142,20 +191,36 @@ private fun ProfileImageSection(
             .clickable(onClick = onImageClick),
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = rememberAsyncImagePainter(
-                model = selectedImageUri
-                    ?: if (currentUser.imageUrl.isNotEmpty()) currentUser.imageUrl else R.drawable.ic_user,
-                placeholder = rememberAsyncImagePainter(R.drawable.ic_user),
-                error = rememberAsyncImagePainter(R.drawable.ic_user)
-            ),
-            contentDescription = "Profile Picture",
+        AsyncImageWithPlaceholder(
+            imageUrl = selectedImageUri?.toString() ?: currentUser.imageUrl,
             modifier = Modifier
                 .size(100.dp)
                 .clip(CircleShape),
-            contentScale = ContentScale.Crop
+            placeholderRes = R.drawable.ic_user
         )
     }
+}
+
+@Composable
+private fun AsyncImageWithPlaceholder(
+    imageUrl: String,
+    modifier: Modifier = Modifier,
+    placeholderRes: Int = R.drawable.ic_user
+) {
+    val painter = rememberAsyncImagePainter(
+        ImageRequest.Builder(LocalContext.current)
+            .data(if (imageUrl.isNotEmpty()) imageUrl else null)
+            .crossfade(true)
+            .placeholder(placeholderRes)
+            .error(placeholderRes)
+            .build()
+    )
+    Image(
+        painter = painter,
+        contentDescription = "Profile Picture",
+        modifier = modifier,
+        contentScale = ContentScale.Crop
+    )
 }
 
 @Composable
@@ -163,40 +228,70 @@ private fun ProfileFieldsSection(
     currentUser: User,
     onUserUpdate: (User) -> Unit
 ) {
-    EditProfileField("Username", currentUser.username) {
-        if (it.matches(Regex("^[a-zA-Z0-9_]*$"))) onUserUpdate(currentUser.copy(username = it))
-    }
-    EditProfileField("Name", currentUser.name) { onUserUpdate(currentUser.copy(name = it)) }
-    EditProfileField("Email", currentUser.email) { onUserUpdate(currentUser.copy(email = it)) }
-    EditProfileField("Bio", currentUser.bio) {
-        if (it.length <= 100) onUserUpdate(
-            currentUser.copy(
-                bio = it
-            )
-        )
-    }
+    EditProfileField(
+        label = "Username",
+        value = currentUser.username,
+        onValueChange = {
+            if (it.matches(Regex("^[a-zA-Z0-9_]*$"))) {
+                onUserUpdate(currentUser.copy(username = it))
+            }
+        }
+    )
+    EditProfileField(
+        label = "Name",
+        value = currentUser.name,
+        onValueChange = { onUserUpdate(currentUser.copy(name = it)) }
+    )
+    EditProfileField(
+        label = "Email",
+        value = currentUser.email,
+        onValueChange = { onUserUpdate(currentUser.copy(email = it)) }
+    )
+    EditProfileField(
+        label = "Bio",
+        value = currentUser.bio,
+        maxLength = 100,
+        onValueChange = { if (it.length <= 100) onUserUpdate(currentUser.copy(bio = it)) }
+    )
 }
 
 @Composable
 private fun EditProfileField(
     label: String,
     value: String,
+    maxLength: Int? = null,
     onValueChange: (String) -> Unit
 ) {
-    TextField(
-        label = { Text(label) },
-        value = value,
-        onValueChange = onValueChange,
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = Color.Transparent,
-            unfocusedContainerColor = Color.Transparent,
-            disabledContainerColor = Color.Transparent,
-            errorContainerColor = Color.Transparent
+            .padding(vertical = 8.dp)
+    ) {
+        TextField(
+            label = { Text(label) },
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent
+            ),
+            shape = RoundedCornerShape(8.dp),
+            singleLine = label != "Bio",
+            maxLines = if (label == "Bio") 4 else 1
         )
-    )
+        if (maxLength != null) {
+            Text(
+                text = "${value.length}/$maxLength",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.align(Alignment.End)
+            )
+        }
+    }
 }
 
 @Composable
@@ -209,12 +304,14 @@ private fun EditProfileSkeleton() {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp), contentAlignment = Alignment.Center
+                .padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center
         ) {
             Surface(
                 modifier = Modifier
                     .size(100.dp)
-                    .clip(CircleShape), color = MaterialTheme.colorScheme.surfaceVariant
+                    .clip(CircleShape),
+                color = MaterialTheme.colorScheme.surfaceVariant
             ) {}
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -223,7 +320,8 @@ private fun EditProfileSkeleton() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
-                    .padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surfaceVariant
+                    .padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant
             ) {}
         }
     }
@@ -234,7 +332,8 @@ private fun ErrorContent(errorMessage: String) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp), contentAlignment = Alignment.Center
+            .padding(16.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = errorMessage,
