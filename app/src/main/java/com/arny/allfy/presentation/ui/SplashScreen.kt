@@ -41,31 +41,34 @@ fun SplashScreen(
                 OvershootInterpolator(2f).getInterpolation(it)
             })
         )
-        when (authState.value) {
-            is AuthState.Authenticated -> {
-                navController.navigate(Screens.FeedScreen.route) {
-                    popUpTo(Screens.SplashScreen.route) {
-                        inclusive = true
+
+        val isHandlingSpecialIntent =
+            navController.currentDestination?.route?.startsWith("incoming_call") == true
+
+        if (!isHandlingSpecialIntent) {
+            when (authState.value) {
+                is AuthState.Authenticated -> {
+                    navController.navigate(Screens.FeedScreen.route) {
+                        popUpTo(Screens.SplashScreen.route) { inclusive = true }
                     }
                 }
-            }
 
-            is AuthState.Error -> Toast.makeText(
-                context,
-                (authState.value as AuthState.Error).message, Toast.LENGTH_SHORT
-            ).show()
+                is AuthState.Error -> Toast.makeText(
+                    context,
+                    (authState.value as AuthState.Error).message, Toast.LENGTH_SHORT
+                ).show()
 
-            is AuthState.Unauthenticated -> {
-                navController.navigate(Screens.LoginScreen.route) {
-                    popUpTo(Screens.SplashScreen.route) {
-                        inclusive = true
+                is AuthState.Unauthenticated -> {
+                    navController.navigate(Screens.LoginScreen.route) {
+                        popUpTo(Screens.SplashScreen.route) { inclusive = true }
                     }
                 }
-            }
 
-            else -> {}
+                else -> {}
+            }
         }
     }
+
     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(id = R.drawable.ic_logo),

@@ -176,7 +176,6 @@ class ChatViewModel @Inject constructor(
                     is Response.Success -> {
                         currentCallId = response.data
                         _callState.value = "pending"
-//                        navHostController.navigate("call/$callerId/$calleeId")
                     }
 
                     is Response.Error -> {}
@@ -205,7 +204,6 @@ class ChatViewModel @Inject constructor(
                 if (response is Response.Success) {
                     _callState.value = "accepted"
                     currentCallId = callId
-//                    navHostController.navigate("call/${FirebaseAuth.getInstance().currentUser?.uid}/$conversationId.split('_').first()")
                 }
             }
         }

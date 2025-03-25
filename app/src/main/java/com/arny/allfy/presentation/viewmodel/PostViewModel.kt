@@ -89,14 +89,13 @@ class PostViewModel @Inject constructor(
         }
     }
 
-
     private fun fetchUsers(userIds: List<String>) {
         viewModelScope.launch {
             userUseCases.getUsersByIDs(userIds).collect { response ->
                 when (response) {
                     is Response.Success -> {
                         val newUsers = response.data.associateBy { it.userId }
-                        _users.value = _users.value + newUsers // Cập nhật cache
+                        _users.value = _users.value + newUsers
                     }
 
                     is Response.Error -> {
@@ -136,8 +135,7 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    private val _postsState =
-        MutableStateFlow<Response<Map<String, Post>>>(Response.Loading)
+    private val _postsState = MutableStateFlow<Response<Map<String, Post>>>(Response.Loading)
     val postsState: StateFlow<Response<Map<String, Post>>> = _postsState.asStateFlow()
 
     private val loadedPosts = mutableMapOf<String, Post>()
@@ -190,18 +188,17 @@ class PostViewModel @Inject constructor(
                         _likeLoadingStates.value -= post.postID
                     }
 
-                    is Response.Loading -> {
-                    }
+                    is Response.Loading -> {}
                 }
             }
         }
     }
 
-
-    //Comment
+    // Trạng thái cho Comments (bao gồm cả Reply)
     private val _comments = MutableStateFlow<Response<List<Comment>>>(Response.Loading)
     val comments: StateFlow<Response<List<Comment>>> = _comments.asStateFlow()
 
+    // Tải Comments cho một Post
     fun loadComments(postID: String) {
         viewModelScope.launch {
             postUseCases.getComments(postID).collect { response ->
@@ -210,14 +207,86 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    private val _addCommentState =
-        mutableStateOf<Response<Boolean>>(Response.Success(false))
+    // Trạng thái cho việc thêm Comment/Reply
+    private val _addCommentState = mutableStateOf<Response<Boolean>>(Response.Success(false))
     val addCommentState: State<Response<Boolean>> = _addCommentState
 
-    fun addComment(postID: String, userID: String, content: String) {
+    // Thêm Comment hoặc Reply (với parentCommentID để xác định Reply)
+    fun addComment(
+        postID: String,
+        userID: String,
+        content: String,
+        parentCommentID: String? = null
+    ) {
         viewModelScope.launch {
-            postUseCases.addComment(postID, userID, content).collect { response ->
+            postUseCases.addComment(postID, userID, content, parentCommentID).collect { response ->
                 _addCommentState.value = response
+                if (response is Response.Success && response.data) {
+                    // Sau khi thêm thành công, tải lại danh sách Comment
+                    loadComments(postID)
+                    _addCommentState.value = Response.Success(false) // Reset state
+                }
+            }
+        }
+    }
+
+    private val _commentLikeLoadingStates = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val commentLikeLoadingStates: StateFlow<Map<String, Boolean>> =
+        _commentLikeLoadingStates.asStateFlow()
+
+    fun toggleLikeComment(postID: String, comment: Comment, userID: String) {
+        viewModelScope.launch {
+            _commentLikeLoadingStates.value += (comment.commentID to true)
+            postUseCases.toggleLikeComment(postID, comment.commentID, userID).collect { response ->
+                when (response) {
+                    is Response.Success -> {
+                        val updatedComment = response.data
+                        _comments.value = when (val currentComments = _comments.value) {
+                            is Response.Success -> {
+                                Response.Success(
+                                    currentComments.data.map {
+                                        if (it.commentID == updatedComment.commentID) updatedComment else it
+                                    }
+                                )
+                            }
+
+                            else -> _comments.value
+                        }
+
+                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
+                            posts = _getFeedPostsState.value.posts.map { post ->
+                                if (post.postID == postID) {
+                                    post.copy(
+                                        comments = post.comments.map {
+                                            if (it.commentID == updatedComment.commentID) updatedComment else it
+                                        }
+                                    )
+                                } else post
+                            }
+                        )
+
+                        _currentPost.value?.let { current ->
+                            if (current.postID == postID) {
+                                _currentPost.value = current.copy(
+                                    comments = current.comments.map {
+                                        if (it.commentID == updatedComment.commentID) updatedComment else it
+                                    }
+                                )
+                            }
+                        }
+
+                        _commentLikeLoadingStates.value -= comment.commentID
+                    }
+
+                    is Response.Error -> {
+                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
+                            error = response.message
+                        )
+                        _commentLikeLoadingStates.value -= comment.commentID
+                    }
+
+                    is Response.Loading -> {}
+                }
             }
         }
     }
@@ -230,10 +299,9 @@ class PostViewModel @Inject constructor(
         loadedPosts.clear()
         _postsState.value = Response.Loading
         _likeLoadingStates.value = emptyMap()
+        _commentLikeLoadingStates.value = emptyMap()
         _currentPost.value = null
         _comments.value = Response.Loading
         _addCommentState.value = Response.Success(false)
     }
-
-
 }

@@ -36,7 +36,6 @@ import com.arny.allfy.utils.Screens
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     navController: NavHostController,
@@ -47,7 +46,6 @@ fun LoginScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Xử lý trạng thái authentication
     LaunchedEffect(authState.value) {
         when (authState.value) {
             is AuthState.Authenticated -> {

@@ -75,7 +75,7 @@ fun ProfileScreen(
                 Column {
                     TopAppBar(
                         title = {
-                            val currentUserState = userState // Biến tạm
+                            val currentUserState = userState
                             Text(
                                 text = if (currentUserState is Response.Success) currentUserState.data.username else "",
                                 style = MaterialTheme.typography.headlineSmall.copy(

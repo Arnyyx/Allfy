@@ -375,7 +375,6 @@ class MessageRepositoryImpl @Inject constructor(
     ): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
         try {
-            Log.d("CallRepository", "cancelCall: $conversationId, $callId")
             val conversationRef =
                 firebaseDatabase.reference.child("conversations").child(conversationId)
             val updates = mapOf(
@@ -459,11 +458,18 @@ class MessageRepositoryImpl @Inject constructor(
 
             val messageRef = conversationRef.child("messages").push()
             val messageId = messageRef.key ?: throw Exception("Failed to generate message ID")
-            val durationText = formatDuration(duration)
+
+            val messageContent = if (duration == 0L) {
+                "Missed call"
+            } else {
+                val durationText = formatDuration(duration)
+                "Call ended (duration: $durationText)"
+            }
+
             val callMessage = Message(
                 id = messageId,
                 senderId = callerId,
-                content = "Cuộc gọi kết thúc (duration: $durationText)",
+                content = messageContent,
                 timestamp = System.currentTimeMillis(),
                 type = MessageType.VOICE_CALL
             )
@@ -492,13 +498,11 @@ class MessageRepositoryImpl @Inject constructor(
             }
 
             override fun onCancelled(error: DatabaseError) {
-                trySend(Response.Error(error.message).toString())
-//                close(error.toException())
+                Log.d("CallRepository", "onCancelled: ${error.message}")
             }
         })
         awaitClose { ref.removeEventListener(listener) }
     }
-
 
     private fun createConversationId(participants: List<String>): String {
         return participants.sorted().joinToString("_")

@@ -125,21 +125,40 @@ exports.sendCallNotification = onValueCreated({
     region: 'asia-southeast1'
 }, async (event) => {
     const callData = event.data.val();
-    if (!callData || !callData.callerId || !callData.calleeId) return null;
+    if (!callData || !callData.callerId || !callData.calleeId) {
+        functions.logger.error('Missing call data or callerId/calleeId', callData);
+        return null;
+    }
 
     const { callerId, calleeId } = callData;
-    const conversationRef = admin.database().ref(`/conversations/${event.params.conversationId}`);
-    const callState = (await conversationRef.child("callState").once('value')).val() || "idle";
-    if (callState !== "pending") return null;
+    const conversationId = event.params.conversationId;
+    const callId = event.params.callId;
+
+    const conversationRef = admin.database().ref(`/conversations/${conversationId}`);
+    const callStateSnapshot = await conversationRef.child("callState").once('value');
+    let callState = callStateSnapshot.val() || "idle";
+    if (callState !== "pending") {
+        functions.logger.log(`Call state is ${callState} for callId: ${callId}, skipping notification`);
+        return null;
+    }
 
     const callerDoc = await admin.firestore().collection('users').doc(callerId).get();
-    if (!callerDoc.exists) return null;
+    if (!callerDoc.exists) {
+        functions.logger.error(`Caller document not found for ID: ${callerId}`);
+        return null;
+    }
     const callerUsername = callerDoc.data().username || 'Unknown';
 
     const calleeDoc = await admin.firestore().collection('users').doc(calleeId).get();
-    if (!calleeDoc.exists) return null;
+    if (!calleeDoc.exists) {
+        functions.logger.error(`Callee document not found for ID: ${calleeId}`);
+        return null;
+    }
     const calleeFcmToken = calleeDoc.data().fcmToken;
-    if (!calleeFcmToken) return null;
+    if (!calleeFcmToken) {
+        functions.logger.warn(`No FCM token found for callee: ${calleeId}`);
+        return null;
+    }
 
     const payload = {
         token: calleeFcmToken,
@@ -152,13 +171,38 @@ exports.sendCallNotification = onValueCreated({
             callerId: callerId,
             calleeId: calleeId,
             callType: 'voice',
-            callId: event.params.callId,
-            conversationId: event.params.conversationId
+            callId: callId,
+            conversationId: conversationId
+        },
+        android: {
+            priority: 'high',
+            ttl: 30 * 1000
         }
     };
 
-    await admin.messaging().send(payload);
+    try {
+        await admin.messaging().send(payload);
+        functions.logger.log(`Call notification sent to ${calleeId} with callId: ${callId}, conversationId: ${conversationId}`);
+    } catch (error) {
+        functions.logger.error('Failed to send call notification:', error);
+    }
+
+    setTimeout(async () => {
+        const updatedCallStateSnapshot = await conversationRef.child("callState").once('value');
+        callState = updatedCallStateSnapshot.val() || "idle";
+        if (callState === "pending") {
+            await conversationRef.update({
+                "callState": "idle",
+                [`calls/${callId}`]: null,
+                "timestamp": admin.database.ServerValue.TIMESTAMP
+            });
+            functions.logger.log(`Call timed out after 30s, reset to idle for callId: ${callId}`);
+        }
+    }, 30000);
+
+    return null;
 });
+
 exports.generateVideoThumbnail = onObjectFinalized(
   {
     region: "asia-southeast1",

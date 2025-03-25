@@ -67,7 +67,6 @@ fun ConversationsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var currentUser by remember { mutableStateOf(User()) }
 
-    // Load dữ liệu ban đầu
     LaunchedEffect(currentUserState) {
         when (currentUserState) {
             is Response.Success -> {
@@ -75,15 +74,16 @@ fun ConversationsScreen(
                 chatViewModel.loadConversations(currentUser.userId)
                 userViewModel.getFollowersFromSubcollection(currentUser.userId)
             }
+
             else -> Unit
         }
     }
 
-    // Load users từ conversations
     LaunchedEffect(conversationsState) {
         if (conversationsState is Response.Success) {
             val conversations = (conversationsState as Response.Success<List<Conversation>>).data
-            val participantIds = conversations.flatMap { it.participants }.toSet() - currentUser.userId
+            val participantIds =
+                conversations.flatMap { it.participants }.toSet() - currentUser.userId
             userViewModel.getUsers(participantIds.toList())
         }
     }
@@ -97,7 +97,8 @@ fun ConversationsScreen(
         }
     }
 
-    val isLoading = currentUserState is Response.Loading || conversationsState is Response.Loading || followersState is Response.Loading
+    val isLoading =
+        currentUserState is Response.Loading || conversationsState is Response.Loading || followersState is Response.Loading
 
     Scaffold(
         topBar = {
@@ -137,6 +138,7 @@ fun ConversationsScreen(
                         searchQuery = searchQuery
                     )
                 }
+
                 else -> Unit
             }
         }
@@ -268,6 +270,7 @@ private fun FollowersSection(
                 }
             }
         }
+
         is Response.Error -> ErrorMessage(followersState.message)
         Response.Loading -> Unit
     }
@@ -355,7 +358,8 @@ private fun ConversationsSection(
         is Response.Success -> {
             val conversations = (conversationsState as Response.Success<List<Conversation>>).data
                 .filter {
-                    val otherUserId = it.participants.firstOrNull { id -> id != currentUser.userId } ?: ""
+                    val otherUserId =
+                        it.participants.firstOrNull { id -> id != currentUser.userId } ?: ""
                     val otherUser = userMap[otherUserId]
                     otherUser?.username?.contains(searchQuery, ignoreCase = true) ?: true
                 }
@@ -375,13 +379,15 @@ private fun ConversationsSection(
                             visible = true,
                             enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
                         ) {
-                            val otherUserId = conversation.participants.firstOrNull { it != currentUser.userId } ?: ""
+                            val otherUserId =
+                                conversation.participants.firstOrNull { it != currentUser.userId }
+                                    ?: ""
                             ConversationItem(
                                 conversation = conversation,
                                 userMap = userMap,
                                 currentUserId = currentUser.userId,
                                 onClick = {
-                                    navHostController.navigate("chat/${currentUser.userId}/$otherUserId")
+                                    navHostController.navigate("chat/${conversation.id}/${currentUser.userId}/$otherUserId")
                                 }
                             )
                         }
@@ -396,6 +402,7 @@ private fun ConversationsSection(
                 }
             }
         }
+
         is Response.Error -> ErrorMessage((conversationsState as Response.Error).message)
         Response.Loading -> Unit
     }

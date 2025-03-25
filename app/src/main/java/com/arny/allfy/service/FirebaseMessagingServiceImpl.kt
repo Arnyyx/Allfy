@@ -26,7 +26,6 @@ import com.google.firebase.messaging.RemoteMessage
 class FirebaseMessagingServiceImpl : FirebaseMessagingService() {
     companion object {
         const val CALL_NOTIFICATION_ID = 1
-        var isCallActive = false
     }
 
     private var ringtone: Ringtone? = null
@@ -49,7 +48,6 @@ class FirebaseMessagingServiceImpl : FirebaseMessagingService() {
                 getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vibratorManager.defaultVibrator
         } else {
-            @Suppress("DEPRECATION")
             getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -64,6 +62,17 @@ class FirebaseMessagingServiceImpl : FirebaseMessagingService() {
 
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(stopEffectsReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver was not registered or already unregistered
+            // Safe to ignore this exception
+        }
+//        stopRingingAndVibrating() // Also clean up audio/vibration
+    }
+
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
         val data = remoteMessage.data
@@ -71,15 +80,11 @@ class FirebaseMessagingServiceImpl : FirebaseMessagingService() {
 
         when (data["type"]) {
             "call_invitation" -> {
-                if (!isCallActive) {
-                    val callerId = data["callerId"] ?: return
-                    val calleeId = data["calleeId"] ?: return
-                    val callId = data["callId"] ?: return
-                    isCallActive = true
-                    showCallNotification(callerId, calleeId, callId)
-                    startRingingAndVibrating()
-                } else {
-                }
+                val callerId = data["callerId"] ?: return
+                val calleeId = data["calleeId"] ?: return
+                val callId = data["callId"] ?: return
+                showCallNotification(callerId, calleeId, callId)
+                startRingingAndVibrating()
             }
 
             else -> {
@@ -155,7 +160,7 @@ class FirebaseMessagingServiceImpl : FirebaseMessagingService() {
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .addAction(R.drawable.ic_call, "Accept", acceptPendingIntent)
             .addAction(R.drawable.ic_call_end, "Reject", rejectPendingIntent)
-            .setAutoCancel(true)
+            .setAutoCancel(false)
             .build()
 
         notificationManager.notify(CALL_NOTIFICATION_ID, notification)
@@ -169,7 +174,6 @@ class FirebaseMessagingServiceImpl : FirebaseMessagingService() {
     private fun stopRingingAndVibrating() {
         ringtone?.let { if (it.isPlaying) it.stop() }
         vibrator?.cancel()
-        isCallActive = false
         val notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(CALL_NOTIFICATION_ID)

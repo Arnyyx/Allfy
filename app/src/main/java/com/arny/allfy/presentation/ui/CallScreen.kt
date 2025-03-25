@@ -29,6 +29,7 @@ fun CallScreen(
     navHostController: NavHostController,
     userViewModel: UserViewModel,
     chatViewModel: ChatViewModel,
+    conversationId: String,
     currentUserId: String,
     otherUserId: String
 ) {
@@ -36,19 +37,28 @@ fun CallScreen(
     val callState by chatViewModel.callState.collectAsState()
     var callDuration by remember { mutableLongStateOf(0L) }
     var isMicMuted by remember { mutableStateOf(false) }
-    val conversationId = remember { listOf(currentUserId, otherUserId).sorted().joinToString("_") }
 
     LaunchedEffect(callState) {
-        if (callState == "accepted") {
-            while (callState == "accepted") {
+        when (callState) {
+            "accepted" -> {
                 delay(1000)
                 callDuration += 1000
             }
+
+            "rejected" -> {
+                delay(3000)
+                chatViewModel.endCall(conversationId, callDuration)
+                navHostController.popBackStack()
+            }
+
+            else -> {}
         }
     }
 
     Box(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
     ) {
         when (otherUserState) {
             is Response.Success -> {
@@ -69,6 +79,7 @@ fun CallScreen(
                     onToggleMic = { isMicMuted = !isMicMuted }
                 )
             }
+
             else -> {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             }

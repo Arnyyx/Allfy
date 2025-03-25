@@ -29,6 +29,7 @@ class AuthViewModel @Inject constructor(
     private val _signUpState = MutableLiveData<Response<Boolean>>()
     val signUpState: LiveData<Response<Boolean>> = _signUpState
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+
     private val _authState = MutableLiveData<AuthState>()
     val authState: LiveData<AuthState> = _authState
 
@@ -90,7 +91,6 @@ class AuthViewModel @Inject constructor(
             }
         }
     }
-
 
     private fun checkAuthStatus() {
         if (auth.currentUser == null) {

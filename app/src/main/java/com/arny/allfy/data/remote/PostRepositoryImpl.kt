@@ -15,9 +15,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
@@ -172,62 +170,41 @@ class PostRepositoryImpl @Inject constructor(
         try {
             val snapshot = firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
+                .collection("comments")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
                 .get()
                 .await()
 
-            if (snapshot.exists()) {
-                val commentsData =
-                    snapshot.get("comments") as? List<HashMap<String, Any>> ?: emptyList()
-                if (commentsData.isEmpty()) {
-                    emit(Response.Success(emptyList()))
-                    return@flow
-                }
-
-                val baseComments = commentsData.mapNotNull { commentMap ->
-                    try {
-                        Triple(
-                            commentMap["commentID"] as? String ?: return@mapNotNull null,
-                            commentMap["commentOwnerID"] as? String ?: return@mapNotNull null,
-                            Comment(
-                                commentID = commentMap["commentID"] as? String
-                                    ?: return@mapNotNull null,
-                                commentOwnerID = commentMap["commentOwnerID"] as? String
-                                    ?: return@mapNotNull null,
-                                content = commentMap["content"] as? String
-                                    ?: return@mapNotNull null,
-                                timestamp = commentMap["timestamp"] as? Timestamp ?: Timestamp.now()
-                            )
-                        )
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
-
-                val userIds = baseComments.map { it.second }.distinct()
-
-                val userSnapshots = firestore.collection(Constants.COLLECTION_NAME_USERS)
-                    .whereIn(FieldPath.documentId(), userIds)
-                    .get()
-                    .await()
-
-                val userDataMap = userSnapshots.documents.associate { doc ->
-                    doc.id to Pair(
-                        doc.getString("username"),
-                        doc.getString("imageUrl")
-                    )
-                }
-
-                val fullComments = baseComments.map { (_, userId, baseComment) ->
-                    val (username, imageUrl) = userDataMap[userId] ?: ("" to "")
-                    baseComment.copy(
-                        commentOwnerUserName = username ?: "",
-                        commentOwnerProfilePicture = imageUrl ?: ""
-                    )
-                }.sortedByDescending { it.timestamp }
-                emit(Response.Success(fullComments))
+            val comments = if (snapshot.isEmpty) {
+                emptyList()
             } else {
-                emit(Response.Success(emptyList()))
+                snapshot.toObjects(Comment::class.java)
             }
+
+            if (comments.isEmpty()) {
+                emit(Response.Success(emptyList()))
+                return@flow
+            }
+
+            val userIds = comments.map { it.commentOwnerID }.distinct()
+
+            val userSnapshots = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                .whereIn(FieldPath.documentId(), userIds)
+                .get()
+                .await()
+
+            val userDataMap = userSnapshots.documents.associate { doc ->
+                doc.id to Pair(doc.getString("username"), doc.getString("imageUrl"))
+            }
+
+            val fullComments = comments.map { comment ->
+                val (username, imageUrl) = userDataMap[comment.commentOwnerID] ?: ("" to "")
+                comment.copy(
+                    commentOwnerUserName = username ?: "",
+                    commentOwnerProfilePicture = imageUrl ?: ""
+                )
+            }
+            emit(Response.Success(fullComments))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
@@ -236,20 +213,26 @@ class PostRepositoryImpl @Inject constructor(
     override fun addComment(
         postID: String,
         commentOwnerID: String,
-        content: String
+        content: String,
+        parentCommentID: String?
     ): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
         try {
+            val commentID = UUID.randomUUID().toString()
             val newComment = hashMapOf(
-                "commentID" to UUID.randomUUID().toString(),
+                "commentID" to commentID,
                 "commentOwnerID" to commentOwnerID,
                 "content" to content,
-                "timestamp" to Timestamp.now()
+                "timestamp" to Timestamp.now(),
+                "likes" to emptyList<String>(),
+                "parentCommentID" to parentCommentID
             )
 
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
-                .update("comments", FieldValue.arrayUnion(newComment))
+                .collection("comments")
+                .document(commentID)
+                .set(newComment)
                 .await()
             emit(Response.Success(true))
         } catch (e: Exception) {
@@ -274,6 +257,48 @@ class PostRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Log.e("PostRepositoryImpl", "uploadImageToFirebase: $e")
             throw e
+        }
+    }
+
+    override fun toggleLikeComment(
+        postID: String,
+        commentID: String,
+        userID: String
+    ): Flow<Response<Comment>> = flow {
+        emit(Response.Loading)
+        try {
+            val commentRef = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .collection("comments")
+                .document(commentID)
+
+            val snapshot = commentRef.get().await()
+            if (snapshot.exists()) {
+                val comment = snapshot.toObject(Comment::class.java)!!
+                val isLiked = comment.likes.contains(userID)
+                val updatedLikes = if (isLiked) {
+                    comment.likes - userID
+                } else {
+                    comment.likes + userID
+                }
+                val updatedComment = comment.copy(likes = updatedLikes)
+                commentRef.set(updatedComment).await()
+
+                val userSnapshot = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                    .document(comment.commentOwnerID)
+                    .get()
+                    .await()
+
+                val finalComment = updatedComment.copy(
+                    commentOwnerUserName = userSnapshot.getString("username") ?: "",
+                    commentOwnerProfilePicture = userSnapshot.getString("imageUrl") ?: ""
+                )
+                emit(Response.Success(finalComment))
+            } else {
+                emit(Response.Error("Comment not found"))
+            }
+        } catch (e: Exception) {
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 }

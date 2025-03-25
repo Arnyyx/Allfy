@@ -28,6 +28,7 @@ import com.arny.allfy.domain.usecase.post.GetComments
 import com.arny.allfy.domain.usecase.post.GetFeedPosts
 import com.arny.allfy.domain.usecase.post.GetPostByID
 import com.arny.allfy.domain.usecase.post.PostUseCases
+import com.arny.allfy.domain.usecase.post.ToggleLikeComment
 import com.arny.allfy.domain.usecase.post.ToggleLikePost
 import com.arny.allfy.domain.usecase.post.UploadPost
 import com.arny.allfy.domain.usecase.user.CheckIfFollowingUseCase
@@ -149,7 +150,8 @@ class AllfyModule {
         getPostByID = GetPostByID(repository),
         toggleLikePost = ToggleLikePost(repository),
         addComment = AddComment(repository),
-        getComments = GetComments(repository)
+        getComments = GetComments(repository),
+        toggleLikeComment = ToggleLikeComment(repository)
     )
 
 

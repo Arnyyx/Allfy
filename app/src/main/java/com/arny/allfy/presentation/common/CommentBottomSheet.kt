@@ -1,5 +1,6 @@
 package com.arny.allfy.presentation.common
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -16,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +50,7 @@ fun CommentBottomSheet(
     postViewModel: PostViewModel = hiltViewModel()
 ) {
     val commentText = remember { mutableStateOf("") }
+    val replyingToCommentId = remember { mutableStateOf<String?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -60,6 +64,7 @@ fun CommentBottomSheet(
         if (postViewModel.addCommentState.value is Response.Success) {
             postViewModel.loadComments(post.postID)
             commentText.value = ""
+            replyingToCommentId.value = null
             keyboardController?.hide()
         }
     }
@@ -86,13 +91,19 @@ fun CommentBottomSheet(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
-                // Sử dụng Column thay vì Box để bố trí CommentsList và CommentInput
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f) // CommentsList chiếm phần không gian linh hoạt
+                        .weight(1f)
                 ) {
-                    CommentsList(postViewModel, post.postID)
+                    CommentsList(
+                        post = post,
+                        postViewModel = postViewModel,
+                        currentUserId = currentUser.userId,
+                        onReplyClick = { commentId ->
+                            replyingToCommentId.value = commentId
+                        }
+                    )
                 }
                 CommentInput(
                     currentUser = currentUser,
@@ -103,11 +114,15 @@ fun CommentBottomSheet(
                             postViewModel.addComment(
                                 postID = post.postID,
                                 userID = currentUser.userId,
-                                content = commentText.value
+                                content = commentText.value,
+                                parentCommentID = replyingToCommentId.value
                             )
                         }
                     },
-                    isSending = postViewModel.addCommentState.value is Response.Loading
+                    isSending = postViewModel.addCommentState.value is Response.Loading,
+                    replyingTo = replyingToCommentId.value?.let { id ->
+                        (postViewModel.comments.value as? Response.Success)?.data?.find { it.commentID == id }?.commentOwnerUserName
+                    }
                 )
             }
         }
@@ -116,8 +131,10 @@ fun CommentBottomSheet(
 
 @Composable
 private fun CommentsList(
+    post: Post,
     postViewModel: PostViewModel,
-    postId: String
+    currentUserId: String,
+    onReplyClick: (String) -> Unit
 ) {
     val commentsResponse by postViewModel.comments.collectAsState()
     val listState = rememberLazyListState()
@@ -130,6 +147,7 @@ private fun CommentsList(
             if (comments.isEmpty()) {
                 EmptyState("No comments yet")
             } else {
+                val rootComments = comments.filter { it.parentCommentID == null }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -137,10 +155,19 @@ private fun CommentsList(
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
                     itemsIndexed(
-                        items = comments,
+                        items = rootComments,
                         key = { _, comment -> comment.commentID }
                     ) { index, comment ->
-                        AnimatedCommentItem(comment = comment, delayIndex = index)
+                        val replies = comments.filter { it.parentCommentID == comment.commentID }
+                        AnimatedCommentItem(
+                            post = post,
+                            comment = comment,
+                            replies = replies,
+                            delayIndex = index,
+                            postViewModel = postViewModel,
+                            currentUserId = currentUserId,
+                            onReplyClick = onReplyClick
+                        )
                     }
                 }
                 LaunchedEffect(comments.size) {
@@ -157,8 +184,17 @@ private fun CommentsList(
 }
 
 @Composable
-private fun AnimatedCommentItem(comment: Comment, delayIndex: Int) {
+private fun AnimatedCommentItem(
+    post: Post,
+    comment: Comment,
+    replies: List<Comment>,
+    delayIndex: Int,
+    postViewModel: PostViewModel,
+    currentUserId: String,
+    onReplyClick: (String) -> Unit
+) {
     var isVisible by remember { mutableStateOf(false) }
+    var showReplies by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay(delayIndex * 100L)
@@ -169,16 +205,59 @@ private fun AnimatedCommentItem(comment: Comment, delayIndex: Int) {
         visible = isVisible,
         enter = fadeIn(tween(300)) + expandVertically(tween(300))
     ) {
-        CommentItem(comment)
+        Column {
+            CommentItem(
+                post = post,
+                comment = comment,
+                postViewModel = postViewModel,
+                currentUserId = currentUserId,
+                onReplyClick = onReplyClick,
+                onShowRepliesClick = { showReplies = !showReplies },
+                hasReplies = replies.isNotEmpty(),
+                repliesVisible = showReplies,
+                repliesCount = replies.size
+            )
+            if (showReplies && replies.isNotEmpty()) {
+                replies.forEach { reply ->
+                    CommentItem(
+                        post = post,
+                        comment = reply,
+                        postViewModel = postViewModel,
+                        currentUserId = currentUserId,
+                        onReplyClick = onReplyClick,
+                        isReply = true,
+                        onShowRepliesClick = {},
+                        hasReplies = false, // Không cho phép Reply cấp 2
+                        repliesVisible = false,
+                        repliesCount = 0
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun CommentItem(comment: Comment) {
+private fun CommentItem(
+    post: Post,
+    comment: Comment,
+    postViewModel: PostViewModel,
+    currentUserId: String,
+    onReplyClick: (String) -> Unit,
+    isReply: Boolean = false,
+    onShowRepliesClick: () -> Unit,
+    hasReplies: Boolean,
+    repliesVisible: Boolean,
+    repliesCount: Int = 0
+) {
+    val commentLikeLoadingStates by postViewModel.commentLikeLoadingStates.collectAsState()
+    val isLiking = commentLikeLoadingStates[comment.commentID] == true
+    val isLiked = comment.likes.contains(currentUserId)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp, horizontal = if (isReply) 32.dp else 0.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         AsyncImageWithPlaceholder(
@@ -207,18 +286,56 @@ private fun CommentItem(comment: Comment) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
-                Text(
-                    text = "Like",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.clickable { /* TODO: Handle like */ }
-                )
-                Text(
-                    text = "Reply",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.clickable { /* TODO: Handle reply */ }
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.clickable(
+                        enabled = !isLiking,
+                        onClick = {
+                            postViewModel.toggleLikeComment(
+                                postID = post.postID,
+                                comment = comment,
+                                userID = currentUserId
+                            )
+                        }
+                    )
+                ) {
+                    Icon(
+                        imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = "Like",
+                        tint = if (isLiked) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = if (comment.likes.isNotEmpty()) comment.likes.size.toString() else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isLiked) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    if (isLiking) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
+                // Chỉ hiển thị nút "Reply" cho Comment gốc
+                if (!isReply) {
+                    Text(
+                        text = "Reply",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.clickable { onReplyClick(comment.commentID) }
+                    )
+                }
+                if (hasReplies) {
+                    Text(
+                        text = if (repliesVisible) "Hide Replies" else "Show $repliesCount Replies",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { onShowRepliesClick() }
+                    )
+                }
             }
         }
     }
@@ -230,7 +347,8 @@ private fun CommentInput(
     commentText: String,
     onCommentTextChange: (String) -> Unit,
     onSendComment: () -> Unit,
-    isSending: Boolean
+    isSending: Boolean,
+    replyingTo: String?
 ) {
     Card(
         modifier = Modifier
@@ -239,50 +357,61 @@ private fun CommentInput(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(8.dp)
         ) {
-            AsyncImageWithPlaceholder(
-                imageUrl = currentUser.imageUrl,
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-            )
-            OutlinedTextField(
-                value = commentText,
-                onValueChange = onCommentTextChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Add a comment...") },
-                maxLines = 5,
-                enabled = !isSending,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                    disabledBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                ),
-                shape = RoundedCornerShape(16.dp)
-            )
-            Box(
-                modifier = Modifier.size(40.dp),
-                contentAlignment = Alignment.Center
+            if (replyingTo != null) {
+                Text(
+                    text = "Replying to $replyingTo",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (isSending) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                } else {
-                    IconButton(
-                        onClick = onSendComment,
-                        enabled = commentText.isNotBlank()
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send comment",
-                            tint = if (commentText.isNotBlank()) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
+                AsyncImageWithPlaceholder(
+                    imageUrl = currentUser.imageUrl,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                )
+                OutlinedTextField(
+                    value = commentText,
+                    onValueChange = onCommentTextChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text(if (replyingTo != null) "Write a reply..." else "Add a comment...") },
+                    maxLines = 5,
+                    enabled = !isSending,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                Box(
+                    modifier = Modifier.size(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSending) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    } else {
+                        IconButton(
+                            onClick = onSendComment,
+                            enabled = commentText.isNotBlank()
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send comment",
+                                tint = if (commentText.isNotBlank()) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
                     }
                 }
             }

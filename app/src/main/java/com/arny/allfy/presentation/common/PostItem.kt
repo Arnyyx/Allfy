@@ -86,7 +86,7 @@ fun PostItem(
         derivedStateOf { post.likes.size }
     }
     val commentCount by remember(post) {
-        derivedStateOf { post.comments?.size ?: 0 } // Giả sử Post có thuộc tính comments
+        derivedStateOf { post.comments.size ?: 0 }
     }
     val showComments = remember { mutableStateOf(false) }
 

@@ -19,8 +19,18 @@ interface PostRepository {
     fun getPostByID(postID: String): Flow<Response<Post>>
 
     fun toggleLikePost(post: Post, userID: String): Flow<Response<Post>>
-
     fun getComments(postID: String): Flow<Response<List<Comment>>>
-    fun addComment(postID: String, commentOwnerID: String, content: String): Flow<Response<Boolean>>
+    fun addComment(
+        postID: String,
+        commentOwnerID: String,
+        content: String,
+        parentCommentID: String? = null
+    ): Flow<Response<Boolean>>
+
+    fun toggleLikeComment(
+        postID: String,
+        commentID: String,
+        userID: String
+    ): Flow<Response<Comment>>
 
 }

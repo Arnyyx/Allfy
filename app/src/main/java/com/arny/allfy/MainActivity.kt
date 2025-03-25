@@ -99,24 +99,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIncomingCall(intent: Intent) {
-        Log.d(
-            "AAA",
-            "Raw intent extras: ${
-                intent.extras?.keySet()
-                    ?.joinToString { "$it=${intent.getStringExtra(it)}" } ?: "No extras"
-            }")
         val action = intent.action
         val callerId = intent.getStringExtra("callerId")
         val calleeId = intent.getStringExtra("calleeId")
         val callId = intent.getStringExtra("callId")
         Log.d(
-            "AAA",
-            "Handling intent - action=$action, callerId=$callerId, calleeId=$calleeId, callId=$callId"
+            "IncomingCall",
+            "Action: $action, CallerId: $callerId, CalleeId: $calleeId, CallId: $callId"
         )
 
         when (action) {
             "INCOMING_CALL" -> {
                 if (callerId != null && calleeId != null && callId != null) {
+                    Log.d("IncomingCall", "Navigate to incoming call screen")
                     navController.navigate("incoming_call/$callerId/$calleeId/$callId")
                 }
             }
@@ -268,62 +263,76 @@ fun AllfyApp(
             )
         }
         composable(
-            route = "chat/{currentUserId}/{otherUserId}",
+            route = "chat/{conversationId}/{currentUserId}/{otherUserId}",
             arguments = listOf(
+                navArgument("conversationId") { type = NavType.StringType },
                 navArgument("currentUserId") { type = NavType.StringType },
                 navArgument("otherUserId") { type = NavType.StringType }
             )
         ) { backStackEntry ->
+            val conversationId = backStackEntry.arguments?.getString("conversationId")
             val currentUserId = backStackEntry.arguments?.getString("currentUserId")
             val otherUserId = backStackEntry.arguments?.getString("otherUserId")
+            requireNotNull(conversationId) { "conversationId parameter wasn't found" }
             requireNotNull(currentUserId) { "currentUserId parameter wasn't found" }
             requireNotNull(otherUserId) { "otherUserId parameter wasn't found" }
             ChatScreen(
                 navHostController = navHostController,
                 chatViewModel = chatViewModel,
                 userViewModel = userViewModel,
+                conversationId = conversationId,
                 currentUserId = currentUserId,
                 otherUserId = otherUserId
             )
         }
         composable(
-            route = "incoming_call/{callerId}/{calleeId}",
+            route = "incoming_call/{callerId}/{calleeId}/{callId}",
             arguments = listOf(
                 navArgument("callerId") { type = NavType.StringType },
-                navArgument("calleeId") { type = NavType.StringType }
+                navArgument("calleeId") { type = NavType.StringType },
+                navArgument("callId") { type = NavType.StringType }
             )
         ) { backStackEntry ->
-            val callerId = backStackEntry.arguments?.getString("callerId") ?: return@composable
-            val calleeId = backStackEntry.arguments?.getString("calleeId") ?: return@composable
+            val callerId = backStackEntry.arguments?.getString("callerId")
+            val calleeId = backStackEntry.arguments?.getString("calleeId")
+            val callId = backStackEntry.arguments?.getString("callId")
+            requireNotNull(callerId) { "callerId parameter wasn't found" }
+            requireNotNull(calleeId) { "calleeId parameter wasn't found" }
+            requireNotNull(callId) { "callId parameter wasn't found" }
             IncomingCallScreen(
                 callerId = callerId,
                 calleeId = calleeId,
+                callId = callId,
                 userViewModel = userViewModel,
                 chatViewModel = chatViewModel,
                 onAccept = {
-                    navHostController.navigate("call/$callerId/$calleeId")
+//                    navHostController.navigate("call/$callerId/$calleeId")
                 },
                 onReject = {
-                    navHostController.popBackStack()
+//                    navHostController.popBackStack()
                 }
             )
         }
 
         composable(
-            route = "call/{currentUserId}/{otherUserId}",
+            route = "call/{conversationId}/{currentUserId}/{otherUserId}",
             arguments = listOf(
+                navArgument("conversationId") { type = NavType.StringType },
                 navArgument("currentUserId") { type = NavType.StringType },
                 navArgument("otherUserId") { type = NavType.StringType },
             )
         ) { backStackEntry ->
+            val conversationId = backStackEntry.arguments?.getString("conversationId")
             val currentUserId = backStackEntry.arguments?.getString("currentUserId")
             val otherUserId = backStackEntry.arguments?.getString("otherUserId")
+            requireNotNull(conversationId) { "conversationId parameter wasn't found" }
             requireNotNull(currentUserId) { "currentUserId parameter wasn't found" }
             requireNotNull(otherUserId) { "otherUserId parameter wasn't found" }
             CallScreen(
                 navHostController = navHostController,
                 userViewModel = userViewModel,
                 chatViewModel = chatViewModel,
+                conversationId = conversationId,
                 currentUserId = currentUserId,
                 otherUserId = otherUserId
             )

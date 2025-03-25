@@ -8,7 +8,12 @@ import javax.inject.Inject
 class AddComment @Inject constructor(
     private val repository: PostRepository
 ) {
-    operator fun invoke(postID: String, userID: String, content: String): Flow<Response<Boolean>> {
-        return repository.addComment(postID, userID, content)
+    operator fun invoke(
+        postID: String,
+        userID: String,
+        content: String,
+        parentCommentID: String? = null
+    ): Flow<Response<Boolean>> {
+        return repository.addComment(postID, userID, content, parentCommentID)
     }
 }

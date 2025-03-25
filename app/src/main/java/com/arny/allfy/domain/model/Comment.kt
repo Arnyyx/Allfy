@@ -9,7 +9,9 @@ data class Comment(
     val commentOwnerUserName: String = "",
     val commentOwnerProfilePicture: String = "",
     val content: String = "",
-    val timestamp: Timestamp = Timestamp.now()
+    val timestamp: Timestamp = Timestamp.now(),
+    val likes: List<String> = emptyList(),
+    val parentCommentID: String? = null
 ) {
     val timeAgo: String get() = timestamp.toTimeAgo()
 }

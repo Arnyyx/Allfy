@@ -62,6 +62,7 @@ fun ChatScreen(
     navHostController: NavHostController,
     chatViewModel: ChatViewModel,
     userViewModel: UserViewModel,
+    conversationId: String,
     currentUserId: String,
     otherUserId: String
 ) {
@@ -76,6 +77,7 @@ fun ChatScreen(
         userViewModel.getUserById(otherUserId)
     }
 
+
     val isLoading = conversationState is Response.Loading || otherUserState is Response.Loading
 
     Scaffold(
@@ -87,7 +89,7 @@ fun ChatScreen(
                     onBackClick = { navHostController.popBackStack() },
                     onVoiceCallClick = {
                         chatViewModel.sendCallInvitation(currentUserId, otherUserId)
-                        navHostController.navigate("call/$currentUserId/$otherUserId")
+                        navHostController.navigate("call/$conversationId/$currentUserId/$otherUserId")
                     },
                     onVideoCallClick = { /* TODO: Handle video call */ }
                 )
