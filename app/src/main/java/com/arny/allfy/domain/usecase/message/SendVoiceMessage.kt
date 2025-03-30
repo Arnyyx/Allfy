@@ -1,17 +1,17 @@
 package com.arny.allfy.domain.usecase.message
 
+import android.net.Uri
 import com.arny.allfy.domain.repository.MessageRepository
 import com.arny.allfy.utils.Response
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
-class CancelCallUseCase @Inject constructor(
+class SendVoiceMessage @Inject constructor(
     private val messageRepository: MessageRepository
 ) {
-    suspend operator fun invoke(
-        conversationId: String,
-        callId: String,
-    ): Flow<Response<Boolean>> {
-        return messageRepository.cancelCall(conversationId, callId)
+    operator fun invoke(
+        conversationID: String, audioUri: Uri,
+    ): Flow<Response<String>> {
+        return messageRepository.sendVoiceMessage(conversationID, audioUri)
     }
 }

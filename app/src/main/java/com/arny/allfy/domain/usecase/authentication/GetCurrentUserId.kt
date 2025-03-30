@@ -3,10 +3,8 @@ package com.arny.allfy.domain.usecase.authentication
 import com.arny.allfy.domain.repository.AuthenticationRepository
 import javax.inject.Inject
 
-class FirebaseSignIn @Inject constructor(
+class GetCurrentUserId @Inject constructor(
     private val repository: AuthenticationRepository
-
 ) {
-    operator fun invoke(email: String, password: String) =
-        repository.firebaseSignIn(email, password)
+    operator fun invoke() = repository.getCurrentUserId()
 }

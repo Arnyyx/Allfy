@@ -144,6 +144,33 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun getPostsByIDs(postIDs: List<String>): Flow<Response<List<Post>>> = flow {
+        emit(Response.Loading)
+        try {
+            if (postIDs.isEmpty()) {
+                emit(Response.Success(emptyList()))
+                return@flow
+            }
+
+            val chunkedPostIDs = postIDs.chunked(10)
+            val allPosts = mutableListOf<Post>()
+
+            for (chunk in chunkedPostIDs) {
+                val snapshot = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                    .whereIn(FieldPath.documentId(), chunk)
+                    .get()
+                    .await()
+                val posts = snapshot.toObjects(Post::class.java)
+                allPosts.addAll(posts)
+            }
+
+            val sortedPosts = postIDs.mapNotNull { id -> allPosts.find { it.postID == id } }
+            emit(Response.Success(sortedPosts))
+        } catch (e: Exception) {
+            emit(Response.Error(e.localizedMessage ?: "An unexpected error occurred"))
+        }
+    }
+
     override fun toggleLikePost(post: Post, userID: String): Flow<Response<Post>> = flow {
         emit(Response.Loading)
         try {

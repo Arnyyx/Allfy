@@ -32,7 +32,7 @@ import com.arny.allfy.R
 import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
-import com.arny.allfy.utils.Screens
+import com.arny.allfy.utils.Screen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -42,27 +42,25 @@ fun LoginScreen(
     authViewModel: AuthViewModel,
     googleAuthClient: GoogleAuthClient
 ) {
-    val authState = authViewModel.authState.observeAsState()
+    val authState by authViewModel.authState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(authState.value) {
-        when (authState.value) {
-            is AuthState.Authenticated -> {
-                navController.navigate(Screens.FeedScreen.route) {
-                    popUpTo(Screens.LoginScreen.route) { inclusive = true }
+    LaunchedEffect(authState) {
+        when {
+            authState.isAuthenticated -> {
+                navController.navigate(Screen.FeedScreen) {
+                    popUpTo(Screen.LoginScreen) { inclusive = true }
                 }
             }
 
-            is AuthState.Error -> {
+            !authState.errorMessage.isNullOrBlank() -> {
                 Toast.makeText(
                     context,
-                    (authState.value as AuthState.Error).message,
+                    authState.errorMessage,
                     Toast.LENGTH_SHORT
                 ).show()
             }
-
-            else -> {}
         }
     }
 
@@ -83,8 +81,8 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 LoginForm(
+                    authState = authState,
                     authViewModel = authViewModel,
-                    authState = authState.value,
                     googleAuthClient = googleAuthClient,
                     scope = scope,
                     context = context
@@ -98,8 +96,8 @@ fun LoginScreen(
 
 @Composable
 private fun LoginForm(
+    authState: AuthState,
     authViewModel: AuthViewModel,
-    authState: AuthState?,
     googleAuthClient: GoogleAuthClient,
     scope: CoroutineScope,
     context: Any
@@ -169,8 +167,8 @@ private fun LoginForm(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    when (authState) {
-        is AuthState.Loading -> CircularProgressIndicator()
+    when {
+        authState.isLoading -> CircularProgressIndicator()
         else -> {
             Button(
                 onClick = {
@@ -266,7 +264,7 @@ private fun SignUpPrompt(navController: NavHostController) {
         modifier = Modifier
             .padding(bottom = 16.dp)
             .clickable {
-                navController.navigate(Screens.SignUpScreen.route)
+                navController.navigate(Screen.SignUpScreen)
             },
         color = Color(0xFF3897F0),
         style = MaterialTheme.typography.bodyMedium

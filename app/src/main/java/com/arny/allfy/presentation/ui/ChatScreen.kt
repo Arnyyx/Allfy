@@ -4,6 +4,7 @@ import android.Manifest
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -12,7 +13,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,10 +42,10 @@ import coil.compose.SubcomposeAsyncImage
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.arny.allfy.R
-import com.arny.allfy.domain.model.Conversation
 import com.arny.allfy.domain.model.Message
 import com.arny.allfy.domain.model.MessageType
 import com.arny.allfy.domain.model.User
+import com.arny.allfy.presentation.viewmodel.ChatState
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
@@ -54,43 +54,45 @@ import com.arny.allfy.utils.formatTimestamp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
-import kotlin.time.Duration.Companion.seconds
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     navHostController: NavHostController,
     chatViewModel: ChatViewModel,
     userViewModel: UserViewModel,
-    conversationId: String,
-    currentUserId: String,
+    conversationId: String?,
     otherUserId: String
 ) {
-    val messageInput by chatViewModel.messageInput.collectAsState()
-    val messages by chatViewModel.messages.collectAsState()
-    val sendMessageState by chatViewModel.sendMessageState.collectAsState()
-    val conversationState by chatViewModel.conversationState.collectAsState()
-    val otherUserState by userViewModel.otherUser.collectAsState()
+    val chatState by chatViewModel.chatState.collectAsState()
+    val userState by userViewModel.userState.collectAsState()
+    val currentUserId = userState.currentUser.userId
 
-    LaunchedEffect(Unit) {
-        chatViewModel.initializeChat(currentUserId, otherUserId)
-        userViewModel.getUserById(otherUserId)
+    var isConversationInitialized by remember { mutableStateOf(conversationId != null) }
+
+    LaunchedEffect(conversationId, currentUserId, otherUserId) {
+        if (conversationId != null) {
+            chatViewModel.loadMessages(conversationId)
+        } else if (currentUserId.isNotEmpty()) {
+            chatViewModel.loadConversations(currentUserId)
+        }
+        userViewModel.getUserDetails(otherUserId)
     }
 
+    val isLoading =
+        chatState.isLoadingConversations || userState.isLoadingOtherUser || chatState.isSendingMessage
 
-    val isLoading = conversationState is Response.Loading || otherUserState is Response.Loading
+    val error = chatState.conversationError
+        ?: chatState.sendMessageError
+        ?: chatState.initializeConversationError
 
     Scaffold(
         topBar = {
             Column {
                 ChatTopBar(
-                    user = (otherUserState as? Response.Success)?.data ?: User(),
+                    user = userState.otherUser,
                     isLoading = isLoading,
                     onBackClick = { navHostController.popBackStack() },
-                    onVoiceCallClick = {
-                        chatViewModel.sendCallInvitation(currentUserId, otherUserId)
-                        navHostController.navigate("call/$conversationId/$currentUserId/$otherUserId")
-                    },
+                    onVoiceCallClick = { /* TODO: Handle voice call */ },
                     onVideoCallClick = { /* TODO: Handle video call */ }
                 )
                 if (isLoading) {
@@ -99,26 +101,63 @@ fun ChatScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
+                if (error != null) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
             }
         },
         modifier = Modifier.fillMaxSize()
     ) { paddingValues ->
         ChatContent(
+            chatState = chatState,
             paddingValues = paddingValues,
-            conversationState = conversationState,
-            otherUserState = otherUserState,
-            messages = messages,
-            messageInput = messageInput,
+            messages = chatState.messages,
+            messageInput = chatState.messageInput,
             currentUserId = currentUserId,
-            sendMessageState = sendMessageState,
-            onMessageRead = chatViewModel::markMessageAsRead,
+            conversationId = conversationId,
+            sendMessageState = chatState.isSendingMessage,
             onMessageInputChanged = chatViewModel::onMessageInputChanged,
-            onSendMessage = chatViewModel::sendMessage,
-            onSendImages = chatViewModel::sendImages,
-            onSendVoiceMessage = chatViewModel::sendVoiceMessage
+            onSendMessage = { message ->
+                if (!isConversationInitialized) {
+                    chatViewModel.initializeConversation(listOf(currentUserId, otherUserId))
+                    isConversationInitialized = true
+                    if (!chatState.isInitializingConversation) {
+                        val converId = chatState.conversations.firstOrNull {
+                            it.participants.containsAll(listOf(currentUserId, otherUserId))
+                        }?.id ?: return@ChatContent
+                        chatViewModel.sendMessage(converId, message)
+                    }
+                } else {
+                    val converId = conversationId ?: chatState.conversations.firstOrNull {
+                        it.participants.containsAll(listOf(currentUserId, otherUserId))
+                    }?.id ?: return@ChatContent
+                    chatViewModel.sendMessage(converId, message)
+                }
+            },
+            onSendImages = { uris ->
+                val converId = conversationId ?: chatState.conversations.firstOrNull {
+                    it.participants.containsAll(listOf(currentUserId, otherUserId))
+                }?.id
+                if (converId != null) {
+                    chatViewModel.sendImages(converId, uris)
+                }
+            },
+            onSendVoiceMessage = { uri ->
+                val converId = conversationId ?: chatState.conversations.firstOrNull {
+                    it.participants.containsAll(listOf(currentUserId, otherUserId))
+                }?.id
+                if (converId != null) {
+                    chatViewModel.sendVoiceMessage(converId, uri)
+                }
+            }
         )
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -146,7 +185,7 @@ private fun ChatTopBar(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "Online", // TODO: Thay bằng logic isOnline từ User
+                        text = "Online",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
@@ -215,25 +254,24 @@ private fun AsyncImageWithPlaceholder(
 
 @Composable
 private fun ChatContent(
+    chatState: ChatState,
     paddingValues: PaddingValues,
-    conversationState: Response<Conversation>,
-    otherUserState: Response<User>,
     messages: List<Message>,
     messageInput: String,
     currentUserId: String,
-    sendMessageState: Response<Boolean>,
-    onMessageRead: (String, String) -> Unit,
+    conversationId: String?,
+    sendMessageState: Boolean,
     onMessageInputChanged: (String) -> Unit,
-    onSendMessage: (String, Message) -> Unit,
-    onSendImages: (String, List<Uri>) -> Unit,
-    onSendVoiceMessage: (String, Uri) -> Unit
+    onSendMessage: (Message) -> Unit,
+    onSendImages: (List<Uri>) -> Unit,
+    onSendVoiceMessage: (Uri) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val imagePicker =
         rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-            if (uris.isNotEmpty() && conversationState is Response.Success) {
+            if (uris.isNotEmpty()) {
                 scope.launch {
-                    onSendImages(conversationState.data.id, uris)
+                    onSendImages(uris)
                 }
             }
         }
@@ -244,40 +282,33 @@ private fun ChatContent(
             .background(MaterialTheme.colorScheme.background)
             .padding(paddingValues)
     ) {
-        when {
-            conversationState is Response.Error -> {
-                ErrorState(conversationState.message)
-            }
-
-            conversationState is Response.Success && otherUserState is Response.Success -> {
-                val conversation = conversationState.data
-                ChatMessagesList(
-                    messages = messages,
-                    currentUserId = currentUserId,
-                    conversationId = conversation.id,
-                    onMessageRead = onMessageRead,
-                    modifier = Modifier.weight(1f)
-                )
-                ChatInput(
-                    messageInput = messageInput,
-                    sendMessageState = sendMessageState,
-                    onMessageInputChanged = onMessageInputChanged,
-                    onSendMessage = {
-                        if (messageInput.isNotBlank()) {
-                            val message = Message(
-                                senderId = currentUserId,
-                                content = messageInput,
-                                type = MessageType.TEXT
-                            )
-                            onSendMessage(conversation.id, message)
-                        }
-                    },
-                    onImagePick = {
-                        imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
-                    onSendVoiceMessage = { uri -> onSendVoiceMessage(conversation.id, uri) }
-                )
-            }
+        if (chatState.conversationError != null) {
+            ErrorState(chatState.conversationError!!)
+        } else {
+            ChatMessagesList(
+                messages = messages,
+                currentUserId = currentUserId,
+                modifier = Modifier.weight(1f)
+            )
+            ChatInput(
+                messageInput = messageInput,
+                isSendingMessage = sendMessageState,
+                onMessageInputChanged = onMessageInputChanged,
+                onSendMessage = {
+                    if (messageInput.isNotBlank()) {
+                        val message = Message(
+                            senderId = currentUserId,
+                            content = messageInput,
+                            type = MessageType.TEXT
+                        )
+                        onSendMessage(message)
+                    }
+                },
+                onImagePick = {
+                    imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onSendVoiceMessage = onSendVoiceMessage
+            )
         }
     }
 }
@@ -308,8 +339,6 @@ private fun ErrorState(errorMessage: String) {
 private fun ChatMessagesList(
     messages: List<Message>,
     currentUserId: String,
-    conversationId: String,
-    onMessageRead: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -326,11 +355,6 @@ private fun ChatMessagesList(
             items = messages.reversed(),
             key = { it.id }
         ) { message ->
-            LaunchedEffect(message.id) {
-                if (message.senderId != currentUserId) {
-                    onMessageRead(conversationId, message.id)
-                }
-            }
             AnimatedMessageItem(
                 message = message,
                 isFromCurrentUser = message.senderId == currentUserId
@@ -496,7 +520,7 @@ private fun AnimatedMessageItem(
 @Composable
 private fun ChatInput(
     messageInput: String,
-    sendMessageState: Response<Boolean>,
+    isSendingMessage: Boolean,
     onMessageInputChanged: (String) -> Unit,
     onSendMessage: () -> Unit,
     onImagePick: () -> Unit,
@@ -549,7 +573,7 @@ private fun ChatInput(
             .navigationBarsPadding()
             .background(MaterialTheme.colorScheme.surface)
     ) {
-        if (sendMessageState is Response.Loading) {
+        if (isSendingMessage) {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.primary
@@ -561,7 +585,7 @@ private fun ChatInput(
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onImagePick, enabled = sendMessageState !is Response.Loading) {
+            IconButton(onClick = onImagePick, enabled = !isSendingMessage) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Attach Images",
@@ -574,7 +598,7 @@ private fun ChatInput(
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 4.dp),
-                enabled = sendMessageState !is Response.Loading && !isRecording,
+                enabled = !isSendingMessage && !isRecording,
                 placeholder = { Text("Type a message...") },
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
@@ -588,7 +612,7 @@ private fun ChatInput(
             if (!isRecording) {
                 IconButton(
                     onClick = { recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                    enabled = sendMessageState !is Response.Loading
+                    enabled = !isSendingMessage
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_mic),
@@ -598,7 +622,7 @@ private fun ChatInput(
                 }
                 IconButton(
                     onClick = onSendMessage,
-                    enabled = sendMessageState !is Response.Loading && messageInput.isNotBlank()
+                    enabled = !isSendingMessage && messageInput.isNotBlank()
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,

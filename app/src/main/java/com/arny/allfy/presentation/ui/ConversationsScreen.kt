@@ -41,7 +41,7 @@ import com.arny.allfy.domain.model.MessageType
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
-import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.formatTimestamp
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -59,46 +59,27 @@ fun ConversationsScreen(
     userViewModel: UserViewModel,
     chatViewModel: ChatViewModel
 ) {
-    val currentUserState by userViewModel.currentUser.collectAsState()
-    val conversationsState by chatViewModel.loadConversationsState.collectAsState()
-    val followersState by userViewModel.followers.collectAsState()
-    val usersState by userViewModel.users.collectAsState()
-
+    val userState by userViewModel.userState.collectAsState()
+    val chatState by chatViewModel.chatState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
-    var currentUser by remember { mutableStateOf(User()) }
+    val userMap = userState.users.associateBy { it.userId }
 
-    LaunchedEffect(currentUserState) {
-        when (currentUserState) {
-            is Response.Success -> {
-                currentUser = (currentUserState as Response.Success<User>).data
-                chatViewModel.loadConversations(currentUser.userId)
-                userViewModel.getFollowersFromSubcollection(currentUser.userId)
-            }
+    LaunchedEffect(userState.currentUser) {
+        chatViewModel.loadConversations(userState.currentUser.userId)
+        userViewModel.getFollowers(userState.currentUser.userId)
 
-            else -> Unit
-        }
     }
 
-    LaunchedEffect(conversationsState) {
-        if (conversationsState is Response.Success) {
-            val conversations = (conversationsState as Response.Success<List<Conversation>>).data
-            val participantIds =
-                conversations.flatMap { it.participants }.toSet() - currentUser.userId
-            userViewModel.getUsers(participantIds.toList())
-        }
+    LaunchedEffect(chatState.conversations) {
+        val conversations = chatState.conversations
+        val participantIds =
+            conversations.flatMap { it.participants }.toSet() - userState.currentUser.userId
+        userViewModel.getUsersByIDs(participantIds.toList())
     }
 
-    val userMap by remember(usersState) {
-        derivedStateOf {
-            when (usersState) {
-                is Response.Success -> (usersState as Response.Success<List<User>>).data.associateBy { it.userId }
-                else -> emptyMap()
-            }
-        }
-    }
 
     val isLoading =
-        currentUserState is Response.Loading || conversationsState is Response.Loading || followersState is Response.Loading
+        chatState.isLoadingConversations || userState.isLoadingUsers || userState.isLoadingFollowers
 
     Scaffold(
         topBar = {
@@ -121,26 +102,19 @@ fun ConversationsScreen(
                 .padding(paddingValues)
         ) {
             SearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
-            when (currentUserState) {
-                is Response.Error -> ErrorMessage((currentUserState as Response.Error).message)
-                is Response.Success -> {
-                    FollowersSection(
-                        followersState = followersState,
-                        navHostController = navHostController,
-                        currentUser = currentUser,
-                        chatViewModel = chatViewModel
-                    )
-                    ConversationsSection(
-                        navHostController = navHostController,
-                        chatViewModel = chatViewModel,
-                        userMap = userMap,
-                        currentUser = currentUser,
-                        searchQuery = searchQuery
-                    )
-                }
+            FollowersSection(
+                followers = userState.followers,
+                currentUser = userState.currentUser,
+                navHostController = navHostController,
+            )
+            ConversationsSection(
+                conversations = chatState.conversations,
+                navHostController = navHostController,
+                userMap = userMap,
+                currentUser = userState.currentUser,
+                searchQuery = searchQuery
+            )
 
-                else -> Unit
-            }
         }
     }
 }
@@ -228,58 +202,49 @@ private fun SearchBar(
 
 @Composable
 private fun FollowersSection(
-    followersState: Response<List<User>>,
+    followers: List<User>,
     navHostController: NavHostController,
     currentUser: User,
-    chatViewModel: ChatViewModel
 ) {
-    when (followersState) {
-        is Response.Success -> {
-            val followers = followersState.data
-            if (followers.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "Followers",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                    val listState = rememberLazyListState()
-                    LazyRow(
-                        state = listState,
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    if (followers.isNotEmpty()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = "Followers",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            val listState = rememberLazyListState()
+            LazyRow(
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(followers, key = { it.userId }) { follower ->
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
                     ) {
-                        items(followers, key = { it.userId }) { follower ->
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
-                            ) {
-                                FollowerItem(
-                                    follower = follower,
-                                    navHostController = navHostController,
-                                    currentUser = currentUser
-                                )
-                            }
-                        }
+                        FollowerItem(
+                            follower = follower,
+                            navController = navHostController,
+                            currentUser = currentUser
+                        )
                     }
                 }
             }
         }
-
-        is Response.Error -> ErrorMessage(followersState.message)
-        Response.Loading -> Unit
     }
 }
 
 @Composable
 private fun FollowerItem(
     follower: User,
-    navHostController: NavHostController,
+    navController: NavHostController,
     currentUser: User
 ) {
     val isOnlineState by getOnlineStatus(follower.userId).collectAsState(initial = false)
@@ -291,7 +256,13 @@ private fun FollowerItem(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.clickable {
-                navHostController.navigate("chat/${currentUser.userId}/${follower.userId}")
+                navController.navigate("chat/${currentUser.userId}/${follower.userId}")
+                navController.navigate(
+                    Screen.ChatScreen(
+                        currentUserId = currentUser.userId,
+                        otherUserId = follower.userId
+                    )
+                )
             }
         ) {
             AsyncImageWithPlaceholder(
@@ -344,67 +315,66 @@ private fun AsyncImageWithPlaceholder(
 
 @Composable
 private fun ConversationsSection(
+    conversations: List<Conversation>,
     navHostController: NavHostController,
-    chatViewModel: ChatViewModel,
     userMap: Map<String, User>,
     currentUser: User,
     searchQuery: String
 ) {
-    val conversationsState by chatViewModel.loadConversationsState.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    when (conversationsState) {
-        is Response.Success -> {
-            val conversations = (conversationsState as Response.Success<List<Conversation>>).data
-                .filter {
-                    val otherUserId =
-                        it.participants.firstOrNull { id -> id != currentUser.userId } ?: ""
-                    val otherUser = userMap[otherUserId]
-                    otherUser?.username?.contains(searchQuery, ignoreCase = true) ?: true
-                }
-            if (conversations.isEmpty()) {
-                EmptyState("No conversations found")
-            } else {
-                LazyColumn(
-                    state = listState,
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+    val conversationss =
+        conversations
+            .filter {
+                val otherUserId =
+                    it.participants.firstOrNull { id -> id != currentUser.userId } ?: ""
+                val otherUser = userMap[otherUserId]
+                otherUser?.username?.contains(searchQuery, ignoreCase = true) ?: true
+            }
+    if (conversationss.isEmpty()) {
+        EmptyState("No conversations found")
+    } else {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(
+                items = conversationss,
+                key = { it.id }
+            ) { conversation ->
+                AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
                 ) {
-                    items(
-                        items = conversations,
-                        key = { it.id }
-                    ) { conversation ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
-                        ) {
-                            val otherUserId =
-                                conversation.participants.firstOrNull { it != currentUser.userId }
-                                    ?: ""
-                            ConversationItem(
-                                conversation = conversation,
-                                userMap = userMap,
-                                currentUserId = currentUser.userId,
-                                onClick = {
-                                    navHostController.navigate("chat/${conversation.id}/${currentUser.userId}/$otherUserId")
-                                }
+                    val otherUserId =
+                        conversation.participants.firstOrNull { it != currentUser.userId }
+                            ?: ""
+                    ConversationItem(
+                        conversation = conversation,
+                        userMap = userMap,
+                        currentUserId = currentUser.userId,
+                        onClick = {
+                            navHostController.navigate(
+                                Screen.ChatScreen(
+                                    conversationId = conversation.id,
+                                    currentUserId = currentUser.userId,
+                                    otherUserId = otherUserId
+                                )
                             )
                         }
-                    }
-                }
-                LaunchedEffect(conversations.size) {
-                    if (conversations.isNotEmpty() && listState.firstVisibleItemIndex <= 1) {
-                        scope.launch {
-                            listState.animateScrollToItem(0)
-                        }
-                    }
+                    )
                 }
             }
         }
-
-        is Response.Error -> ErrorMessage((conversationsState as Response.Error).message)
-        Response.Loading -> Unit
+        LaunchedEffect(conversationss.size) {
+            if (conversationss.isNotEmpty() && listState.firstVisibleItemIndex <= 1) {
+                scope.launch {
+                    listState.animateScrollToItem(0)
+                }
+            }
+        }
     }
 }
 

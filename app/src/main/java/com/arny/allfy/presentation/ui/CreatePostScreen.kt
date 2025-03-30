@@ -45,6 +45,7 @@ import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.Toast
+import com.arny.allfy.presentation.viewmodel.PostState
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
@@ -56,12 +57,10 @@ fun CreatePostScreen(
     postViewModel: PostViewModel,
     userViewModel: UserViewModel
 ) {
-    val currentUser by userViewModel.currentUser.collectAsState()
-    val uploadPostState by postViewModel.uploadPostSate.collectAsState()
-
+    val userState by userViewModel.userState.collectAsState()
+    val postState by postViewModel.postState.collectAsState()
     var captionText by remember { mutableStateOf("") }
     var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
-
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
@@ -73,30 +72,25 @@ fun CreatePostScreen(
         pageCount = { selectedImageUris.size }
     )
 
-    val isLoading = currentUser is Response.Loading || uploadPostState is Response.Loading
-
     Scaffold(
         topBar = {
             Column {
                 CreatePostTopBar(
-                    isLoading = isLoading,
                     onCancelClick = { navHostController.popBackStack() },
                     onShareClick = {
-                        if (selectedImageUris.isNotEmpty() && currentUser is Response.Success) {
-                            val user = (currentUser as Response.Success<User>).data
-                            val post = Post(
-                                postOwnerID = user.userId,
-                                postOwnerUsername = user.username,
-                                postOwnerImageUrl = user.imageUrl,
-                                caption = captionText,
-                                mediaItems = emptyList()
-                            )
-                            postViewModel.uploadPost(post, selectedImageUris)
-                        }
+                        val post = Post(
+                            postOwnerID = userState.currentUser.userId,
+                            postOwnerUsername = userState.currentUser.username,
+                            postOwnerImageUrl = userState.currentUser.imageUrl,
+                            caption = captionText,
+                            mediaItems = emptyList()
+                        )
+                        postViewModel.uploadPost(post, selectedImageUris)
                     },
+                    isLoading = postState.isUploadingPost,
                     isShareEnabled = selectedImageUris.isNotEmpty()
                 )
-                if (isLoading) {
+                if (postState.isUploadingPost) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary
@@ -112,32 +106,21 @@ fun CreatePostScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
         ) {
-            when (currentUser) {
-                is Response.Success -> {
-                    ImagePickerSection(
-                        selectedImageUris = selectedImageUris,
-                        pagerState = pagerState,
-                        onImagePick = { launcher.launch("image/*;video/*") }
-                    )
+            ImagePickerSection(
+                selectedImageUris = selectedImageUris,
+                pagerState = pagerState,
+                onImagePick = { launcher.launch("image/*;video/*") }
+            )
 
-                    CaptionInput(
-                        captionText = captionText,
-                        onCaptionChange = { captionText = it }
-                    )
-                    PostOptions()
-                    UploadStateHandler(
-                        uploadResponse = uploadPostState,
-                        onSuccess = { navHostController.popBackStack() }
-                    )
-                }
-
-                is Response.Error -> ErrorState(
-                    message = (currentUser as Response.Error).message,
-                    onRetry = { userViewModel.getCurrentUser() }
-                )
-
-                else -> Unit
-            }
+            CaptionInput(
+                captionText = captionText,
+                onCaptionChange = { captionText = it }
+            )
+            PostOptions()
+            UploadStateHandler(
+                postState = postState,
+                onSuccess = { navHostController.popBackStack() }
+            )
         }
     }
 }
@@ -146,9 +129,9 @@ fun CreatePostScreen(
 @Composable
 private fun CreatePostTopBar(
     isLoading: Boolean,
+    isShareEnabled: Boolean,
     onCancelClick: () -> Unit,
     onShareClick: () -> Unit,
-    isShareEnabled: Boolean
 ) {
     TopAppBar(
         title = {
@@ -378,13 +361,13 @@ private fun PostOptions() {
 
 @Composable
 private fun UploadStateHandler(
-    uploadResponse: Response<Boolean>,
+    postState: PostState,
     onSuccess: () -> Unit
 ) {
-    when (uploadResponse) {
-        is Response.Error -> {
+    when {
+        postState.uploadPostError.isNotEmpty() -> {
             Text(
-                text = uploadResponse.message,
+                text = postState.uploadPostError,
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier
@@ -392,16 +375,10 @@ private fun UploadStateHandler(
             )
         }
 
-        is Response.Success -> {
+        !postState.isUploadingPost -> {
             Toast("Upload successful")
-            LaunchedEffect(uploadResponse.data) {
-                if (uploadResponse.data) {
-                    onSuccess()
-                }
-            }
+//            onSuccess()
         }
-
-        else -> Unit
     }
 }
 

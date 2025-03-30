@@ -9,12 +9,12 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -24,8 +24,7 @@ import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
-import com.arny.allfy.utils.Screens
-import com.google.firebase.auth.FirebaseAuth
+import com.arny.allfy.utils.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,21 +35,16 @@ fun SettingsScreen(
     postViewModel: PostViewModel,
     userViewModel: UserViewModel
 ) {
-    val context = LocalContext.current
-    val authState = authViewModel.authState.observeAsState()
-    LaunchedEffect(authState.value) {
-        when (authState.value) {
-            is AuthState.Unauthenticated -> {
-                authViewModel.clear()
-                chatViewModel.clear()
-                postViewModel.clear()
-                userViewModel.clear()
-                navController.navigate(Screens.LoginScreen.route) {
-                    popUpTo(Screens.SettingsScreen.route) { inclusive = true }
-                }
+    val authState = authViewModel.authState.collectAsState()
+    LaunchedEffect(authState) {
+        if (!authState.value.isAuthenticated && !authState.value.isLoading) {
+            authViewModel.clearAuthState()
+            chatViewModel.clearChatState()
+            postViewModel.clearPostState()
+            userViewModel.clearUserState()
+            navController.navigate(Screen.LoginScreen) {
+                popUpTo(Screen.SettingsScreen) { inclusive = true }
             }
-
-            else -> Unit
         }
     }
 
@@ -96,7 +90,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
-                        authViewModel.signOut(context)
+                        authViewModel.signOut()
                     },
                     modifier = Modifier
                         .fillMaxWidth()

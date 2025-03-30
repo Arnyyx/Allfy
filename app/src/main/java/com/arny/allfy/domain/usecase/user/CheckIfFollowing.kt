@@ -3,7 +3,7 @@ package com.arny.allfy.domain.usecase.user
 import com.arny.allfy.domain.repository.UserRepository
 import javax.inject.Inject
 
-class CheckIfFollowingUseCase @Inject constructor(
+class CheckIfFollowing @Inject constructor(
     private val userRepository: UserRepository
 ) {
     operator fun invoke(currentUserId: String, targetUserId: String) =

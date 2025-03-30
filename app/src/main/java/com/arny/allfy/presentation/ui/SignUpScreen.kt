@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,8 +32,7 @@ import com.arny.allfy.R
 import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
-import com.arny.allfy.utils.Response
-import com.arny.allfy.utils.Screens
+import com.arny.allfy.utils.Screen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -42,13 +40,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun SignUpScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel(),
-    googleAuthClient: GoogleAuthClient = hiltViewModel<AuthViewModel>().googleAuthClient
+    authViewModel: AuthViewModel,
+    googleAuthClient: GoogleAuthClient
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val authState = authViewModel.authState.observeAsState()
-    val signUpState = authViewModel.signUpState.observeAsState()
+    val authState by authViewModel.authState.collectAsState()
 
     Box(
         modifier = Modifier
@@ -68,8 +65,7 @@ fun SignUpScreen(
             ) {
                 SignUpForm(
                     authViewModel = authViewModel,
-                    authState = authState.value,
-                    signUpState = signUpState.value,
+                    authState = authState,
                     googleAuthClient = googleAuthClient,
                     scope = scope,
                     context = context,
@@ -78,57 +74,34 @@ fun SignUpScreen(
                 LoginPrompt(navController)
             }
         }
-
     }
 }
 
 @Composable
 private fun SignUpForm(
     authViewModel: AuthViewModel,
-    authState: AuthState?,
-    signUpState: Response<*>?,
+    authState: AuthState,
     googleAuthClient: GoogleAuthClient,
     scope: CoroutineScope,
     context: Any,
     navController: NavHostController
 ) {
-    val nameState = remember { mutableStateOf("") }
     val usernameState = remember { mutableStateOf("") }
     val emailState = remember { mutableStateOf("") }
     val passwordState = remember { mutableStateOf("") }
 
-    // Xử lý trạng thái đăng ký và đăng nhập
-    LaunchedEffect(signUpState) {
-        when (signUpState) {
-            is Response.Success<*> -> {
-                if (signUpState.data as Boolean) {
-                    navController.navigate(Screens.ProfileScreen.route) {
-                        popUpTo(Screens.SignUpScreen.route) { inclusive = true }
-                    }
-                }
-            }
-
-            is Response.Error -> {
-                Toast.makeText(context as Activity, signUpState.message, Toast.LENGTH_SHORT).show()
-            }
-
-            else -> {}
-        }
-    }
-
     LaunchedEffect(authState) {
-        when (authState) {
-            is AuthState.Authenticated -> {
-                navController.navigate(Screens.ProfileScreen.route) {
-                    popUpTo(Screens.SignUpScreen.route) { inclusive = true }
+        when {
+            authState.isAuthenticated -> {
+                navController.navigate(Screen.ProfileScreen()) {
+                    popUpTo(Screen.SignUpScreen) { inclusive = true }
                 }
             }
 
-            is AuthState.Error -> {
-                Toast.makeText(context as Activity, authState.message, Toast.LENGTH_SHORT).show()
+            authState.errorMessage != null -> {
+                Toast.makeText(context as Activity, authState.errorMessage, Toast.LENGTH_SHORT)
+                    .show()
             }
-
-            else -> {}
         }
     }
 
@@ -141,27 +114,6 @@ private fun SignUpForm(
     )
 
     Spacer(modifier = Modifier.height(32.dp))
-
-    OutlinedTextField(
-        value = nameState.value,
-        onValueChange = { nameState.value = it },
-        label = { Text("Full Name") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Text,
-            imeAction = ImeAction.Next
-        ),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-            focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-            unfocusedIndicatorColor = MaterialTheme.colorScheme.outline
-        ),
-        shape = RoundedCornerShape(8.dp)
-    )
-
-    Spacer(modifier = Modifier.height(16.dp))
 
     OutlinedTextField(
         value = usernameState.value,
@@ -227,14 +179,12 @@ private fun SignUpForm(
 
     Spacer(modifier = Modifier.height(24.dp))
 
-    val isLoading = signUpState is Response.Loading || authState is AuthState.Loading
     Button(
         onClick = {
             authViewModel.signUp(
-                usernameState.value,
-                nameState.value,
-                emailState.value,
-                passwordState.value
+                username = usernameState.value,
+                email = emailState.value,
+                password = passwordState.value
             )
         },
         modifier = Modifier
@@ -242,10 +192,12 @@ private fun SignUpForm(
             .height(50.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3897F0)),
         shape = RoundedCornerShape(8.dp),
-        enabled = !isLoading && nameState.value.isNotBlank() && usernameState.value.isNotBlank() &&
-                emailState.value.isNotBlank() && passwordState.value.isNotBlank()
+        enabled = !authState.isLoading &&
+                usernameState.value.isNotBlank() &&
+                emailState.value.isNotBlank() &&
+                passwordState.value.isNotBlank()
     ) {
-        if (isLoading) {
+        if (authState.isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(24.dp),
                 color = Color.White,
@@ -281,7 +233,7 @@ private fun SignUpForm(
             .fillMaxWidth()
             .height(50.dp),
         shape = RoundedCornerShape(8.dp),
-        enabled = !isLoading
+        enabled = !authState.isLoading
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -336,7 +288,7 @@ private fun LoginPrompt(navController: NavHostController) {
     Text(
         text = "Have an account? Log in",
         modifier = Modifier
-            .padding(bottom = 16.dp)
+            .padding(top = 16.dp)
             .clickable {
                 navController.popBackStack()
             },

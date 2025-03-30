@@ -6,143 +6,121 @@ import androidx.lifecycle.viewModelScope
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.usecase.user.UserUseCases
 import com.arny.allfy.utils.Response
-import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 @HiltViewModel
 class UserViewModel @Inject constructor(
     private val userUseCases: UserUseCases,
 ) : ViewModel() {
-    private val _currentUser = MutableStateFlow<Response<User>>(Response.Loading)
-    val currentUser: StateFlow<Response<User>> = _currentUser.asStateFlow()
+    private val _userState = MutableStateFlow(UserState())
+    val userState: StateFlow<UserState> = _userState.asStateFlow()
 
-    private val _otherUser = MutableStateFlow<Response<User>>(Response.Loading)
-    val otherUser: StateFlow<Response<User>> = _otherUser.asStateFlow()
-
-    private val _followStatus = MutableStateFlow<Response<Boolean>>(Response.Success(false))
-    val followStatus: StateFlow<Response<Boolean>> = _followStatus.asStateFlow()
-
-    fun getCurrentUser() {
+    fun getCurrentUser(userId: String) {
         viewModelScope.launch {
-            val userID = FirebaseAuth.getInstance().currentUser?.uid
-            if (userID != null) {
-                userUseCases.getUserDetails(userID).collect {
-                    _currentUser.value = it
+            userUseCases.getUserDetails(userId).collect { response ->
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingCurrentUser = true) }
+                    is Response.Error -> _userState.update { it.copy(errorCurrentUser = response.message) }
+                    is Response.Success -> _userState.update {
+                        it.copy(
+                            currentUser = response.data,
+                            isLoadingCurrentUser = false
+                        )
+                    }
                 }
             }
         }
     }
 
-    fun getUserById(userId: String) {
+    fun getUserDetails(userId: String) {
         viewModelScope.launch {
-            if (userId == FirebaseAuth.getInstance().currentUser?.uid) {
-                getCurrentUser()
-                _otherUser.value = _currentUser.value
-            } else {
-                userUseCases.getUserDetails(userId).collect {
-                    _otherUser.value = it
+            userUseCases.getUserDetails(userId).collect { response ->
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingOtherUser = true) }
+                    is Response.Error -> _userState.update { it.copy(errorOtherUser = response.message) }
+                    is Response.Success -> _userState.update {
+                        it.copy(
+                            otherUser = response.data,
+                            isLoadingOtherUser = false
+                        )
+                    }
                 }
             }
         }
     }
-
-    private val _updateProfileStatus = MutableStateFlow<Response<Boolean>>(Response.Success(false))
-    val updateProfileStatus: StateFlow<Response<Boolean>> = _updateProfileStatus.asStateFlow()
 
     fun updateUserProfile(updatedUser: User, imageUri: Uri?) {
         viewModelScope.launch {
-            _updateProfileStatus.value = Response.Loading
-            userUseCases.setUserDetailsUseCase(updatedUser, imageUri).collect { response ->
-                _updateProfileStatus.value = response
-                if (response is Response.Success) {
-                    getCurrentUser()
-                    _updateProfileStatus.value = Response.Success(false)
+            userUseCases.setUserDetails(updatedUser, imageUri).collect { response ->
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingUpdateProfile = true) }
+                    is Response.Error -> _userState.update { it.copy(updateProfileError = response.message) }
+                    is Response.Success -> _userState.update { it.copy(isLoadingUpdateProfile = false) }
                 }
             }
         }
     }
 
-
-    fun followUser(userId: String) {
+    fun followUser(currentUserId: String, targetUserId: String) {
         viewModelScope.launch {
-            val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
-            if (currentUserId != null) {
-                userUseCases.followUser(currentUserId, userId).collect { response ->
-                    _followStatus.value = response
-                    if (response is Response.Success && response.data) {
-                        getCurrentUser()
-                        getUserById(userId)
+            userUseCases.followUser(currentUserId, targetUserId).collect { response ->
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingFollowUser = true) }
+                    is Response.Error -> _userState.update { it.copy(followUserError = response.message) }
+                    is Response.Success -> _userState.update { it.copy(isLoadingFollowUser = false) }
+                }
+            }
+        }
+    }
+
+    fun unfollowUser(currentUserId: String, targetUserId: String) {
+        viewModelScope.launch {
+            userUseCases.unfollowUser(currentUserId, targetUserId).collect { response ->
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingUnfollowUser = true) }
+                    is Response.Error -> _userState.update { it.copy(unfollowUserError = response.message) }
+                    is Response.Success -> _userState.update { it.copy(isLoadingUnfollowUser = false) }
+                }
+            }
+        }
+    }
+
+    fun getFollowers(userId: String) {
+        viewModelScope.launch {
+            userUseCases.getFollowers(userId).collect { response ->
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingFollowers = true) }
+                    is Response.Error -> _userState.update { it.copy(followersError = response.message) }
+                    is Response.Success -> _userState.update {
+                        it.copy(
+                            followers = response.data,
+                            isLoadingFollowers = false
+                        )
                     }
                 }
             }
         }
     }
-
-    fun unfollowUser(userId: String) {
-        viewModelScope.launch {
-            val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
-            if (currentUserId != null) {
-                userUseCases.unfollowUser(currentUserId, userId).collect { response ->
-                    _followStatus.value = response
-                    if (response is Response.Success && response.data) {
-                        getCurrentUser()
-                        getUserById(userId)
-                    }
-                }
-            }
-        }
-    }
-
-    private val _followers = MutableStateFlow<Response<List<User>>>(Response.Loading)
-    val followers: StateFlow<Response<List<User>>> = _followers.asStateFlow()
-
-    fun getFollowersFromSubcollection(userId: String) {
-        viewModelScope.launch {
-            userUseCases.getFollowersFromSubcollection(userId).collect { response ->
-                _followers.value = response
-            }
-        }
-    }
-
-    private val _users = MutableStateFlow<Response<List<User>>>(Response.Loading)
-    val users: StateFlow<Response<List<User>>> = _users.asStateFlow()
-
-    fun getUsers(userIDs: List<String>) {
-        viewModelScope.launch {
-            _users.value = Response.Loading
-            try {
-                userUseCases.getUsersByIDs(userIDs).collect { response ->
-                    if (response is Response.Success) {
-                        _users.value = Response.Success(response.data)
-                    } else if (response is Response.Error) {
-                        _users.value = Response.Error(response.message)
-                    }
-                }
-            } catch (e: Exception) {
-                _users.value = Response.Error(e.message ?: "Failed to fetch users")
-            }
-        }
-    }
-
-    private val _followingCount = MutableStateFlow<Response<Int>>(Response.Loading)
-    val followingCount: StateFlow<Response<Int>> = _followingCount.asStateFlow()
-
-    private val _followersCount = MutableStateFlow<Response<Int>>(Response.Loading)
-    val followersCount: StateFlow<Response<Int>> = _followersCount.asStateFlow()
-
-    private val _postsIds = MutableStateFlow<Response<List<String>>>(Response.Loading)
-    val postsIds: StateFlow<Response<List<String>>> = _postsIds.asStateFlow()
 
     fun getFollowingCount(userId: String) {
         viewModelScope.launch {
             userUseCases.getFollowingCount(userId).collect { response ->
-                _followingCount.value = response
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingFollowingCount = true) }
+                    is Response.Error -> _userState.update { it.copy(followingCountError = response.message) }
+                    is Response.Success -> _userState.update {
+                        it.copy(
+                            followingCount = response.data,
+                            isLoadingFollowingCount = false
+                        )
+                    }
+                }
             }
         }
     }
@@ -150,32 +128,118 @@ class UserViewModel @Inject constructor(
     fun getFollowersCount(userId: String) {
         viewModelScope.launch {
             userUseCases.getFollowersCount(userId).collect { response ->
-                _followersCount.value = response
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingFollowersCount = true) }
+                    is Response.Error -> _userState.update { it.copy(followersCountError = response.message) }
+                    is Response.Success -> _userState.update {
+                        it.copy(
+                            followersCount = response.data,
+                            isLoadingFollowersCount = false
+                        )
+                    }
+                }
             }
         }
     }
 
-    fun getPostsIdsFromSubcollection(userId: String) {
+    fun getPostIds(userId: String) {
         viewModelScope.launch {
-            userUseCases.getPostsIdsFromSubcollection(userId).collect { response ->
-                _postsIds.value = response
+            userUseCases.getPostIds(userId).collect { response ->
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingPostsIds = true) }
+                    is Response.Error -> _userState.update { it.copy(postsIdsError = response.message) }
+                    is Response.Success -> _userState.update {
+                        it.copy(
+                            postsIds = response.data,
+                            isLoadingPostsIds = false
+                        )
+                    }
+                }
             }
         }
     }
 
-    fun checkIfFollowing(currentUserId: String, targetUserId: String): Flow<Response<Boolean>> {
-        return userUseCases.checkIfFollowing(currentUserId, targetUserId)
+    fun checkIfFollowing(
+        currentUserId: String,
+        targetUserId: String
+    ) {
+        viewModelScope.launch {
+            userUseCases.checkIfFollowing(currentUserId, targetUserId).collect { response ->
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingCheckIfFollowing = true) }
+                    is Response.Error -> _userState.update { it.copy(checkIfFollowingError = response.message) }
+                    is Response.Success -> _userState.update {
+                        it.copy(
+                            isFollowing = response.data,
+                            isLoadingCheckIfFollowing = false
+                        )
+                    }
+                }
+            }
+        }
     }
 
-    fun clear() {
-        _currentUser.value = Response.Loading
-        _otherUser.value = Response.Loading
-        _followStatus.value = Response.Success(false)
-        _updateProfileStatus.value = Response.Loading
-        _followers.value = Response.Loading
-        _users.value = Response.Loading
-        _followingCount.value = Response.Loading
-        _followersCount.value = Response.Loading
-        _postsIds.value = Response.Loading
+    fun getUsersByIDs(userIDs: List<String>) {
+        viewModelScope.launch {
+            userUseCases.getUsersByIDs(userIDs).collect { response ->
+                when (response) {
+                    is Response.Loading -> _userState.update { it.copy(isLoadingUsers = true) }
+                    is Response.Error -> _userState.update { it.copy(usersError = response.message) }
+                    is Response.Success -> _userState.update {
+                        it.copy(
+                            users = response.data,
+                            isLoadingUsers = false
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun clearUserState() {
+        _userState.value = UserState()
     }
 }
+
+data class UserState(
+    val isLoadingCurrentUser: Boolean = false,
+    val currentUser: User = User(),
+    val errorCurrentUser: String = "",
+
+    val isLoadingOtherUser: Boolean = false,
+    val otherUser: User = User(),
+    val errorOtherUser: String = "",
+
+    val isLoadingUpdateProfile: Boolean = false,
+    val updateProfileError: String = "",
+
+    val isLoadingFollowUser: Boolean = false,
+    val followUserError: String = "",
+
+    val isLoadingUnfollowUser: Boolean = false,
+    val unfollowUserError: String = "",
+
+    val isLoadingFollowers: Boolean = false,
+    val followers: List<User> = emptyList(),
+    val followersError: String = "",
+
+    val isLoadingFollowingCount: Boolean = false,
+    val followingCount: Int = 0,
+    val followingCountError: String = "",
+
+    val isLoadingFollowersCount: Boolean = false,
+    val followersCount: Int = 0,
+    val followersCountError: String = "",
+
+    val isLoadingPostsIds: Boolean = false,
+    val postsIds: List<String> = emptyList(),
+    val postsIdsError: String = "",
+
+    val isLoadingCheckIfFollowing: Boolean = false,
+    val isFollowing: Boolean = false,
+    val checkIfFollowingError: String = "",
+
+    val isLoadingUsers: Boolean = false,
+    val users: List<User> = emptyList(),
+    val usersError: String = ""
+)

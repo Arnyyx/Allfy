@@ -3,9 +3,10 @@ package com.arny.allfy.domain.usecase.authentication
 import com.arny.allfy.domain.repository.AuthenticationRepository
 import javax.inject.Inject
 
-class FirebaseSignOut @Inject constructor(
+class SignUp @Inject constructor(
     private val repository: AuthenticationRepository
 
 ) {
-    operator fun invoke() = repository.firebaseSignOut()
+    operator fun invoke(userName: String, email: String, password: String) =
+        repository.signUp(userName, email, password)
 }

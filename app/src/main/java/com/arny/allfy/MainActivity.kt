@@ -1,8 +1,9 @@
 package com.arny.allfy
 
 import android.Manifest
-import android.app.NotificationManager
-import android.content.Context
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.rememberNavController
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -22,20 +23,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
+import androidx.navigation.toRoute
 import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.presentation.ui.*
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
-import com.arny.allfy.service.FirebaseMessagingServiceImpl
 import com.arny.allfy.ui.theme.AllfyTheme
-import com.arny.allfy.utils.Screens
+import com.arny.allfy.utils.Screen
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
@@ -75,7 +71,7 @@ class MainActivity : ComponentActivity() {
                     val postViewModel: PostViewModel = hiltViewModel()
 
                     AllfyApp(
-                        navHostController = navController,
+                        navController = navController,
                         authViewModel = authViewModel,
                         userViewModel = userViewModel,
                         postViewModel = postViewModel,
@@ -199,7 +195,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AllfyApp(
-    navHostController: NavHostController,
+    navController: NavHostController,
     authViewModel: AuthViewModel,
     userViewModel: UserViewModel,
     postViewModel: PostViewModel,
@@ -207,102 +203,70 @@ fun AllfyApp(
     googleAuthClient: GoogleAuthClient
 ) {
     NavHost(
-        navController = navHostController,
-        startDestination = Screens.SplashScreen.route,
+        navController = navController,
+        startDestination = Screen.SplashScreen,
         enterTransition = { fadeIn(animationSpec = tween(1)) },
         exitTransition = { fadeOut(animationSpec = tween(1)) }
     ) {
-        composable(Screens.LoginScreen.route) {
-            LoginScreen(navHostController, authViewModel, googleAuthClient)
+        composable<Screen.LoginScreen> {
+            LoginScreen(navController, authViewModel, googleAuthClient)
         }
-        composable(Screens.SignUpScreen.route) {
-            SignUpScreen(navHostController, authViewModel)
+        composable<Screen.SignUpScreen> {
+            SignUpScreen(navController, authViewModel, googleAuthClient)
         }
-        composable(Screens.FeedScreen.route) {
-            FeedScreen(navHostController, userViewModel, postViewModel)
+        composable<Screen.FeedScreen> {
+            FeedScreen(navController, userViewModel, postViewModel, authViewModel)
         }
-        composable(Screens.SplashScreen.route) {
-            SplashScreen(navController = navHostController, authViewModel)
+        composable<Screen.SplashScreen> {
+            SplashScreen(navController, authViewModel)
         }
-        composable(Screens.ProfileScreen.route) {
-            ProfileScreen(navHostController, userViewModel, postViewModel)
+        composable<Screen.ProfileScreen> {
+            val args = it.toRoute<Screen.ProfileScreen>()
+            ProfileScreen(navController, userViewModel, postViewModel, args.userId)
         }
-        composable("profile/{userID}") { backStackEntry ->
-            val userID = backStackEntry.arguments?.getString("userID") ?: ""
-            ProfileScreen(navHostController, userViewModel, postViewModel, userID)
+        composable<Screen.SearchScreen> {
+            SearchScreen(navController)
         }
-        composable(Screens.SearchScreen.route) {
-            SearchScreen(navHostController)
+        composable<Screen.EditProfileScreen> {
+            EditProfileScreen(navController, userViewModel)
         }
-        composable(Screens.EditProfileScreen.route) {
-            EditProfileScreen(onBackClick = { navHostController.popBackStack() }, userViewModel)
+        composable<Screen.CreatePostScreen> {
+            CreatePostScreen(navController, postViewModel, userViewModel)
         }
-        composable(Screens.CreatePostScreen.route) {
-            CreatePostScreen(navHostController, postViewModel, userViewModel)
-        }
-        composable(Screens.SettingsScreen.route) {
+        composable<Screen.SettingsScreen> {
             SettingsScreen(
-                navHostController,
+                navController,
                 authViewModel,
                 chatViewModel,
                 postViewModel,
                 userViewModel
             )
         }
-        composable("postDetail/{postID}") { backStackEntry ->
-            val postID = backStackEntry.arguments?.getString("postID")
-            if (postID != null) {
-                PostDetailScreen(postID, navHostController, postViewModel, userViewModel)
-            }
+        composable<Screen.PostDetailScreen> {
+            val postID = it.toRoute<Screen.PostDetailScreen>().postID
+            PostDetailScreen(postID, navController, postViewModel, userViewModel)
         }
-        composable(Screens.ConversationsScreen.route) {
+        composable<Screen.ConversationsScreen> {
             ConversationsScreen(
-                navHostController,
-                userViewModel,
-                chatViewModel
+                navController, userViewModel, chatViewModel
             )
         }
-        composable(
-            route = "chat/{conversationId}/{currentUserId}/{otherUserId}",
-            arguments = listOf(
-                navArgument("conversationId") { type = NavType.StringType },
-                navArgument("currentUserId") { type = NavType.StringType },
-                navArgument("otherUserId") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val conversationId = backStackEntry.arguments?.getString("conversationId")
-            val currentUserId = backStackEntry.arguments?.getString("currentUserId")
-            val otherUserId = backStackEntry.arguments?.getString("otherUserId")
-            requireNotNull(conversationId) { "conversationId parameter wasn't found" }
-            requireNotNull(currentUserId) { "currentUserId parameter wasn't found" }
-            requireNotNull(otherUserId) { "otherUserId parameter wasn't found" }
+        composable<Screen.ChatScreen> {
+            val args = it.toRoute<Screen.ChatScreen>()
             ChatScreen(
-                navHostController = navHostController,
+                navHostController = navController,
                 chatViewModel = chatViewModel,
                 userViewModel = userViewModel,
-                conversationId = conversationId,
-                currentUserId = currentUserId,
-                otherUserId = otherUserId
+                conversationId = args.conversationId,
+                otherUserId = args.otherUserId
             )
         }
-        composable(
-            route = "incoming_call/{callerId}/{calleeId}/{callId}",
-            arguments = listOf(
-                navArgument("callerId") { type = NavType.StringType },
-                navArgument("calleeId") { type = NavType.StringType },
-                navArgument("callId") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val callerId = backStackEntry.arguments?.getString("callerId")
-            val calleeId = backStackEntry.arguments?.getString("calleeId")
-            val callId = backStackEntry.arguments?.getString("callId")
-            requireNotNull(callerId) { "callerId parameter wasn't found" }
-            requireNotNull(calleeId) { "calleeId parameter wasn't found" }
-            requireNotNull(callId) { "callId parameter wasn't found" }
+        composable<Screen.IncomingCall> {
+            val args = it.toRoute<Screen.IncomingCall>()
             IncomingCallScreen(
-                callerId = callerId,
-                calleeId = calleeId,
-                callId = callId,
+                callerId = args.callerId,
+                calleeId = args.calleeId,
+                callId = args.callId,
                 userViewModel = userViewModel,
                 chatViewModel = chatViewModel,
                 onAccept = {
@@ -311,30 +275,6 @@ fun AllfyApp(
                 onReject = {
 //                    navHostController.popBackStack()
                 }
-            )
-        }
-
-        composable(
-            route = "call/{conversationId}/{currentUserId}/{otherUserId}",
-            arguments = listOf(
-                navArgument("conversationId") { type = NavType.StringType },
-                navArgument("currentUserId") { type = NavType.StringType },
-                navArgument("otherUserId") { type = NavType.StringType },
-            )
-        ) { backStackEntry ->
-            val conversationId = backStackEntry.arguments?.getString("conversationId")
-            val currentUserId = backStackEntry.arguments?.getString("currentUserId")
-            val otherUserId = backStackEntry.arguments?.getString("otherUserId")
-            requireNotNull(conversationId) { "conversationId parameter wasn't found" }
-            requireNotNull(currentUserId) { "currentUserId parameter wasn't found" }
-            requireNotNull(otherUserId) { "otherUserId parameter wasn't found" }
-            CallScreen(
-                navHostController = navHostController,
-                userViewModel = userViewModel,
-                chatViewModel = chatViewModel,
-                conversationId = conversationId,
-                currentUserId = currentUserId,
-                otherUserId = otherUserId
             )
         }
     }

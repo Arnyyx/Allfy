@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.gms.google.services)
+    alias(libs.plugins.kotlin.serialization)
     id("kotlin-kapt")
     id("com.google.dagger.hilt.android")
 }
@@ -92,11 +93,15 @@ dependencies {
 
     implementation(libs.firebase.messaging.ktx)
     implementation(libs.stream.webrtc.android)
-    implementation (libs.accompanist.swiperefresh)
-    implementation (libs.androidx.media3.exoplayer)
-    implementation (libs.androidx.media3.ui)
+    implementation(libs.accompanist.swiperefresh)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
 
-    implementation (libs.androidx.material.icons.extended)
+    implementation(libs.androidx.material.icons.extended)
+
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.navigation.compose)
+    implementation(libs.kotlinx.serialization.json)
 }
 kapt {
     correctErrorTypes = true

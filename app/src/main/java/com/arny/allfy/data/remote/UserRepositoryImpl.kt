@@ -32,7 +32,7 @@ class UserRepositoryImpl @Inject constructor(
             }
             if (user.username.isNotEmpty()) updates["username"] = user.username
             if (user.name.isNotEmpty()) updates["name"] = user.name
-            if (user.bio.isNotEmpty()) updates["bio"] = user.bio
+            if (user.bio?.isNotEmpty()!!) updates["bio"] = user.bio
             if (user.email.isNotEmpty()) updates["email"] = user.email
 
             firestore.collection(Constants.COLLECTION_NAME_USERS)
@@ -104,7 +104,7 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getUserByID(userID: String): Flow<Response<User>> = flow {
+    override fun getUserDetails(userID: String): Flow<Response<User>> = flow {
         emit(Response.Loading)
         try {
             val snapshot = firestore.collection(Constants.COLLECTION_NAME_USERS)
@@ -161,7 +161,7 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getFollowersFromSubcollection(userId: String): Flow<Response<List<User>>> = flow {
+    override fun getFollowers(userId: String): Flow<Response<List<User>>> = flow {
         emit(Response.Loading)
         try {
             val followerDocs = firestore.collection(Constants.COLLECTION_NAME_USERS)
@@ -217,7 +217,7 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getPostsIdsFromSubcollection(userId: String): Flow<Response<List<String>>> = flow {
+    override fun getPostIds(userId: String): Flow<Response<List<String>>> = flow {
         emit(Response.Loading)
         try {
             val snapshot = firestore.collection(Constants.COLLECTION_NAME_USERS)
@@ -249,5 +249,4 @@ class UserRepositoryImpl @Inject constructor(
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
-
 }

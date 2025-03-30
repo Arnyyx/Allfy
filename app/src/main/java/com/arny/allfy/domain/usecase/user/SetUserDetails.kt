@@ -7,7 +7,7 @@ import com.arny.allfy.utils.Response
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
-class SetUserDetailsUseCase @Inject constructor(
+class SetUserDetails @Inject constructor(
     private val repository: UserRepository
 
 ) {

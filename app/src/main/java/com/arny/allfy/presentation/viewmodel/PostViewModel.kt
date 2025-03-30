@@ -10,208 +10,148 @@ import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.usecase.post.PostUseCases
 import com.arny.allfy.domain.usecase.user.UserUseCases
-import com.arny.allfy.presentation.state.PostState
 import com.arny.allfy.utils.Response
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class PostViewModel @Inject constructor(
-    private val postUseCases: PostUseCases,
-    private val userUseCases: UserUseCases
+    private val postUseCases: PostUseCases
 ) : ViewModel() {
-    private val _getFeedPostsState = MutableStateFlow(PostState())
-    val getFeedPostsState: StateFlow<PostState> = _getFeedPostsState.asStateFlow()
-    private val _users = MutableStateFlow<Map<String, User>>(emptyMap())
-    val users: StateFlow<Map<String, User>> = _users.asStateFlow()
+    private val _postState = MutableStateFlow(PostState())
+    val postState: StateFlow<PostState> = _postState.asStateFlow()
 
-    private var lastVisiblePost: Post? = null
-    private var isLoadingMore = false
-
-    fun getFeedPosts(currentUserID: String, forceRefresh: Boolean = false) {
-        if (!forceRefresh && (_getFeedPostsState.value.endReached || isLoadingMore)) {
-            return
-        }
-
-        if (forceRefresh) {
-            lastVisiblePost = null
-            isLoadingMore = false
-            _getFeedPostsState.value = PostState(isLoading = true)
-        } else if (_getFeedPostsState.value.posts.isNotEmpty()) {
-            isLoadingMore = true
-        } else {
-            _getFeedPostsState.value = _getFeedPostsState.value.copy(isLoading = true)
-        }
-
+    fun getFeedPosts(currentUserID: String) {
         viewModelScope.launch {
-            postUseCases.getFeedPosts(currentUserID, lastVisiblePost).collect { response ->
+            postUseCases.getFeedPosts(currentUserID).collect { response ->
                 when (response) {
-                    is Response.Loading -> {
-                        if (forceRefresh || _getFeedPostsState.value.posts.isEmpty()) {
-                            _getFeedPostsState.value =
-                                _getFeedPostsState.value.copy(isLoading = true)
+                    is Response.Loading -> _postState.update { it.copy(isLoadingFeed = true) }
+                    is Response.Success -> {
+                        _postState.update {
+                            it.copy(
+                                isLoadingFeed = false,
+                                feedPosts = response.data,
+                            )
                         }
                     }
 
-                    is Response.Success -> {
-                        val newPosts = response.data
-                        lastVisiblePost = newPosts.lastOrNull()
-
-                        val userIds = newPosts.map { it.postOwnerID }.distinct()
-                        fetchUsers(userIds)
-
-                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
-                            isLoading = false,
-                            posts = if (forceRefresh || _getFeedPostsState.value.posts.isEmpty()) {
-                                newPosts
-                            } else {
-                                _getFeedPostsState.value.posts + newPosts
-                            },
-                            endReached = newPosts.size < 10,
-                            error = ""
+                    is Response.Error -> _postState.update {
+                        it.copy(
+                            isLoadingFeed = false,
+                            feedPostsError = response.message
                         )
-                        isLoadingMore = false
-                    }
-
-                    is Response.Error -> {
-                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
-                            isLoading = false,
-                            error = response.message
-                        )
-                        isLoadingMore = false
                     }
                 }
             }
         }
     }
 
-    private fun fetchUsers(userIds: List<String>) {
-        viewModelScope.launch {
-            userUseCases.getUsersByIDs(userIds).collect { response ->
-                when (response) {
-                    is Response.Success -> {
-                        val newUsers = response.data.associateBy { it.userId }
-                        _users.value = _users.value + newUsers
-                    }
-
-                    is Response.Error -> {
-                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
-                            error = response.message
-                        )
-                    }
-
-                    is Response.Loading -> {}
-                }
-            }
-        }
-    }
-
-    private val _uploadPostSate = MutableStateFlow<Response<Boolean>>(Response.Success(false))
-    val uploadPostSate: StateFlow<Response<Boolean>> = _uploadPostSate
+    val _uploadState = mutableStateOf(Response.Success(false))
 
     fun uploadPost(post: Post, imageUris: List<Uri>) {
         viewModelScope.launch {
-            postUseCases.uploadPost(post, imageUris).collect {
-                _uploadPostSate.value = it
-                if (it is Response.Success) {
-                    _uploadPostSate.value = Response.Success(false)
+            postUseCases.uploadPost(post, imageUris).collect { response ->
+                when (response) {
+                    is Response.Loading -> _postState.update { it.copy(isUploadingPost = true) }
+                    is Response.Success -> {
+                        _postState.update { it.copy(isUploadingPost = false) }
+                    }
+
+                    is Response.Error -> _postState.update { it.copy(uploadPostError = response.message) }
                 }
             }
         }
     }
 
-    private val _deletePostState = MutableStateFlow<Response<Boolean>>(Response.Success(false))
-    val deletePostState: StateFlow<Response<Boolean>> = _deletePostState
-
     fun deletePost(postID: String, currentUserID: String) {
         viewModelScope.launch {
-            postUseCases.deletePost(postID, currentUserID).collect {
-                _deletePostState.value = it
+            postUseCases.deletePost(postID, currentUserID).collect { response ->
+                when (response) {
+                    is Response.Loading -> _postState.update { it.copy(isDeletingPost = true) }
+                    is Response.Success -> {
+                        _postState.update { it.copy(isDeletingPost = false) }
+                    }
+
+                    is Response.Error -> _postState.update { it.copy(deletePostError = response.message) }
+                }
             }
         }
     }
-
-    private val _postsState = MutableStateFlow<Response<Map<String, Post>>>(Response.Loading)
-    val postsState: StateFlow<Response<Map<String, Post>>> = _postsState.asStateFlow()
-
-    private val loadedPosts = mutableMapOf<String, Post>()
 
     fun getPostByID(postId: String) {
         viewModelScope.launch {
             postUseCases.getPostByID(postId).collect { response ->
                 when (response) {
+                    is Response.Loading -> _postState.update { it.copy(isLoadingPost = true) }
+                    is Response.Error -> _postState.update { it.copy(loadPostError = response.message) }
                     is Response.Success -> {
-                        val currentPosts =
-                            (_postsState.value as? Response.Success)?.data ?: emptyMap()
-                        _postsState.value =
-                            Response.Success(currentPosts + (postId to response.data))
+                        _postState.update { it.copy(isLoadingPost = false, post = response.data) }
                     }
 
-                    is Response.Error -> _postsState.value = Response.Error(response.message)
-                    is Response.Loading -> _postsState.value = Response.Loading
                 }
             }
         }
     }
 
-    private val _likeLoadingStates = MutableStateFlow<Map<String, Boolean>>(emptyMap())
-    val likeLoadingStates: StateFlow<Map<String, Boolean>> = _likeLoadingStates.asStateFlow()
-
-    private val _currentPost = MutableStateFlow<Post?>(null)
-    val currentPost: StateFlow<Post?> = _currentPost.asStateFlow()
+    fun getPostsByIds(postIds: List<String>) {
+        viewModelScope.launch {
+            postUseCases.getPostsByIds(postIds).collect { response ->
+                when (response) {
+                    is Response.Loading -> _postState.update { it.copy(isLoadingPosts = true) }
+                    is Response.Error -> _postState.update { it.copy(loadPostsError = response.message) }
+                    is Response.Success -> {
+                        _postState.update {
+                            it.copy(
+                                isLoadingPosts = false,
+                                posts = response.data
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     fun toggleLikePost(post: Post, userID: String) {
         viewModelScope.launch {
-            _likeLoadingStates.value += (post.postID to true)
-
             postUseCases.toggleLikePost(post, userID).collect { response ->
                 when (response) {
+                    is Response.Loading -> _postState.update { it.copy(isLikingPost = true) }
                     is Response.Success -> {
-                        val updatedPost = response.data
-                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
-                            posts = _getFeedPostsState.value.posts.map {
-                                if (it.postID == updatedPost.postID) updatedPost else it
-                            }
-                        )
-                        _currentPost.value = updatedPost
-                        _likeLoadingStates.value -= post.postID
+                        _postState.update { it.copy(isLikingPost = false) }
                     }
 
-                    is Response.Error -> {
-                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
-                            error = response.message
-                        )
-                        _likeLoadingStates.value -= post.postID
-                    }
-
-                    is Response.Loading -> {}
+                    is Response.Error -> _postState.update { it.copy(likePostError = response.message) }
                 }
             }
         }
     }
 
-    // Trạng thái cho Comments (bao gồm cả Reply)
-    private val _comments = MutableStateFlow<Response<List<Comment>>>(Response.Loading)
-    val comments: StateFlow<Response<List<Comment>>> = _comments.asStateFlow()
-
-    // Tải Comments cho một Post
     fun loadComments(postID: String) {
         viewModelScope.launch {
             postUseCases.getComments(postID).collect { response ->
-                _comments.value = response
+                when (response) {
+                    is Response.Loading -> _postState.update { it.copy(isLoadingComments = true) }
+                    is Response.Success -> {
+                        _postState.update {
+                            it.copy(
+                                isLoadingComments = false,
+                                comments = response.data
+                            )
+                        }
+                    }
+
+                    is Response.Error -> _postState.update { it.copy(loadCommentsError = response.message) }
+                }
             }
         }
     }
 
-    // Trạng thái cho việc thêm Comment/Reply
-    private val _addCommentState = mutableStateOf<Response<Boolean>>(Response.Success(false))
-    val addCommentState: State<Response<Boolean>> = _addCommentState
-
-    // Thêm Comment hoặc Reply (với parentCommentID để xác định Reply)
     fun addComment(
         postID: String,
         userID: String,
@@ -220,88 +160,67 @@ class PostViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             postUseCases.addComment(postID, userID, content, parentCommentID).collect { response ->
-                _addCommentState.value = response
-                if (response is Response.Success && response.data) {
-                    // Sau khi thêm thành công, tải lại danh sách Comment
-                    loadComments(postID)
-                    _addCommentState.value = Response.Success(false) // Reset state
+                when (response) {
+                    is Response.Loading -> _postState.update { it.copy(isAddingComment = true) }
+                    is Response.Success -> {
+                        _postState.update { it.copy(isAddingComment = false) }
+                        loadComments(postID)
+                    }
+
+                    is Response.Error -> _postState.update { it.copy(addCommentError = response.message) }
                 }
             }
         }
     }
-
-    private val _commentLikeLoadingStates = MutableStateFlow<Map<String, Boolean>>(emptyMap())
-    val commentLikeLoadingStates: StateFlow<Map<String, Boolean>> =
-        _commentLikeLoadingStates.asStateFlow()
 
     fun toggleLikeComment(postID: String, comment: Comment, userID: String) {
         viewModelScope.launch {
-            _commentLikeLoadingStates.value += (comment.commentID to true)
             postUseCases.toggleLikeComment(postID, comment.commentID, userID).collect { response ->
                 when (response) {
+                    is Response.Loading -> _postState.update { it.copy(isLikingComment = true) }
+                    is Response.Error -> _postState.update { it.copy(likeCommentError = response.message) }
                     is Response.Success -> {
-                        val updatedComment = response.data
-                        _comments.value = when (val currentComments = _comments.value) {
-                            is Response.Success -> {
-                                Response.Success(
-                                    currentComments.data.map {
-                                        if (it.commentID == updatedComment.commentID) updatedComment else it
-                                    }
-                                )
-                            }
-
-                            else -> _comments.value
-                        }
-
-                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
-                            posts = _getFeedPostsState.value.posts.map { post ->
-                                if (post.postID == postID) {
-                                    post.copy(
-                                        comments = post.comments.map {
-                                            if (it.commentID == updatedComment.commentID) updatedComment else it
-                                        }
-                                    )
-                                } else post
-                            }
-                        )
-
-                        _currentPost.value?.let { current ->
-                            if (current.postID == postID) {
-                                _currentPost.value = current.copy(
-                                    comments = current.comments.map {
-                                        if (it.commentID == updatedComment.commentID) updatedComment else it
-                                    }
-                                )
-                            }
-                        }
-
-                        _commentLikeLoadingStates.value -= comment.commentID
+                        _postState.update { it.copy(isLikingComment = false) }
                     }
-
-                    is Response.Error -> {
-                        _getFeedPostsState.value = _getFeedPostsState.value.copy(
-                            error = response.message
-                        )
-                        _commentLikeLoadingStates.value -= comment.commentID
-                    }
-
-                    is Response.Loading -> {}
                 }
             }
         }
     }
 
-    fun clear() {
-        _getFeedPostsState.value = PostState()
-        lastVisiblePost = null
-        isLoadingMore = false
-        _uploadPostSate.value = Response.Success(false)
-        loadedPosts.clear()
-        _postsState.value = Response.Loading
-        _likeLoadingStates.value = emptyMap()
-        _commentLikeLoadingStates.value = emptyMap()
-        _currentPost.value = null
-        _comments.value = Response.Loading
-        _addCommentState.value = Response.Success(false)
+    fun clearPostState() {
+        _postState.value = PostState()
     }
 }
+
+data class PostState(
+    val isLoadingFeed: Boolean = false,
+    val feedPosts: List<Post> = emptyList(),
+    val feedPostsError: String = "",
+
+    val isUploadingPost: Boolean = false,
+    val uploadPostError: String = "",
+
+    val isDeletingPost: Boolean = false,
+    val deletePostError: String = "",
+
+    val isLoadingPost: Boolean = false,
+    val post: Post = Post(),
+    val loadPostError: String = "",
+
+    val isLoadingPosts: Boolean = false,
+    val posts: List<Post> = emptyList(),
+    val loadPostsError: String = "",
+
+    val isLikingPost: Boolean = false,
+    val likePostError: String = "",
+
+    val isLoadingComments: Boolean = false,
+    val comments: List<Comment> = emptyList(),
+    val loadCommentsError: String = "",
+
+    val isAddingComment: Boolean = false,
+    val addCommentError: String = "",
+
+    val isLikingComment: Boolean = false,
+    val likeCommentError: String = ""
+)

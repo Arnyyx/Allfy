@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,51 +22,46 @@ import androidx.navigation.NavController
 import com.arny.allfy.R
 import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
-import com.arny.allfy.utils.Screens
+import com.arny.allfy.utils.Screen
 
 @Composable
 fun SplashScreen(
     navController: NavController,
     authViewModel: AuthViewModel
 ) {
-    val scale = remember {
-        Animatable(0f)
-    }
-    val authState = authViewModel.authState.observeAsState()
+    val scale = remember { Animatable(0f) }
+    val authState = authViewModel.authState.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(key1 = true) {
+    LaunchedEffect(Unit) {
         scale.animateTo(
             targetValue = 0.5f,
-            animationSpec = tween(durationMillis = 1, easing = {
-                OvershootInterpolator(2f).getInterpolation(it)
-            })
+            animationSpec = tween(
+                durationMillis = 500,
+                easing = { it * it }
+            )
         )
+    }
 
-        val isHandlingSpecialIntent =
-            navController.currentDestination?.route?.startsWith("incoming_call") == true
+    LaunchedEffect(authState.value) {
+        when {
+            authState.value.isLoading -> {}
 
-        if (!isHandlingSpecialIntent) {
-            when (authState.value) {
-                is AuthState.Authenticated -> {
-                    navController.navigate(Screens.FeedScreen.route) {
-                        popUpTo(Screens.SplashScreen.route) { inclusive = true }
-                    }
+            authState.value.isAuthenticated -> {
+                navController.navigate(Screen.FeedScreen) {
+                    popUpTo(Screen.SplashScreen) { inclusive = true }
                 }
-
-                is AuthState.Error -> Toast.makeText(
-                    context,
-                    (authState.value as AuthState.Error).message, Toast.LENGTH_SHORT
-                ).show()
-
-                is AuthState.Unauthenticated -> {
-                    navController.navigate(Screens.LoginScreen.route) {
-                        popUpTo(Screens.SplashScreen.route) { inclusive = true }
-                    }
-                }
-
-                else -> {}
             }
+
+            else -> {
+                navController.navigate(Screen.LoginScreen) {
+                    popUpTo(Screen.SplashScreen) { inclusive = true }
+                }
+            }
+        }
+
+        authState.value.errorMessage?.let { error ->
+            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
         }
     }
 

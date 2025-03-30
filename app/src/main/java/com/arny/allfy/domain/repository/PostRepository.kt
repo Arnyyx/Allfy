@@ -17,6 +17,7 @@ interface PostRepository {
     fun uploadPost(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>>
     fun deletePost(postID: String, currentUserID: String): Flow<Response<Boolean>>
     fun getPostByID(postID: String): Flow<Response<Post>>
+    fun getPostsByIDs(postIDs: List<String>): Flow<Response<List<Post>>>
 
     fun toggleLikePost(post: Post, userID: String): Flow<Response<Post>>
     fun getComments(postID: String): Flow<Response<List<Comment>>>
@@ -32,5 +33,4 @@ interface PostRepository {
         commentID: String,
         userID: String
     ): Flow<Response<Comment>>
-
 }

@@ -1,139 +1,125 @@
 package com.arny.allfy.presentation.viewmodel
 
-import android.content.Context
-import androidx.compose.runtime.State
-import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.arny.allfy.data.remote.GoogleAuthClient
-import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.usecase.authentication.AuthenticationUseCases
-import com.arny.allfy.domain.usecase.user.SetUserDetailsUseCase
 import com.arny.allfy.utils.Response
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.UserProfileChangeRequest
-import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authUseCases: AuthenticationUseCases,
-    private val setUserDetailsUseCase: SetUserDetailsUseCase,
-    val googleAuthClient: GoogleAuthClient
 ) : ViewModel() {
-    private val _signUpState = MutableLiveData<Response<Boolean>>()
-    val signUpState: LiveData<Response<Boolean>> = _signUpState
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
-
-    private val _authState = MutableLiveData<AuthState>()
-    val authState: LiveData<AuthState> = _authState
+    private val _authState = MutableStateFlow(AuthState())
+    val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
     init {
         checkAuthStatus()
     }
 
+    private fun checkAuthStatus() {
+        if (authUseCases.isAuthenticated()) {
+            _authState.update { it.copy(isAuthenticated = true) }
+        } else {
+            _authState.update { it.copy(isAuthenticated = false) }
+        }
+    }
+
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
-            authUseCases.firebaseSignIn(email, password).collect {
-                _authState.value = it
+            authUseCases.signInWithEmail(email, password).collect { response ->
+                when (response) {
+                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
+                    is Response.Success -> _authState.update { it.copy(isAuthenticated = true) }
+                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
+                }
             }
+
         }
     }
 
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
-            authUseCases.signInWithGoogle(idToken).collect {
-                _authState.value = it
-            }
-        }
-    }
-
-    fun signUp(username: String, name: String, email: String, password: String) {
-        viewModelScope.launch {
-            _signUpState.value = Response.Loading
-            try {
-                val result = auth.createUserWithEmailAndPassword(email, password).await()
-                val user = result.user
-                if (user != null) {
-                    val userData = User(
-                        userId = user.uid,
-                        username = username,
-                        name = name,
-                        email = email,
-                        imageUrl = "",
-                        bio = "",
-                        fcmToken = ""
-                    )
-                    setUserDetailsUseCase(userData, null).collect { response ->
-                        when (response) {
-                            is Response.Success -> {
-                                val profileUpdates = UserProfileChangeRequest.Builder()
-                                    .setDisplayName(name)
-                                    .build()
-                                user.updateProfile(profileUpdates).await()
-                                _signUpState.value = Response.Success(true)
-                            }
-
-                            is Response.Error -> _signUpState.value =
-                                Response.Error(response.message)
-
-                            is Response.Loading -> _signUpState.value = Response.Loading
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                _signUpState.value = Response.Error(e.message ?: "Sign up failed")
-            }
-        }
-    }
-
-    private fun checkAuthStatus() {
-        if (auth.currentUser == null) {
-            _authState.value = AuthState.Unauthenticated
-        } else {
-            _authState.value = AuthState.Authenticated
-        }
-    }
-
-    fun signOut(context: Context) {
-        viewModelScope.launch {
-            authUseCases.firebaseSignOut().collect { state ->
-                when (state) {
-                    is AuthState.Unauthenticated -> {
-                        val preferences =
-                            context.getSharedPreferences("FCMPrefs", Context.MODE_PRIVATE)
-                        preferences.edit().remove("fcmToken").apply()
-
-                        _authState.value = state
-                        clear()
+            authUseCases.signInWithGoogle(idToken).collect { response ->
+                when (response) {
+                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
+                    is Response.Success -> _authState.update {
+                        it.copy(isAuthenticated = true)
                     }
 
-                    is AuthState.Loading -> _authState.value = state
-                    is AuthState.Error -> _authState.value = state
-                    else -> {}
+                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
                 }
             }
         }
     }
 
-
-    fun clear() {
+    fun signUp(username: String, email: String, password: String) {
         viewModelScope.launch {
-            _signUpState.value = Response.Success(false)
-            _authState.value = AuthState.Unauthenticated
+            authUseCases.signUp(username, email, password).collect { response ->
+                when (response) {
+                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
+                    is Response.Success -> {
+                        signInWithEmail(email, password)
+                    }
+
+                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
+                }
+
+            }
+        }
+    }
+
+
+    fun signOut() {
+        viewModelScope.launch {
+            authUseCases.signOut().collect { response ->
+                when (response) {
+                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
+                    is Response.Success -> {
+                        _authState.update { it.copy(isAuthenticated = false) }
+                    }
+
+                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
+                }
+            }
+        }
+    }
+
+    fun getCurrentUserId() {
+        viewModelScope.launch {
+            authUseCases.getCurrentUserId().collect { response ->
+                when (response) {
+                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
+                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
+                    is Response.Success -> _authState.update {
+                        it.copy(currentUserId = response.data)
+                    }
+
+                }
+
+            }
+        }
+    }
+
+
+    fun clearAuthState() {
+        viewModelScope.launch {
+            _authState.value = AuthState()
         }
     }
 }
 
-sealed class AuthState {
-    object Loading : AuthState()
-    object Authenticated : AuthState()
-    data class Error(val message: String) : AuthState()
-    object Unauthenticated : AuthState()
-}
+data class AuthState(
+    val isLoading: Boolean = false,
+    val isAuthenticated: Boolean = false,
+    val errorMessage: String? = null,
+
+    val currentUserId: String = ""
+)
 

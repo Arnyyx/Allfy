@@ -24,13 +24,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.arny.allfy.utils.Screens
+import com.arny.allfy.utils.Screen
 
-enum class BottomNavigationItem(val icon: ImageVector, val route: String, val label: String) {
-    Feed(Icons.Default.Home, Screens.FeedScreen.route, "Home"),
-    Search(Icons.Default.Search, Screens.SearchScreen.route, "Search"),
-    Create(Icons.Default.Add, Screens.CreatePostScreen.route, "Create"), // Thêm nút Create
-    Profile(Icons.Default.Person, Screens.ProfileScreen.route, "Profile")
+enum class BottomNavigationItem(val icon: ImageVector, val route: Screen, val label: String) {
+    Feed(Icons.Default.Home, Screen.FeedScreen, "Home"),
+    Search(Icons.Default.Search, Screen.SearchScreen, "Search"),
+    Create(Icons.Default.Add, Screen.CreatePostScreen, "Create"),
+    Profile(Icons.Default.Person, Screen.ProfileScreen(), "Profile")
 }
 
 @Composable
@@ -52,7 +52,7 @@ fun BottomNavigation(
                 selected = isSelected,
                 onClick = {
                     navController.navigate(item.route) {
-                        popUpTo(Screens.FeedScreen.route) {
+                        popUpTo(Screen.FeedScreen) {
                             saveState = true
                         }
                         launchSingleTop = true
@@ -86,14 +86,4 @@ fun BottomNavigation(
             )
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun BottomNavigationPreview() {
-    val navController = rememberNavController()
-    BottomNavigation(
-        selectedItem = BottomNavigationItem.Feed,
-        navController = navController
-    )
 }

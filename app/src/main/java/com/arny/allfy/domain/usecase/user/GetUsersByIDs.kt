@@ -3,9 +3,8 @@ package com.arny.allfy.domain.usecase.user
 import com.arny.allfy.domain.repository.UserRepository
 import javax.inject.Inject
 
-class GetUsersByIDsUseCase @Inject constructor(
+class GetUsersByIDs @Inject constructor(
     private val repository: UserRepository
 ) {
-    operator fun invoke(followerId: List<String>) =
-        repository.getUsersByIDs(followerId)
+    operator fun invoke(userIDs: List<String>) = repository.getUsersByIDs(userIDs)
 }

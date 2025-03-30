@@ -27,47 +27,40 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.Toast
+import com.arny.allfy.presentation.viewmodel.UserState
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
-    onBackClick: () -> Unit,
+    navController: NavHostController,
     userViewModel: UserViewModel
 ) {
-    val currentUser by userViewModel.currentUser.collectAsState()
-    val updateStatus by userViewModel.updateProfileStatus.collectAsState()
-
+    val userState by userViewModel.userState.collectAsState()
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
-    var user by remember(currentUser) {
-        mutableStateOf(
-            if (currentUser is Response.Success) (currentUser as Response.Success<User>).data
-            else User()
-        )
-    }
+
+    var user by remember { mutableStateOf(User()) }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedImageUri = uri
     }
 
-    LaunchedEffect(updateStatus) {
-        when (updateStatus) {
-            is Response.Success -> {
-                if ((updateStatus as Response.Success<Boolean>).data) {
-                    toastMessage = "Profile updated successfully"
-                    onBackClick()
-                }
+    LaunchedEffect(userState.isLoadingUpdateProfile) {
+        when {
+            userState.updateProfileError != "" -> {
+                toastMessage = userState.updateProfileError
             }
 
-            is Response.Error -> toastMessage = "Error: ${(updateStatus as Response.Error).message}"
-            else -> Unit
+            userState.isLoadingUpdateProfile -> {
+                toastMessage = "Updating profile..."
+            }
         }
     }
 
@@ -79,17 +72,20 @@ fun EditProfileScreen(
         }
     }
 
-    val isLoading = currentUser is Response.Loading || updateStatus is Response.Loading
-
     Scaffold(
         topBar = {
             Column {
                 EditProfileTopBar(
-                    onBackClick = onBackClick,
-                    onSaveClick = { userViewModel.updateUserProfile(user, selectedImageUri) },
-                    isLoading = isLoading
+                    navController = navController,
+                    userState = userState,
+                    onSaveClick = {
+                        userViewModel.updateUserProfile(
+                            userState.currentUser,
+                            selectedImageUri
+                        )
+                    },
                 )
-                if (isLoading) {
+                if (userState.isLoadingUpdateProfile) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary
@@ -105,29 +101,22 @@ fun EditProfileScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
         ) {
-            when (currentUser) {
-                is Response.Success -> {
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .verticalScroll(rememberScrollState())
-                                .padding(16.dp)
-                        ) {
-                            ProfileImageSection(
-                                user,
-                                selectedImageUri
-                            ) { launcher.launch("image/*") }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            ProfileFieldsSection(user) { user = it }
-                        }
-                    }
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                ) {
+                    ProfileImageSection(
+                        userState.currentUser,
+                        selectedImageUri
+                    ) { launcher.launch("image/*") }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ProfileFieldsSection(userState.currentUser) { user = it }
                 }
-
-                is Response.Error -> ErrorContent((currentUser as Response.Error).message)
-                is Response.Loading -> EditProfileSkeleton()
             }
         }
     }
@@ -136,9 +125,9 @@ fun EditProfileScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditProfileTopBar(
-    onBackClick: () -> Unit,
+    userState: UserState,
+    navController: NavHostController,
     onSaveClick: () -> Unit,
-    isLoading: Boolean
 ) {
     TopAppBar(
         title = {
@@ -149,7 +138,9 @@ private fun EditProfileTopBar(
             )
         },
         navigationIcon = {
-            IconButton(onClick = onBackClick) {
+            IconButton(onClick = {
+                navController.popBackStack()
+            }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
@@ -160,12 +151,12 @@ private fun EditProfileTopBar(
         actions = {
             TextButton(
                 onClick = onSaveClick,
-                enabled = !isLoading
+                enabled = !userState.isLoadingUpdateProfile
             ) {
                 Text(
                     text = "Save",
                     fontWeight = FontWeight.Bold,
-                    color = if (!isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(
+                    color = if (!userState.isLoadingUpdateProfile) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(
                         alpha = 0.5f
                     )
                 )
@@ -247,12 +238,14 @@ private fun ProfileFieldsSection(
         value = currentUser.email,
         onValueChange = { onUserUpdate(currentUser.copy(email = it)) }
     )
-    EditProfileField(
-        label = "Bio",
-        value = currentUser.bio,
-        maxLength = 100,
-        onValueChange = { if (it.length <= 100) onUserUpdate(currentUser.copy(bio = it)) }
-    )
+    currentUser.bio?.let {
+        EditProfileField(
+            label = "Bio",
+            value = it,
+            maxLength = 100,
+            onValueChange = { if (it.length <= 100) onUserUpdate(currentUser.copy(bio = it)) }
+        )
+    }
 }
 
 @Composable

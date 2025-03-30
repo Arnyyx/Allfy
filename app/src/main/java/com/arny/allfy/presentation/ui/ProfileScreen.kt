@@ -1,6 +1,5 @@
 package com.arny.allfy.presentation.ui
 
-import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -31,13 +30,12 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
-import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.BottomNavigation
 import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.viewmodel.PostViewModel
+import com.arny.allfy.presentation.viewmodel.UserState
 import com.arny.allfy.presentation.viewmodel.UserViewModel
-import com.arny.allfy.utils.Response
-import com.arny.allfy.utils.Screens
+import com.arny.allfy.utils.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,20 +45,26 @@ fun ProfileScreen(
     postViewModel: PostViewModel,
     userId: String? = null
 ) {
-    val userState by if (userId != null) userViewModel.otherUser.collectAsState() else userViewModel.currentUser.collectAsState()
-    val isLoading by remember { derivedStateOf { userState is Response.Loading } }
+    val userState by userViewModel.userState.collectAsState()
+    val isCurrentUser = userId == null
 
     LaunchedEffect(key1 = userId) {
-        if (userId == null) userViewModel.getCurrentUser() else userViewModel.getUserById(userId)
+        if (!isCurrentUser) {
+            userId?.let { userViewModel.getUserDetails(it) }
+        }
+        if (isCurrentUser && userState.currentUser.userId.isEmpty()) {
+            userViewModel.getCurrentUser("currentUserId")
+        }
     }
 
-    LaunchedEffect(key1 = userState) {
-        if (userState is Response.Success) {
-            val user = (userState as Response.Success<User>).data
+    LaunchedEffect(userState.currentUser, userState.otherUser) {
+        val user = if (isCurrentUser) userState.currentUser else userState.otherUser
+        if (user.userId.isNotEmpty()) {
+            Log.d("ProfileScreen", "ProfileScreen: $user")
             with(userViewModel) {
                 getFollowingCount(user.userId)
                 getFollowersCount(user.userId)
-                getPostsIdsFromSubcollection(user.userId)
+                getPostIds(user.userId)
             }
         }
     }
@@ -75,9 +79,8 @@ fun ProfileScreen(
                 Column {
                     TopAppBar(
                         title = {
-                            val currentUserState = userState
                             Text(
-                                text = if (currentUserState is Response.Success) currentUserState.data.username else "",
+                                text = if (isCurrentUser) userState.currentUser.username else userState.otherUser.username,
                                 style = MaterialTheme.typography.headlineSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 20.sp
@@ -86,25 +89,25 @@ fun ProfileScreen(
                             )
                         },
                         navigationIcon = {
-                            if (userId != null) {
+                            if (!isCurrentUser) {
                                 IconButton(onClick = { navController.popBackStack() }) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                                 }
                             }
                         },
                         actions = {
-                            if (userId == null) {
-                                IconButton(onClick = { navController.navigate(Screens.CreatePostScreen.route) }) {
+                            if (isCurrentUser) {
+                                IconButton(onClick = { navController.navigate(Screen.CreatePostScreen) }) {
                                     Icon(Icons.Default.Add, "New Post")
                                 }
-                                IconButton(onClick = { navController.navigate(Screens.SettingsScreen.route) }) {
+                                IconButton(onClick = { navController.navigate(Screen.SettingsScreen) }) {
                                     Icon(Icons.Default.Menu, "Settings")
                                 }
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
                     )
-                    AnimatedVisibility(visible = isLoading) {
+                    AnimatedVisibility(visible = userState.isLoadingCurrentUser || userState.isLoadingOtherUser) {
                         LinearProgressIndicator(
                             modifier = Modifier.fillMaxWidth(),
                             color = MaterialTheme.colorScheme.primary
@@ -113,25 +116,17 @@ fun ProfileScreen(
                 }
             },
             bottomBar = {
-                if (userId == null) BottomNavigation(BottomNavigationItem.Profile, navController)
+                if (isCurrentUser) BottomNavigation(BottomNavigationItem.Profile, navController)
             }
         ) { paddingValues ->
-            val currentUserState = userState // Biến tạm
-            when (currentUserState) {
-                is Response.Success -> ProfileContent(
-                    navController = navController,
-                    user = currentUserState.data,
-                    postViewModel = postViewModel,
-                    userViewModel = userViewModel,
-                    isCurrentUser = userId == null,
-                    paddingValues = paddingValues
-                )
-
-                is Response.Error -> ErrorToast(currentUserState.message)
-                else -> {
-
-                }
-            }
+            ProfileContent(
+                navController = navController,
+                userState = userState,
+                postViewModel = postViewModel,
+                userViewModel = userViewModel,
+                isCurrentUser = isCurrentUser,
+                paddingValues = paddingValues
+            )
         }
     }
 }
@@ -139,25 +134,23 @@ fun ProfileScreen(
 @Composable
 private fun ProfileContent(
     navController: NavController,
-    user: User,
+    userState: UserState,
     postViewModel: PostViewModel,
     userViewModel: UserViewModel,
     isCurrentUser: Boolean,
     paddingValues: PaddingValues
 ) {
-    val currentUserState by userViewModel.currentUser.collectAsState()
-    val followingCount by userViewModel.followingCount.collectAsState()
-    val followersCount by userViewModel.followersCount.collectAsState()
-    val postsIds by userViewModel.postsIds.collectAsState()
-    var isFollowing by remember { mutableStateOf(false) }
+    val user = if (isCurrentUser) userState.currentUser else userState.otherUser
+    var isFollowing by remember { mutableStateOf(userState.isFollowing) }
 
-    LaunchedEffect(key1 = currentUserState) {
-        if (currentUserState is Response.Success && !isCurrentUser) {
-            val currentUser = (currentUserState as Response.Success<User>).data
-            userViewModel.checkIfFollowing(currentUser.userId, user.userId).collect { response ->
-                if (response is Response.Success) isFollowing = response.data
-            }
+    LaunchedEffect(key1 = userState.currentUser) {
+        if (!isCurrentUser && userState.currentUser.userId.isNotEmpty()) {
+            userViewModel.checkIfFollowing(userState.currentUser.userId, user.userId)
         }
+    }
+
+    LaunchedEffect(userState.isFollowing) {
+        isFollowing = userState.isFollowing
     }
 
     Column(
@@ -173,7 +166,7 @@ private fun ProfileContent(
             AsyncImageWithPlaceholder(
                 imageUrl = user.imageUrl,
                 modifier = Modifier
-                    .size(100.dp) // Tăng kích thước ảnh giống Instagram
+                    .size(100.dp)
                     .clip(CircleShape)
             )
             Spacer(modifier = Modifier.width(16.dp))
@@ -181,18 +174,9 @@ private fun ProfileContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                StatisticItem(
-                    "Posts",
-                    (postsIds as? Response.Success)?.data?.size?.toString() ?: "0"
-                )
-                StatisticItem(
-                    "Followers",
-                    (followersCount as? Response.Success)?.data?.toString() ?: "0"
-                )
-                StatisticItem(
-                    "Following",
-                    (followingCount as? Response.Success)?.data?.toString() ?: "0"
-                )
+                StatisticItem("Posts", userState.postsIds.size.toString())
+                StatisticItem("Followers", userState.followersCount.toString())
+                StatisticItem("Following", userState.followingCount.toString())
             }
         }
 
@@ -203,7 +187,7 @@ private fun ProfileContent(
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
-            if (user.bio.isNotEmpty()) {
+            if (user.bio?.isNotEmpty() == true) {
                 Text(
                     user.bio,
                     fontSize = 14.sp,
@@ -217,7 +201,7 @@ private fun ProfileContent(
 
         if (isCurrentUser) {
             OutlinedButton(
-                onClick = { navController.navigate(Screens.EditProfileScreen.route) },
+                onClick = { navController.navigate(Screen.EditProfileScreen) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(36.dp),
@@ -233,9 +217,11 @@ private fun ProfileContent(
             ) {
                 Button(
                     onClick = {
-                        if (isFollowing) userViewModel.unfollowUser(user.userId) else userViewModel.followUser(
-                            user.userId
-                        )
+                        if (isFollowing) {
+                            userViewModel.unfollowUser(userState.currentUser.userId, user.userId)
+                        } else {
+                            userViewModel.followUser(userState.currentUser.userId, user.userId)
+                        }
                         isFollowing = !isFollowing
                     },
                     modifier = Modifier
@@ -251,10 +237,12 @@ private fun ProfileContent(
                 }
                 OutlinedButton(
                     onClick = {
-                        if (currentUserState is Response.Success) {
-                            val currentUser = (currentUserState as Response.Success<User>).data
-                            navController.navigate("chat/${currentUser.userId}/${user.userId}")
-                        }
+                        navController.navigate(
+                            Screen.ChatScreen(
+                                currentUserId = userState.currentUser.userId,
+                                otherUserId = userState.otherUser.userId
+                            )
+                        )
                     },
                     modifier = Modifier
                         .weight(1f)
@@ -268,7 +256,7 @@ private fun ProfileContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        PostsGrid(navController, postsIds, postViewModel)
+        PostsGrid(navController, userState.postsIds, postViewModel)
     }
 }
 
@@ -287,28 +275,23 @@ private fun StatisticItem(label: String, value: String) {
 @Composable
 private fun PostsGrid(
     navController: NavController,
-    postsIdsState: Response<List<String>>,
+    postsIds: List<String>,
     postViewModel: PostViewModel
 ) {
-    val postsState by postViewModel.postsState.collectAsState()
-    val loadedPosts = (postsState as? Response.Success)?.data ?: emptyMap()
 
-    LaunchedEffect(key1 = postsIdsState) {
-        if (postsIdsState is Response.Success) {
-            postsIdsState.data.forEach { postId -> postViewModel.getPostByID(postId) }
-        }
+    LaunchedEffect(postsIds) {
+        postViewModel.getPostsByIds(postsIds)
     }
-
+    val postState by postViewModel.postState.collectAsState()
+    val loadedPosts = postState.posts.associateBy { it.postID }
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        if (postsIdsState is Response.Success) {
-            itemsIndexed(postsIdsState.data, key = { _, postId -> postId }) { _, postId ->
-                AnimatedPostThumbnail(postId, loadedPosts, navController)
-            }
+        itemsIndexed(postsIds, key = { _, postId -> postId }) { _, postId ->
+            AnimatedPostThumbnail(postId, loadedPosts, navController)
         }
     }
 }
@@ -345,7 +328,9 @@ private fun AnimatedPostThumbnail(
                     .aspectRatio(1f)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(4.dp))
-                    .clickable { navController.navigate("postDetail/$postId") },
+                    .clickable {
+                        navController.navigate(Screen.PostDetailScreen(postId))
+                    },
                 contentScale = ContentScale.Crop
             )
         }

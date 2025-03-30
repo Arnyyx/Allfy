@@ -8,86 +8,74 @@ import com.arny.allfy.utils.Response
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 class AuthenticationRepositoryImpl @Inject constructor(
-    private val auth: FirebaseAuth,
+    private val firebaseAuth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
 ) : AuthenticationRepository {
 
-    override fun isUserAuthenticatedInFirebase(): Boolean {
-        return auth.currentUser != null
-    }
-
-    override fun getFirebaseAuthState(): Flow<Boolean> = callbackFlow {
-        val authStateListener = FirebaseAuth.AuthStateListener {
-            trySend(auth.currentUser == null)
-        }
-        auth.addAuthStateListener(authStateListener)
-        awaitClose {
-            auth.removeAuthStateListener(authStateListener)
-        }
-    }
-
-    override fun getCurrentUserID(): Flow<Response<String>> = flow {
+    override fun getCurrentUserId(): Flow<Response<String>> = flow {
         emit(Response.Loading)
         try {
-            val userID = auth.currentUser?.uid ?: throw Exception("User ID not found")
-            emit(Response.Success(userID))
+            val userId = firebaseAuth.currentUser?.uid ?: throw Exception("User ID is null")
+            emit(Response.Success(userId))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 
-    override fun firebaseSignIn(email: String, password: String): Flow<AuthState> = flow {
-        emit(AuthState.Loading)
+    override fun isAuthenticated(): Boolean {
+        return firebaseAuth.currentUser != null
+    }
+
+    override fun signInWithEmail(email: String, password: String): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
         try {
-            auth.signInWithEmailAndPassword(email, password).await()
-            emit(AuthState.Authenticated)
+            firebaseAuth.signInWithEmailAndPassword(email, password).await()
+            emit(Response.Success(true))
         } catch (e: Exception) {
-            emit(AuthState.Error(e.localizedMessage ?: "An Unexpected Error"))
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 
-    override fun firebaseSignOut(): Flow<AuthState> = flow {
+    override fun signOut(): Flow<Response<Boolean>> = flow {
         try {
-            emit(AuthState.Loading)
-            auth.signOut()
-            emit(AuthState.Unauthenticated)
+            emit(Response.Loading)
+            firebaseAuth.signOut()
+            emit(Response.Success(true))
         } catch (e: Exception) {
-            emit(AuthState.Error(e.localizedMessage ?: "An Unexpected Error"))
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 
-    override fun firebaseSignUp(
+    override fun signUp(
         userName: String,
         email: String,
         password: String
-    ): Flow<AuthState> = flow {
+    ): Flow<Response<Boolean>> = flow {
         try {
-            emit(AuthState.Loading)
-            val authResult = auth.createUserWithEmailAndPassword(email, password).await()
-            val userID = authResult.user?.uid ?: throw Exception("Failed to get user ID")
+            emit(Response.Loading)
+            val authResult = firebaseAuth.createUserWithEmailAndPassword(email, password).await()
+            val userID = authResult.user?.uid ?: throw Exception("Failed to get otherUser ID")
             val user = User(userId = userID, username = userName, email = email)
             firestore.collection(Constants.COLLECTION_NAME_USERS).document(userID).set(user).await()
-            emit(AuthState.Authenticated)
+            emit(Response.Success(true))
         } catch (e: Exception) {
-            emit(AuthState.Error(e.localizedMessage ?: "An Unexpected Error"))
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 
-    override fun signInWithGoogle(idToken: String): Flow<AuthState> = flow {
-        emit(AuthState.Loading)
+    override fun signInWithGoogle(idToken: String): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
         try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
-            val authResult = auth.signInWithCredential(credential).await()
+            val authResult = firebaseAuth.signInWithCredential(credential).await()
             val isNewUser = authResult.additionalUserInfo?.isNewUser ?: false
-            val firebaseUser = authResult.user ?: throw Exception("Firebase user is null")
+            val firebaseUser = authResult.user ?: throw Exception("Firebase otherUser is null")
 
             if (isNewUser) {
                 val user = User(
@@ -101,9 +89,9 @@ class AuthenticationRepositoryImpl @Inject constructor(
                     .set(user)
                     .await()
             }
-            emit(AuthState.Authenticated)
+            emit(Response.Success(true))
         } catch (e: Exception) {
-            emit(AuthState.Error(e.localizedMessage ?: "An Unexpected Error"))
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 }

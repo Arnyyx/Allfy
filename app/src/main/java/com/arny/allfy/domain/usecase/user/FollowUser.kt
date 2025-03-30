@@ -3,9 +3,9 @@ package com.arny.allfy.domain.usecase.user
 import com.arny.allfy.domain.repository.UserRepository
 import javax.inject.Inject
 
-class GetFollowersUseCase @Inject constructor(
+class FollowUser @Inject constructor(
     private val repository: UserRepository
 ) {
-    operator fun invoke(followerId: List<String>) =
-        repository.getFollowers(followerId)
+    operator fun invoke(currentUserId: String, targetUserId: String) =
+        repository.followUser(currentUserId, targetUserId)
 }

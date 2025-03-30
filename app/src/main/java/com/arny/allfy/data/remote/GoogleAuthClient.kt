@@ -51,7 +51,8 @@ class GoogleAuthClient @Inject constructor(
         return when (val credential = result.credential) {
             is CustomCredential -> {
                 if (credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                    val googleIdTokenCredential =
+                        GoogleIdTokenCredential.createFrom(credential.data)
                     SignInResult(
                         data = UserData(
                             userId = googleIdTokenCredential.id,
@@ -70,6 +71,7 @@ class GoogleAuthClient @Inject constructor(
                     )
                 }
             }
+
             else -> {
                 SignInResult(
                     data = null,

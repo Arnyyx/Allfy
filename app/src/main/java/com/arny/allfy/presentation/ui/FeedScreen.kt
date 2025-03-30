@@ -47,10 +47,10 @@ import com.arny.allfy.presentation.common.BottomNavigation
 import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.common.PostItem
 import com.arny.allfy.presentation.common.Toast
+import com.arny.allfy.utils.Screen
+import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
-import com.arny.allfy.utils.Response
-import com.arny.allfy.utils.Screens
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.delay
@@ -59,25 +59,34 @@ import kotlinx.coroutines.delay
 fun FeedScreen(
     navController: NavController,
     userViewModel: UserViewModel,
-    postViewModel: PostViewModel
+    postViewModel: PostViewModel,
+    authViewModel: AuthViewModel
 ) {
-    LaunchedEffect(Unit) {
-        userViewModel.getCurrentUser()
-    }
-    val currentUser by userViewModel.currentUser.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
+    val userState by userViewModel.userState.collectAsState()
 
-    when (currentUser) {
-        is Response.Loading -> LoadingScreenWithNavigation(navController)
-        is Response.Success -> {
-            val user = (currentUser as Response.Success<User>).data
+    LaunchedEffect(Unit) {
+        authViewModel.getCurrentUserId()
+    }
+
+    LaunchedEffect(authState.currentUserId) {
+        authState.currentUserId.let { userId ->
+            userViewModel.getCurrentUser(userId)
+        }
+    }
+
+    when {
+        userState.isLoadingCurrentUser -> LoadingScreenWithNavigation(navController)
+        userState.currentUser.userId.isNotEmpty() -> {
             FeedContent(
-                currentUser = user,
+                currentUser = userState.currentUser,
                 postViewModel = postViewModel,
                 navController = navController
             )
         }
 
-        is Response.Error -> ErrorToast((currentUser as Response.Error).message)
+        userState.errorCurrentUser.isNotEmpty() -> ErrorToast(userState.errorCurrentUser)
+        else -> LoadingScreenWithNavigation(navController)
     }
 }
 
@@ -88,14 +97,14 @@ private fun FeedContent(
     postViewModel: PostViewModel,
     navController: NavController
 ) {
-    val state by postViewModel.getFeedPostsState.collectAsState()
-    val users by postViewModel.users.collectAsState()
+    val state by postViewModel.postState.collectAsState()
     val listState = rememberLazyListState()
     val refreshState =
-        rememberSwipeRefreshState(isRefreshing = state.isLoading && state.posts.isEmpty())
+        rememberSwipeRefreshState(isRefreshing = state.isLoadingFeed && state.feedPosts.isEmpty())
 
-    LaunchedEffect(Unit) {
-        if (state.posts.isEmpty() && !state.isLoading) {
+    // Load feed posts khi có currentUser
+    LaunchedEffect(currentUser.userId) {
+        if (state.feedPosts.isEmpty() && !state.isLoadingFeed) {
             postViewModel.getFeedPosts(currentUser.userId)
         }
     }
@@ -113,7 +122,7 @@ private fun FeedContent(
                     },
                     actions = {
                         IconButton(onClick = {
-                            navController.navigate(Screens.ConversationsScreen.route)
+                            navController.navigate(Screen.ConversationsScreen)
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_message),
@@ -127,7 +136,7 @@ private fun FeedContent(
                         titleContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
-                if (state.isLoading && state.posts.isEmpty()) {
+                if (state.isLoadingFeed && state.feedPosts.isEmpty()) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary
@@ -139,7 +148,7 @@ private fun FeedContent(
     ) { paddingValues ->
         SwipeRefresh(
             state = refreshState,
-            onRefresh = { postViewModel.getFeedPosts(currentUser.userId, forceRefresh = true) }
+            onRefresh = { postViewModel.getFeedPosts(currentUser.userId) }
         ) {
             Box(
                 modifier = Modifier
@@ -148,8 +157,8 @@ private fun FeedContent(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 when {
-                    state.error.isNotBlank() -> ErrorScreen(state.error)
-                    state.posts.isEmpty() && !state.isLoading -> EmptyScreen("No posts available")
+                    state.feedPostsError.isNotBlank() -> ErrorScreen(state.feedPostsError)
+                    state.feedPosts.isEmpty() && !state.isLoadingFeed -> EmptyScreen("No posts available")
                     else -> {
                         LazyColumn(
                             state = listState,
@@ -158,30 +167,15 @@ private fun FeedContent(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             itemsIndexed(
-                                items = state.posts,
+                                items = state.feedPosts,
                                 key = { _, post -> post.postID }
-                            ) { index, post ->
-                                val postOwner = users[post.postOwnerID]
+                            ) { _, post ->
                                 AnimatedPostItem(
                                     post = post,
                                     currentUser = currentUser,
-                                    postOwner = postOwner,
-                                    navController = navController,
-                                    postViewModel = postViewModel
+                                    postViewModel = postViewModel,
+                                    navController = navController
                                 )
-                            }
-
-                            if (!state.endReached && state.posts.isNotEmpty()) {
-                                item {
-                                    LoadingMorePosts(
-                                        isLoading = state.isLoading,
-                                        onLoadMore = {
-                                            if (!state.isLoading) {
-                                                postViewModel.getFeedPosts(currentUser.userId)
-                                            }
-                                        }
-                                    )
-                                }
                             }
                         }
                     }
@@ -195,27 +189,23 @@ private fun FeedContent(
 private fun AnimatedPostItem(
     post: Post,
     currentUser: User,
-    postOwner: User?,
-    navController: NavController,
     postViewModel: PostViewModel,
+    navController: NavController
 ) {
     AnimatedVisibility(
         visible = true,
         enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
     ) {
-        if (postOwner != null) {
-            PostItem(
-                initialPost = post,
-                currentUser = currentUser,
-                postOwner = postOwner,
-                navController = navController,
-                postViewModel = postViewModel
-            )
-        } else {
-        }
+        PostItem(
+            post = post,
+            currentUser = currentUser,
+            navController = navController,
+            postViewModel = postViewModel
+        )
     }
 }
 
+// Các composable khác giữ nguyên như trong code gốc
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LoadingScreenWithNavigation(navController: NavController) {
@@ -279,25 +269,6 @@ private fun EmptyScreen(message: String) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
-    }
-}
-
-@Composable
-private fun LoadingMorePosts(isLoading: Boolean, onLoadMore: () -> Unit) {
-    if (isLoading) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            LinearProgressIndicator()
-        }
-    }
-    LaunchedEffect(isLoading) {
-        if (!isLoading) {
-            onLoadMore()
-        }
     }
 }
 

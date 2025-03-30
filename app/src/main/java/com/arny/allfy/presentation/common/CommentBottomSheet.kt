@@ -1,12 +1,10 @@
 package com.arny.allfy.presentation.common
 
-import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,31 +22,32 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Comment
-import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
+import com.arny.allfy.presentation.viewmodel.PostState
 import com.arny.allfy.presentation.viewmodel.PostViewModel
-import com.arny.allfy.utils.Response
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommentBottomSheet(
-    post: Post,
+    postId: String,
     currentUser: User,
     isVisible: Boolean,
-    onDismiss: () -> Unit,
-    postViewModel: PostViewModel = hiltViewModel()
+    postViewModel: PostViewModel,
+    onDismiss: () -> Unit
 ) {
+    val postState by postViewModel.postState.collectAsState()
+
     val commentText = remember { mutableStateOf("") }
     val replyingToCommentId = remember { mutableStateOf<String?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -56,13 +55,13 @@ fun CommentBottomSheet(
 
     LaunchedEffect(isVisible) {
         if (isVisible) {
-            postViewModel.loadComments(post.postID)
+            postViewModel.loadComments(postId)
         }
     }
 
-    LaunchedEffect(postViewModel.addCommentState.value) {
-        if (postViewModel.addCommentState.value is Response.Success) {
-            postViewModel.loadComments(post.postID)
+    LaunchedEffect(postState.isAddingComment) {
+        if (!postState.isAddingComment) {
+            postViewModel.loadComments(postId)
             commentText.value = ""
             replyingToCommentId.value = null
             keyboardController?.hide()
@@ -97,12 +96,13 @@ fun CommentBottomSheet(
                         .weight(1f)
                 ) {
                     CommentsList(
-                        post = post,
-                        postViewModel = postViewModel,
+                        postId = postId,
                         currentUserId = currentUser.userId,
+                        postViewModel = postViewModel,
                         onReplyClick = { commentId ->
                             replyingToCommentId.value = commentId
-                        }
+                        },
+                        postState = postState
                     )
                 }
                 CommentInput(
@@ -112,16 +112,16 @@ fun CommentBottomSheet(
                     onSendComment = {
                         if (commentText.value.isNotBlank()) {
                             postViewModel.addComment(
-                                postID = post.postID,
+                                postID = postId,
                                 userID = currentUser.userId,
                                 content = commentText.value,
                                 parentCommentID = replyingToCommentId.value
                             )
                         }
                     },
-                    isSending = postViewModel.addCommentState.value is Response.Loading,
+                    isSending = postState.isAddingComment,
                     replyingTo = replyingToCommentId.value?.let { id ->
-                        (postViewModel.comments.value as? Response.Success)?.data?.find { it.commentID == id }?.commentOwnerUserName
+                        postState.comments.find { it.commentID == id }?.commentOwnerUserName
                     }
                 )
             }
@@ -131,19 +131,20 @@ fun CommentBottomSheet(
 
 @Composable
 private fun CommentsList(
-    post: Post,
+    postId: String,
+    postState: PostState,
     postViewModel: PostViewModel,
     currentUserId: String,
     onReplyClick: (String) -> Unit
 ) {
-    val commentsResponse by postViewModel.comments.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    when (commentsResponse) {
-        is Response.Loading -> LoadingState()
-        is Response.Success -> {
-            val comments = (commentsResponse as Response.Success<List<Comment>>).data
+    when {
+        postState.isLoadingComments -> LoadingState()
+        postState.loadCommentsError.isNotBlank() -> ErrorState("Failed to load comments")
+        else -> {
+            val comments = postState.comments
             if (comments.isEmpty()) {
                 EmptyState("No comments yet")
             } else {
@@ -160,7 +161,7 @@ private fun CommentsList(
                     ) { index, comment ->
                         val replies = comments.filter { it.parentCommentID == comment.commentID }
                         AnimatedCommentItem(
-                            post = post,
+                            postId = postId,
                             comment = comment,
                             replies = replies,
                             delayIndex = index,
@@ -179,13 +180,12 @@ private fun CommentsList(
                 }
             }
         }
-        is Response.Error -> ErrorState("Failed to load comments")
     }
 }
 
 @Composable
 private fun AnimatedCommentItem(
-    post: Post,
+    postId: String,
     comment: Comment,
     replies: List<Comment>,
     delayIndex: Int,
@@ -207,7 +207,7 @@ private fun AnimatedCommentItem(
     ) {
         Column {
             CommentItem(
-                post = post,
+                postId = postId,
                 comment = comment,
                 postViewModel = postViewModel,
                 currentUserId = currentUserId,
@@ -220,14 +220,14 @@ private fun AnimatedCommentItem(
             if (showReplies && replies.isNotEmpty()) {
                 replies.forEach { reply ->
                     CommentItem(
-                        post = post,
+                        postId = postId,
                         comment = reply,
                         postViewModel = postViewModel,
                         currentUserId = currentUserId,
                         onReplyClick = onReplyClick,
                         isReply = true,
                         onShowRepliesClick = {},
-                        hasReplies = false, // Không cho phép Reply cấp 2
+                        hasReplies = false,
                         repliesVisible = false,
                         repliesCount = 0
                     )
@@ -239,7 +239,7 @@ private fun AnimatedCommentItem(
 
 @Composable
 private fun CommentItem(
-    post: Post,
+    postId: String,
     comment: Comment,
     postViewModel: PostViewModel,
     currentUserId: String,
@@ -250,8 +250,10 @@ private fun CommentItem(
     repliesVisible: Boolean,
     repliesCount: Int = 0
 ) {
-    val commentLikeLoadingStates by postViewModel.commentLikeLoadingStates.collectAsState()
-    val isLiking = commentLikeLoadingStates[comment.commentID] == true
+    val postState by postViewModel.postState.collectAsState()
+    val isLiking = postState.isLikingComment
+
+
     val isLiked = comment.likes.contains(currentUserId)
 
     Row(
@@ -292,7 +294,7 @@ private fun CommentItem(
                         enabled = !isLiking,
                         onClick = {
                             postViewModel.toggleLikeComment(
-                                postID = post.postID,
+                                postID = postId,
                                 comment = comment,
                                 userID = currentUserId
                             )
@@ -319,7 +321,6 @@ private fun CommentItem(
                         )
                     }
                 }
-                // Chỉ hiển thị nút "Reply" cho Comment gốc
                 if (!isReply) {
                     Text(
                         text = "Reply",
@@ -436,7 +437,7 @@ private fun AsyncImageWithPlaceholder(
         painter = painter,
         contentDescription = "User Avatar",
         modifier = modifier,
-        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+        contentScale = ContentScale.Crop
     )
 }
 

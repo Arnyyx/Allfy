@@ -1,11 +1,10 @@
 package com.arny.allfy.domain.usecase.authentication
 
 data class AuthenticationUseCases(
-    val isUserAuthenticated: IsUserAuthenticated,
-    val firebaseAuthState: FirebaseAuthState,
-    val firebaseSignOut: FirebaseSignOut,
-    val firebaseSignIn: FirebaseSignIn,
-    val firebaseSignUp: FirebaseSignUp,
-    val getCurrentUserID: GetCurrentUserID,
-    val signInWithGoogle: SignInWithGoogle
+    val getCurrentUserId: GetCurrentUserId,
+    val isAuthenticated: IsAuthenticated,
+    val signOut: SignOut,
+    val signInWithEmail: SignInWithEmail,
+    val signUp: SignUp,
+    val signInWithGoogle: SignInWithGoogle,
 )

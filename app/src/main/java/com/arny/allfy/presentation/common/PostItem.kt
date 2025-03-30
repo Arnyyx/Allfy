@@ -1,13 +1,11 @@
 package com.arny.allfy.presentation.common
 
-import android.util.Log
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -22,7 +20,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
@@ -55,30 +52,21 @@ import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.utils.Response
-import com.arny.allfy.utils.Screens
+import com.arny.allfy.utils.Screen
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
 fun PostItem(
-    initialPost: Post,
+    post: Post,
     currentUser: User,
-    postOwner: User,
     postViewModel: PostViewModel = hiltViewModel(),
     navController: NavController
 ) {
-    val currentPost by postViewModel.currentPost.collectAsState()
-    var post by remember { mutableStateOf(initialPost) }
+    val postState by postViewModel.postState.collectAsState()
+    val isLikeLoading = postState.isLikingPost
 
-    val likeLoadingStates by postViewModel.likeLoadingStates.collectAsState()
-    LaunchedEffect(currentPost) {
-        if (currentPost?.postID == initialPost.postID) {
-            post = currentPost ?: initialPost
-        }
-    }
-
-    val isLikeLoading by remember(likeLoadingStates) {
-        derivedStateOf { likeLoadingStates[post.postID] ?: false }
-    }
     val isLiked by remember(post) {
         derivedStateOf { post.likes.contains(currentUser.userId) }
     }
@@ -86,18 +74,9 @@ fun PostItem(
         derivedStateOf { post.likes.size }
     }
     val commentCount by remember(post) {
-        derivedStateOf { post.comments.size ?: 0 }
+        derivedStateOf { post.comments.size }
     }
     val showComments = remember { mutableStateOf(false) }
-
-    val deletePostState by postViewModel.deletePostState.collectAsState()
-    LaunchedEffect(deletePostState) {
-        if (deletePostState is Response.Success && (deletePostState as Response.Success).data) {
-            navController.navigate(Screens.FeedScreen.route) {
-                popUpTo(Screens.FeedScreen.route) { inclusive = true }
-            }
-        }
-    }
 
     Card(
         modifier = Modifier
@@ -116,7 +95,8 @@ fun PostItem(
         Column(modifier = Modifier.fillMaxWidth()) {
             PostHeader(
                 post = post,
-                postOwner = postOwner,
+                postOwnerUsername = post.postOwnerUsername,
+                postOwnerImageUrl = post.postOwnerImageUrl,
                 navController = navController,
                 currentUser = currentUser,
                 onEditPost = { /* TODO: Implement edit post */ },
@@ -137,10 +117,11 @@ fun PostItem(
 
     if (showComments.value) {
         CommentBottomSheet(
-            post = post,
+            postId = post.postID,
             currentUser = currentUser,
+            postViewModel = postViewModel,
             isVisible = showComments.value,
-            onDismiss = { showComments.value = false }
+            onDismiss = { showComments.value = false },
         )
     }
 }
@@ -148,7 +129,8 @@ fun PostItem(
 @Composable
 private fun PostHeader(
     post: Post,
-    postOwner: User,
+    postOwnerUsername: String,
+    postOwnerImageUrl: String,
     navController: NavController,
     currentUser: User,
     onEditPost: () -> Unit = {},
@@ -162,12 +144,12 @@ private fun PostHeader(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.clickable {
-                navController.navigate("profile/${post.postOwnerID}")
+                navController.navigate(Screen.ProfileScreen(post.postOwnerID))
             }
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(postOwner.imageUrl.ifEmpty { null })
+                    .data(postOwnerImageUrl.ifEmpty { null })
                     .crossfade(true)
                     .placeholder(R.drawable.ic_user)
                     .error(R.drawable.ic_user)
@@ -181,7 +163,7 @@ private fun PostHeader(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = postOwner.username,
+                text = postOwnerUsername,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
@@ -490,8 +472,8 @@ private fun LikeButton(
             onClick = {
                 onClick()
                 scale = 0.8f
-                kotlinx.coroutines.GlobalScope.launch {
-                    kotlinx.coroutines.delay(50)
+                GlobalScope.launch {
+                    delay(50)
                     scale = 1f
                 }
             },
