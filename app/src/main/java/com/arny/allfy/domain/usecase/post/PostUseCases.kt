@@ -6,8 +6,9 @@ class PostUseCases(
     val deletePost: DeletePost,
     val getPostByID: GetPostByID,
     val getPostsByIds: GetPostsByIDs,
-    val toggleLikePost: ToggleLikePost,
     val getComments: GetComments,
     val addComment: AddComment,
-    val toggleLikeComment: ToggleLikeComment
+    val toggleLikePost: ToggleLikePost,
+    val toggleLikeComment: ToggleLikeComment,
+    val logPostView: LogPostView
 )

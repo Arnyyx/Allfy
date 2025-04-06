@@ -9,7 +9,7 @@ import javax.inject.Inject
 class SendVoiceMessage @Inject constructor(
     private val messageRepository: MessageRepository
 ) {
-    operator fun invoke(
+    suspend operator fun invoke(
         conversationID: String, audioUri: Uri,
     ): Flow<Response<String>> {
         return messageRepository.sendVoiceMessage(conversationID, audioUri)

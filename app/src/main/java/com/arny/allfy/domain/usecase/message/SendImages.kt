@@ -9,7 +9,7 @@ import javax.inject.Inject
 class SendImages @Inject constructor(
     private val messageRepository: MessageRepository
 ) {
-    operator fun invoke(
+    suspend operator fun invoke(
         conversationID: String,
         imageUris: List<Uri>
     ): Flow<Response<List<String>>> {

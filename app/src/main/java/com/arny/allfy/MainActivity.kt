@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
 
         updateFcmToken(auth, db)
         requestNotificationPermission()
+        KeywordExtractor.initialize(applicationContext)
 
         setContent {
             AllfyTheme {
@@ -218,7 +219,7 @@ fun AllfyApp(
             FeedScreen(navController, userViewModel, postViewModel, authViewModel)
         }
         composable<Screen.SplashScreen> {
-            SplashScreen(navController, authViewModel)
+            SplashScreen(navController, authViewModel, userViewModel)
         }
         composable<Screen.ProfileScreen> {
             val args = it.toRoute<Screen.ProfileScreen>()

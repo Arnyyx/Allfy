@@ -51,15 +51,17 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    val _uploadState = mutableStateOf(Response.Success(false))
-
     fun uploadPost(post: Post, imageUris: List<Uri>) {
         viewModelScope.launch {
             postUseCases.uploadPost(post, imageUris).collect { response ->
                 when (response) {
                     is Response.Loading -> _postState.update { it.copy(isUploadingPost = true) }
                     is Response.Success -> {
-                        _postState.update { it.copy(isUploadingPost = false) }
+                        _postState.update {
+                            it.copy(
+                                isUploadingPost = false, uploadPostSuccess = true
+                            )
+                        }
                     }
 
                     is Response.Error -> _postState.update { it.copy(uploadPostError = response.message) }
@@ -74,7 +76,12 @@ class PostViewModel @Inject constructor(
                 when (response) {
                     is Response.Loading -> _postState.update { it.copy(isDeletingPost = true) }
                     is Response.Success -> {
-                        _postState.update { it.copy(isDeletingPost = false) }
+                        _postState.update {
+                            it.copy(
+                                isDeletingPost = false,
+                                deletePostSuccess = true
+                            )
+                        }
                     }
 
                     is Response.Error -> _postState.update { it.copy(deletePostError = response.message) }
@@ -117,20 +124,38 @@ class PostViewModel @Inject constructor(
         }
     }
 
-    fun toggleLikePost(post: Post, userID: String) {
+    fun toggleLikePost(post: Post, userId: String) {
         viewModelScope.launch {
-            postUseCases.toggleLikePost(post, userID).collect { response ->
+            _postState.update { currentState ->
+                val updatedPosts = currentState.feedPosts.map { p ->
+                    if (p.postID == post.postID) {
+                        val updatedLikes = if (p.likes.contains(userId)) {
+                            p.likes - userId
+                        } else {
+                            p.likes + userId
+                        }
+                        p.copy(likes = updatedLikes)
+                    } else {
+                        p
+                    }
+                }
+                currentState.copy(
+                    feedPosts = updatedPosts,
+                    isLikingPost = false
+                )
+            }
+            postUseCases.toggleLikePost(post, userId).collect { response ->
                 when (response) {
                     is Response.Loading -> _postState.update { it.copy(isLikingPost = true) }
+                    is Response.Error -> _postState.update { it.copy(likePostError = response.message) }
                     is Response.Success -> {
                         _postState.update { it.copy(isLikingPost = false) }
                     }
-
-                    is Response.Error -> _postState.update { it.copy(likePostError = response.message) }
                 }
             }
         }
     }
+
 
     fun loadComments(postID: String) {
         viewModelScope.launch {
@@ -187,6 +212,39 @@ class PostViewModel @Inject constructor(
         }
     }
 
+    fun logPostView(userID: String, postID: String) {
+        viewModelScope.launch {
+            postUseCases.logPostView(userID, postID).collect { response ->
+                when (response) {
+                    is Response.Loading -> _postState.update { it.copy(isLoggingView = true) }
+                    is Response.Success -> _postState.update { it.copy(isLoggingView = false) }
+                    is Response.Error -> _postState.update { it.copy(logViewError = response.message) }
+                }
+            }
+        }
+    }
+
+
+    fun clearUploadPostState() {
+        _postState.update {
+            it.copy(
+                isUploadingPost = false,
+                uploadPostError = "",
+                uploadPostSuccess = false
+            )
+        }
+    }
+
+    fun clearFeedState() {
+        _postState.update {
+            it.copy(
+                isLoadingFeed = false,
+                feedPosts = emptyList(),
+                feedPostsError = ""
+            )
+        }
+    }
+
     fun clearPostState() {
         _postState.value = PostState()
     }
@@ -197,11 +255,13 @@ data class PostState(
     val feedPosts: List<Post> = emptyList(),
     val feedPostsError: String = "",
 
-    val isUploadingPost: Boolean = false,
+    var isUploadingPost: Boolean = false,
     val uploadPostError: String = "",
+    val uploadPostSuccess: Boolean = false,
 
     val isDeletingPost: Boolean = false,
     val deletePostError: String = "",
+    val deletePostSuccess: Boolean = false,
 
     val isLoadingPost: Boolean = false,
     val post: Post = Post(),
@@ -222,5 +282,8 @@ data class PostState(
     val addCommentError: String = "",
 
     val isLikingComment: Boolean = false,
-    val likeCommentError: String = ""
+    val likeCommentError: String = "",
+
+    val isLoggingView: Boolean = false,
+    val logViewError: String = ""
 )

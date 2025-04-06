@@ -6,5 +6,5 @@ import javax.inject.Inject
 class GetUsersByIDs @Inject constructor(
     private val repository: UserRepository
 ) {
-    operator fun invoke(userIDs: List<String>) = repository.getUsersByIDs(userIDs)
+    suspend operator fun invoke(userIDs: List<String>) = repository.getUsersByIDs(userIDs)
 }

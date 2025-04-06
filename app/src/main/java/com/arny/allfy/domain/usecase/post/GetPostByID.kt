@@ -6,5 +6,5 @@ import javax.inject.Inject
 class GetPostByID @Inject constructor(
     private val repository: PostRepository
 ) {
-    operator fun invoke(postID: String) = repository.getPostByID(postID)
+    suspend operator fun invoke(postID: String) = repository.getPostByID(postID)
 }

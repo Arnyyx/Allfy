@@ -31,6 +31,7 @@ import com.arny.allfy.domain.usecase.post.GetComments
 import com.arny.allfy.domain.usecase.post.GetFeedPosts
 import com.arny.allfy.domain.usecase.post.GetPostByID
 import com.arny.allfy.domain.usecase.post.GetPostsByIDs
+import com.arny.allfy.domain.usecase.post.LogPostView
 import com.arny.allfy.domain.usecase.post.PostUseCases
 import com.arny.allfy.domain.usecase.post.ToggleLikeComment
 import com.arny.allfy.domain.usecase.post.ToggleLikePost
@@ -176,7 +177,8 @@ class AllfyModule {
         toggleLikePost = ToggleLikePost(repository),
         addComment = AddComment(repository),
         getComments = GetComments(repository),
-        toggleLikeComment = ToggleLikeComment(repository)
+        toggleLikeComment = ToggleLikeComment(repository),
+        logPostView = LogPostView(repository)
     )
 
     @Singleton

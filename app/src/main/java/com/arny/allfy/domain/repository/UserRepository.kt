@@ -7,16 +7,19 @@ import kotlinx.coroutines.flow.Flow
 
 interface UserRepository {
     fun getUserDetails(userID: String): Flow<Response<User>>
-    fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>>
+    suspend fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>>
     fun getUsersByIDs(userIDs: List<String>): Flow<Response<List<User>>>
 
-    fun followUser(currentUserId: String, targetUserId: String): Flow<Response<Boolean>>
-    fun unfollowUser(currentUserId: String, targetUserId: String): Flow<Response<Boolean>>
+    suspend fun followUser(currentUserId: String, targetUserId: String): Flow<Response<Boolean>>
+    suspend fun unfollowUser(currentUserId: String, targetUserId: String): Flow<Response<Boolean>>
 
-    fun getFollowers(followerIds: List<String>): Flow<Response<List<User>>>
-    fun getFollowers(userId: String): Flow<Response<List<User>>>
-    fun getFollowingCount(userId: String): Flow<Response<Int>>
-    fun getFollowersCount(userId: String): Flow<Response<Int>>
-    fun getPostIds(userId: String): Flow<Response<List<String>>>
-    fun checkIfFollowing(currentUserId: String, targetUserId: String): Flow<Response<Boolean>>
+    suspend fun getFollowers(followerIds: List<String>): Flow<Response<List<User>>>
+    suspend fun getFollowers(userId: String): Flow<Response<List<User>>>
+    suspend fun getFollowingCount(userId: String): Flow<Response<Int>>
+    suspend fun getFollowersCount(userId: String): Flow<Response<Int>>
+    suspend fun getPostIds(userId: String): Flow<Response<List<String>>>
+    suspend fun checkIfFollowing(
+        currentUserId: String,
+        targetUserId: String
+    ): Flow<Response<Boolean>>
 }

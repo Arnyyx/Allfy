@@ -6,5 +6,5 @@ import javax.inject.Inject
 class GetFollowersCount @Inject constructor(
     private val userRepository: UserRepository
 ) {
-    operator fun invoke(userId: String) = userRepository.getFollowersCount(userId)
+    suspend operator fun invoke(userId: String) = userRepository.getFollowersCount(userId)
 }

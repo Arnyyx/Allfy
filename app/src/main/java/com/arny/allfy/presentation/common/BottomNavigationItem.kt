@@ -24,6 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.utils.Screen
 
 enum class BottomNavigationItem(val icon: ImageVector, val route: Screen, val label: String) {
@@ -37,7 +38,8 @@ enum class BottomNavigationItem(val icon: ImageVector, val route: Screen, val la
 fun BottomNavigation(
     selectedItem: BottomNavigationItem,
     navController: NavController,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRefresh: (() -> Unit)? = null,
 ) {
     NavigationBar(
         modifier = modifier
@@ -51,12 +53,16 @@ fun BottomNavigation(
             NavigationBarItem(
                 selected = isSelected,
                 onClick = {
-                    navController.navigate(item.route) {
-                        popUpTo(Screen.FeedScreen) {
-                            saveState = true
+                    if (item == BottomNavigationItem.Feed && isSelected && onRefresh != null) {
+                        onRefresh()
+                    } else {
+                        navController.navigate(item.route) {
+                            popUpTo(Screen.FeedScreen) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                        launchSingleTop = true
-                        restoreState = true
                     }
                 },
                 icon = {

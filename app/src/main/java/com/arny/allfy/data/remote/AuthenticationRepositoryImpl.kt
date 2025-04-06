@@ -8,8 +8,10 @@ import com.arny.allfy.utils.Response
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
@@ -32,25 +34,26 @@ class AuthenticationRepositoryImpl @Inject constructor(
         return firebaseAuth.currentUser != null
     }
 
-    override fun signInWithEmail(email: String, password: String): Flow<Response<Boolean>> = flow {
-        emit(Response.Loading)
-        try {
-            firebaseAuth.signInWithEmailAndPassword(email, password).await()
-            emit(Response.Success(true))
-        } catch (e: Exception) {
-            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+    override fun signInWithEmail(email: String, password: String): Flow<Response<Boolean>> =
+        flow {
+            emit(Response.Loading)
+            try {
+                firebaseAuth.signInWithEmailAndPassword(email, password).await()
+                emit(Response.Success(true))
+            } catch (e: Exception) {
+                emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+            }
         }
-    }
 
     override fun signOut(): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
         try {
-            emit(Response.Loading)
             firebaseAuth.signOut()
             emit(Response.Success(true))
         } catch (e: Exception) {
-            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+            emit(Response.Error(e.localizedMessage ?: "Error signing out"))
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun signUp(
         userName: String,

@@ -270,7 +270,7 @@ exports.generateVideoThumbnail = onObjectFinalized(
       if (postDoc.exists) {
         const postData = postDoc.data();
         const updatedMediaItems = postData.mediaItems.map((item) =>
-          item.url.includes(fileName)
+          item.url.includes(fileName) && item.mediaType === "video"
             ? { ...item, thumbnailUrl: thumbUrl }
             : item
         );
@@ -278,7 +278,7 @@ exports.generateVideoThumbnail = onObjectFinalized(
         await postRef.update({
           mediaItems: updatedMediaItems,
         });
-        functions.logger.log(`Updated Post ${postId} with thumbnail URL: ${thumbUrl}`);
+        functions.logger.log(`Updated Post ${postId} with thumbnail URL: ${thumbUrl} for video ${fileName}`);
       } else {
         functions.logger.log(`Post ${postId} not found in Firestore`);
       }

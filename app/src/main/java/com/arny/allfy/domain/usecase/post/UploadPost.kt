@@ -10,7 +10,7 @@ import javax.inject.Inject
 class UploadPost @Inject constructor(
     private val repository: PostRepository
 ) {
-    operator fun invoke(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>> {
+    suspend operator fun invoke(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>> {
         return repository.uploadPost(post, imageUris)
     }
 }

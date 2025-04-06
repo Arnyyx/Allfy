@@ -6,7 +6,7 @@ import javax.inject.Inject
 class InitializeConversation @Inject constructor(
     private val messageRepository: MessageRepository
 ) {
-    operator fun invoke(
+    suspend operator fun invoke(
         userIds: List<String>
     ) = messageRepository.initializeConversation(userIds)
 }

@@ -9,7 +9,18 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -20,10 +31,24 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,11 +76,7 @@ import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.viewmodel.PostViewModel
-import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun PostItem(
@@ -64,19 +85,18 @@ fun PostItem(
     postViewModel: PostViewModel = hiltViewModel(),
     navController: NavController
 ) {
-    val postState by postViewModel.postState.collectAsState()
-    val isLikeLoading = postState.isLikingPost
-
-    val isLiked by remember(post) {
+    val context = LocalContext.current
+    val isLiked by remember(post.likes) {
         derivedStateOf { post.likes.contains(currentUser.userId) }
     }
-    val likeCount by remember(post) {
+    val likeCount by remember(post.likes) {
         derivedStateOf { post.likes.size }
     }
-    val commentCount by remember(post) {
-        derivedStateOf { post.comments.size }
+    val commentCount by remember(post.commentCount) {
+        derivedStateOf { post.commentCount }
     }
     val showComments = remember { mutableStateOf(false) }
+    var isLikeLoading by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -85,8 +105,11 @@ fun PostItem(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = {
-                        if (!isLiked)
+                        if (!isLiked) {
+                            isLikeLoading = true
                             postViewModel.toggleLikePost(post, currentUser.userId)
+                            isLikeLoading = false // Reset sau khi toggle
+                        }
                     }
                 )
             },
@@ -99,10 +122,9 @@ fun PostItem(
                 postOwnerImageUrl = post.postOwnerImageUrl,
                 navController = navController,
                 currentUser = currentUser,
-                onEditPost = { /* TODO: Implement edit post */ },
                 onDeletePost = { postViewModel.deletePost(post.postID, post.postOwnerID) }
             )
-            PostImages(post)
+            if (post.mediaItems.isNotEmpty()) PostImages(post)
             if (post.caption.isNotBlank()) PostCaption(post.caption)
             PostActions(
                 isLiked = isLiked,
@@ -110,7 +132,11 @@ fun PostItem(
                 likeCount = likeCount,
                 commentCount = commentCount,
                 showComments = showComments,
-                onLikeClick = { postViewModel.toggleLikePost(post, currentUser.userId) }
+                onLikeClick = {
+                    isLikeLoading = true
+                    postViewModel.toggleLikePost(post, currentUser.userId)
+                    isLikeLoading = false
+                }
             )
         }
     }
@@ -121,7 +147,7 @@ fun PostItem(
             currentUser = currentUser,
             postViewModel = postViewModel,
             isVisible = showComments.value,
-            onDismiss = { showComments.value = false },
+            onDismiss = { showComments.value = false }
         )
     }
 }
@@ -133,10 +159,13 @@ private fun PostHeader(
     postOwnerImageUrl: String,
     navController: NavController,
     currentUser: User,
+    isDeletingPost: Boolean = false,
     onEditPost: () -> Unit = {},
     onDeletePost: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(8.dp)
@@ -199,7 +228,7 @@ private fun PostHeader(
                     DropdownMenuItem(
                         text = { Text("Delete Post") },
                         onClick = {
-                            onDeletePost()
+                            showDeleteConfirmDialog = true
                             showMenu = false
                         },
                         leadingIcon = {
@@ -207,7 +236,8 @@ private fun PostHeader(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = "Delete Post"
                             )
-                        }
+                        },
+                        enabled = !isDeletingPost
                     )
                 }
                 DropdownMenuItem(
@@ -219,6 +249,20 @@ private fun PostHeader(
             }
         }
     }
+    if (showDeleteConfirmDialog) {
+        Dialog(
+            title = "Delete Post?",
+            message = "Are you sure you want to delete this post?",
+            confirmText = "Delete",
+            dismissText = "Cancel",
+            onConfirm = {
+                onDeletePost()
+                showDeleteConfirmDialog = false
+            },
+            onDismiss = { showDeleteConfirmDialog = false },
+        )
+    }
+
 }
 
 @Composable
@@ -472,10 +516,6 @@ private fun LikeButton(
             onClick = {
                 onClick()
                 scale = 0.8f
-                GlobalScope.launch {
-                    delay(50)
-                    scale = 1f
-                }
             },
             enabled = !isLoading,
             modifier = Modifier.scale(animatedSize)

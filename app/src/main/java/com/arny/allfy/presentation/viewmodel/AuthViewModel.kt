@@ -36,8 +36,14 @@ class AuthViewModel @Inject constructor(
             authUseCases.signInWithEmail(email, password).collect { response ->
                 when (response) {
                     is Response.Loading -> _authState.update { it.copy(isLoading = true) }
-                    is Response.Success -> _authState.update { it.copy(isAuthenticated = true) }
                     is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
+                    is Response.Success -> _authState.update {
+                        it.copy(
+                            isLoading = false,
+                            isAuthenticated = true
+                        )
+                    }
+
                 }
             }
 
@@ -50,7 +56,11 @@ class AuthViewModel @Inject constructor(
                 when (response) {
                     is Response.Loading -> _authState.update { it.copy(isLoading = true) }
                     is Response.Success -> _authState.update {
-                        it.copy(isAuthenticated = true)
+                        it.copy(
+                            isLoading = false,
+                            isAuthenticated = true
+                        )
+
                     }
 
                     is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
@@ -64,13 +74,12 @@ class AuthViewModel @Inject constructor(
             authUseCases.signUp(username, email, password).collect { response ->
                 when (response) {
                     is Response.Loading -> _authState.update { it.copy(isLoading = true) }
+                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
                     is Response.Success -> {
+                        _authState.update { it.copy(isLoading = false) }
                         signInWithEmail(email, password)
                     }
-
-                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
                 }
-
             }
         }
     }
@@ -80,12 +89,30 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             authUseCases.signOut().collect { response ->
                 when (response) {
-                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
-                    is Response.Success -> {
-                        _authState.update { it.copy(isAuthenticated = false) }
+                    is Response.Loading -> _authState.update {
+                        it.copy(
+                            isLoading = true,
+                            errorMessage = null
+                        )
                     }
 
-                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
+                    is Response.Success -> {
+                        _authState.update {
+                            it.copy(
+                                isLoading = false,
+                                isAuthenticated = false,
+                                currentUserId = "",
+                                errorMessage = null
+                            )
+                        }
+                    }
+
+                    is Response.Error -> _authState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = response.message
+                        )
+                    }
                 }
             }
         }
@@ -98,7 +125,10 @@ class AuthViewModel @Inject constructor(
                     is Response.Loading -> _authState.update { it.copy(isLoading = true) }
                     is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
                     is Response.Success -> _authState.update {
-                        it.copy(currentUserId = response.data)
+                        it.copy(
+                            isLoading = false,
+                            currentUserId = response.data,
+                        )
                     }
 
                 }
@@ -106,7 +136,6 @@ class AuthViewModel @Inject constructor(
             }
         }
     }
-
 
     fun clearAuthState() {
         viewModelScope.launch {

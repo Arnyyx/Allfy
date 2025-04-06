@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -17,9 +18,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
@@ -28,12 +32,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.times
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -57,6 +65,7 @@ fun CreatePostScreen(
     postViewModel: PostViewModel,
     userViewModel: UserViewModel
 ) {
+    val context = LocalContext.current
     val userState by userViewModel.userState.collectAsState()
     val postState by postViewModel.postState.collectAsState()
     var captionText by remember { mutableStateOf("") }
@@ -64,7 +73,11 @@ fun CreatePostScreen(
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
-        selectedImageUris = uris
+        val validUris = uris.filter { uri ->
+            val mimeType = context.contentResolver.getType(uri)
+            mimeType?.startsWith("image/") == true || mimeType?.startsWith("video/") == true
+        }
+        selectedImageUris = validUris
     }
     val pagerState = rememberPagerState(
         initialPage = 0,
@@ -78,6 +91,14 @@ fun CreatePostScreen(
                 CreatePostTopBar(
                     onCancelClick = { navHostController.popBackStack() },
                     onShareClick = {
+                        if (captionText.isBlank() && selectedImageUris.isEmpty()) {
+                            Toast.makeText(
+                                context,
+                                "Please add content to share",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@CreatePostTopBar
+                        }
                         val post = Post(
                             postOwnerID = userState.currentUser.userId,
                             postOwnerUsername = userState.currentUser.username,
@@ -88,7 +109,7 @@ fun CreatePostScreen(
                         postViewModel.uploadPost(post, selectedImageUris)
                     },
                     isLoading = postState.isUploadingPost,
-                    isShareEnabled = selectedImageUris.isNotEmpty()
+                    isShareEnabled = captionText.isNotBlank() || selectedImageUris.isNotEmpty()
                 )
                 if (postState.isUploadingPost) {
                     LinearProgressIndicator(
@@ -98,32 +119,76 @@ fun CreatePostScreen(
                 }
             }
         },
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
     ) { paddingValues ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
         ) {
-            ImagePickerSection(
-                selectedImageUris = selectedImageUris,
-                pagerState = pagerState,
-                onImagePick = { launcher.launch("image/*;video/*") }
-            )
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImageWithPlaceholder(
+                        imageUrl = userState.currentUser.imageUrl,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Text(
+                        text = userState.currentUser.username,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                }
+            }
 
-            CaptionInput(
-                captionText = captionText,
-                onCaptionChange = { captionText = it }
-            )
-            PostOptions()
-            UploadStateHandler(
-                postState = postState,
-                onSuccess = { navHostController.popBackStack() }
-            )
+            if (selectedImageUris.isNotEmpty()) {
+                item {
+                    ImagePickerSection(
+                        selectedImageUris = selectedImageUris,
+                        pagerState = pagerState,
+                        onImagePick = { launcher.launch("*/*") },
+                        onRemoveImage = { index ->
+                            selectedImageUris =
+                                selectedImageUris.toMutableList().apply { removeAt(index) }
+                        }
+                    )
+                }
+            }
+
+            item {
+                CaptionInput(
+                    captionText = captionText,
+                    onCaptionChange = { captionText = it }
+                )
+            }
+
+            item {
+                PostOptions(
+                    onAddMedia = { launcher.launch("*/*") }
+                )
+            }
+
+            item {
+                UploadStateHandler(
+                    postState = postState,
+                    postViewModel = postViewModel,
+                    onSuccess = { navHostController.popBackStack() }
+                )
+            }
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,16 +201,16 @@ private fun CreatePostTopBar(
     TopAppBar(
         title = {
             Text(
-                text = "New Post",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                text = "Create Post",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
             )
         },
         navigationIcon = {
             IconButton(onClick = onCancelClick) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Cancel",
+                    contentDescription = "Close",
                     tint = MaterialTheme.colorScheme.onSurface
                 )
             }
@@ -153,50 +218,50 @@ private fun CreatePostTopBar(
         actions = {
             TextButton(
                 onClick = onShareClick,
-                enabled = isShareEnabled && !isLoading
+                enabled = isShareEnabled && !isLoading,
+                modifier = Modifier.padding(end = 8.dp)
             ) {
                 Text(
-                    text = "Share",
+                    text = "Post",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (isShareEnabled && !isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(
-                        alpha = 0.5f
-                    )
+                    color = if (isShareEnabled && !isLoading)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                 )
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
             titleContentColor = MaterialTheme.colorScheme.onSurface
-        )
+        ),
+        modifier = Modifier.shadow(1.dp)
     )
 }
 
 @Composable
 private fun ImagePickerSection(
     selectedImageUris: List<Uri>,
-    pagerState: androidx.compose.foundation.pager.PagerState,
-    onImagePick: () -> Unit
+    pagerState: PagerState,
+    onImagePick: () -> Unit,
+    onRemoveImage: (Int) -> Unit
 ) {
-    val context = LocalContext.current
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(500.dp)
-            .clickable(onClick = onImagePick),
+            .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        AnimatedVisibility(
-            visible = selectedImageUris.isNotEmpty(),
-            enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
-        ) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                val uri = selectedImageUris[page]
-                val mimeType = context.contentResolver.getType(uri)
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            val uri = selectedImageUris[page]
+            val mimeType = LocalContext.current.contentResolver.getType(uri)
 
+            Box(modifier = Modifier.fillMaxSize()) {
                 if (mimeType?.startsWith("image/") == true) {
                     AsyncImageWithPlaceholder(
                         imageUrl = uri.toString(),
@@ -206,25 +271,27 @@ private fun ImagePickerSection(
                 } else if (mimeType?.startsWith("video/") == true) {
                     VideoPlayer(uri = uri, modifier = Modifier.fillMaxSize())
                 }
+
+                IconButton(
+                    onClick = { onRemoveImage(page) },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .background(
+                            color = Color.Black.copy(alpha = 0.6f),
+                            shape = CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Remove",
+                        tint = Color.White
+                    )
+                }
             }
         }
-        if (selectedImageUris.isEmpty()) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.placehoder_image),
-                    contentDescription = "Placeholder Image",
-                    modifier = Modifier.size(100.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Tap to select images or videos",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-        } else if (selectedImageUris.size > 1) {
+
+        if (selectedImageUris.size > 1) {
             Text(
                 text = "${pagerState.currentPage + 1}/${selectedImageUris.size}",
                 color = Color.White,
@@ -232,7 +299,7 @@ private fun ImagePickerSection(
                     .align(Alignment.BottomEnd)
                     .padding(8.dp)
                     .background(
-                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
+                        color = Color.Black.copy(alpha = 0.6f),
                         shape = RoundedCornerShape(16.dp)
                     )
                     .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -310,51 +377,68 @@ private fun CaptionInput(
 ) {
     TextField(
         value = captionText,
-        onValueChange = onCaptionChange,
+        onValueChange = { if (it.length <= 2200) onCaptionChange(it) },
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        placeholder = { Text("Write a caption...") },
-        maxLines = 5,
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        placeholder = {
+            Text(
+                "Write a caption...",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        },
+        textStyle = MaterialTheme.typography.bodyLarge,
         colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            disabledContainerColor = Color.Transparent,
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent
         ),
-        shape = RoundedCornerShape(8.dp)
+        maxLines = 20,
+        supportingText = {
+            Text(
+                text = "${captionText.length}/2200",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
     )
 }
 
 @Composable
-private fun PostOptions() {
+private fun PostOptions(
+    onAddMedia: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        IconButton(onClick = { /* TODO: Implement tagging people */ }) {
+        IconButton(onClick = onAddMedia) {
             Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = "Tag People",
-                tint = MaterialTheme.colorScheme.onSurface
+                imageVector = Icons.Default.Add,
+                contentDescription = "Add Media",
+                tint = MaterialTheme.colorScheme.primary
             )
         }
-        IconButton(onClick = { /* TODO: Implement adding location */ }) {
-            Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = "Add Location",
-                tint = MaterialTheme.colorScheme.onSurface
-            )
-        }
-        IconButton(onClick = { /* TODO: Implement advanced settings */ }) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "More Options",
-                tint = MaterialTheme.colorScheme.onSurface
-            )
+
+        Row {
+            IconButton(onClick = { /* Tag people */ }) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Tag People",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = { /* Add location */ }) {
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = "Add Location",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -362,46 +446,27 @@ private fun PostOptions() {
 @Composable
 private fun UploadStateHandler(
     postState: PostState,
+    postViewModel: PostViewModel,
     onSuccess: () -> Unit
 ) {
     when {
+        postState.isUploadingPost -> {}
+
         postState.uploadPostError.isNotEmpty() -> {
             Text(
                 text = postState.uploadPostError,
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .padding(16.dp)
+                modifier = Modifier.padding(16.dp)
             )
         }
 
-        !postState.isUploadingPost -> {
+        postState.uploadPostSuccess -> {
             Toast("Upload successful")
-//            onSuccess()
-        }
-    }
-}
-
-@Composable
-private fun ErrorState(
-    message: String,
-    onRetry: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = message,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        TextButton(onClick = onRetry) {
-            Text("Retry")
+            LaunchedEffect(Unit) {
+                onSuccess()
+                postViewModel.clearUploadPostState()
+            }
         }
     }
 }

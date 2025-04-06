@@ -8,7 +8,7 @@ import javax.inject.Inject
 class AddComment @Inject constructor(
     private val repository: PostRepository
 ) {
-    operator fun invoke(
+    suspend operator fun invoke(
         postID: String,
         userID: String,
         content: String,

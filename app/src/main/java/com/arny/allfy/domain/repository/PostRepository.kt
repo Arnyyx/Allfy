@@ -8,29 +8,31 @@ import com.arny.allfy.utils.Response
 import kotlinx.coroutines.flow.Flow
 
 interface PostRepository {
-    fun getFeedPosts(
+    suspend fun getFeedPosts(
         currentUser: String,
         lastVisible: Post? = null,
         limit: Int = Constants.POST_LIMIT
     ): Flow<Response<List<Post>>>
 
-    fun uploadPost(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>>
-    fun deletePost(postID: String, currentUserID: String): Flow<Response<Boolean>>
-    fun getPostByID(postID: String): Flow<Response<Post>>
-    fun getPostsByIDs(postIDs: List<String>): Flow<Response<List<Post>>>
+    suspend fun uploadPost(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>>
+    suspend fun deletePost(postID: String, currentUserID: String): Flow<Response<Boolean>>
+    suspend fun getPostByID(postID: String): Flow<Response<Post>>
+    suspend fun getPostsByIDs(postIDs: List<String>): Flow<Response<List<Post>>>
 
-    fun toggleLikePost(post: Post, userID: String): Flow<Response<Post>>
-    fun getComments(postID: String): Flow<Response<List<Comment>>>
-    fun addComment(
+    suspend fun toggleLikePost(post: Post, userID: String): Flow<Response<Boolean>>
+    suspend fun getComments(postID: String): Flow<Response<List<Comment>>>
+    suspend fun addComment(
         postID: String,
         commentOwnerID: String,
         content: String,
         parentCommentID: String? = null
     ): Flow<Response<Boolean>>
 
-    fun toggleLikeComment(
+    suspend fun toggleLikeComment(
         postID: String,
         commentID: String,
         userID: String
     ): Flow<Response<Comment>>
+
+    suspend fun logPostView(userID: String, postID: String): Flow<Response<Boolean>>
 }

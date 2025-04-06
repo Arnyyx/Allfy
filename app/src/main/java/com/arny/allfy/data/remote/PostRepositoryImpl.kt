@@ -1,5 +1,6 @@
 package com.arny.allfy.data.remote
 
+import KeywordExtractor.extractKeywords
 import android.content.Context
 import android.net.Uri
 import android.util.Log
@@ -14,10 +15,13 @@ import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import java.util.UUID
 import javax.inject.Inject
 
@@ -27,85 +31,141 @@ class PostRepositoryImpl @Inject constructor(
     private val context: Context
 ) : PostRepository {
 
-    override fun getFeedPosts(
+    override suspend fun getFeedPosts(
         currentUser: String,
         lastVisible: Post?,
         limit: Int
     ): Flow<Response<List<Post>>> = flow {
         emit(Response.Loading)
         try {
-            val query = firestore.collection(Constants.COLLECTION_NAME_POSTS)
-                .whereNotEqualTo("postOwnerID", currentUser)
-                .orderBy("timestamp", Query.Direction.DESCENDING)
-                .limit(limit.toLong())
+            val retrofit = Retrofit.Builder()
+                .baseUrl("https://recommendationserver.onrender.com/")
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+            val api = retrofit.create(RecommendationApi::class.java)
+            val response = api.getRecommendations(currentUser, limit)
 
-            val finalQuery = if (lastVisible != null) {
-                query.startAfter(lastVisible.timestamp)
-            } else {
-                query
-            }
+            if (response.isSuccessful) {
+                val recommendedPostIds = response.body()?.postIds ?: emptyList()
 
-            val snapshot = finalQuery.get().await()
-            val posts = snapshot.toObjects(Post::class.java)
-            emit(Response.Success(posts))
-        } catch (e: Exception) {
-            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
-        }
-    }
-
-
-    override fun uploadPost(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>> = flow {
-        emit(Response.Loading)
-        try {
-            val postID = firestore.collection(Constants.COLLECTION_NAME_POSTS).document().id
-
-            val initialPost = post.copy(
-                postID = postID,
-                mediaItems = emptyList()
-            )
-            firestore.collection(Constants.COLLECTION_NAME_POSTS)
-                .document(postID)
-                .set(initialPost)
-                .await()
-
-            val mediaItems = imageUris.map { uri ->
-                val mimeType = context.contentResolver.getType(uri)
-                val mediaType = when {
-                    mimeType?.startsWith("image/") == true -> "image"
-                    mimeType?.startsWith("video/") == true -> "video"
-                    mimeType?.startsWith("audio/") == true -> "audio"
-                    else -> "image"
+                if (recommendedPostIds.isEmpty()) {
+                    emit(Response.Success(emptyList()))
+                    return@flow
                 }
-                val mediaUrl = uploadImageToFirebase(postID, uri)
-                MediaItem(url = mediaUrl, mediaType = mediaType, thumbnailUrl = null)
+
+                val query = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                    .whereIn("postID", recommendedPostIds)
+                    .orderBy("timestamp", Query.Direction.DESCENDING)
+
+                val finalQuery = if (lastVisible != null) {
+                    query.startAfter(lastVisible.timestamp)
+                } else {
+                    query
+                }
+
+                val snapshot = finalQuery.get().await()
+                val posts = snapshot.toObjects(Post::class.java)
+                emit(Response.Success(posts))
+            } else {
+                emit(Response.Error("Failed to fetch recommendations"))
             }
-
-            val postWithMedia = initialPost.copy(mediaItems = mediaItems)
-            firestore.collection(Constants.COLLECTION_NAME_POSTS)
-                .document(postID)
-                .set(postWithMedia)
-                .await()
-
-            val postRef = mapOf(
-                "postId" to postID,
-                "timestamp" to postWithMedia.timestamp
-            )
-            firestore.collection(Constants.COLLECTION_NAME_USERS)
-                .document(post.postOwnerID)
-                .collection("posts")
-                .document(postID)
-                .set(postRef)
-                .await()
-
-            emit(Response.Success(true))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 
-    override fun deletePost(postID: String, currentUserID: String): Flow<Response<Boolean>> = flow {
+    override suspend fun uploadPost(post: Post, imageUris: List<Uri>): Flow<Response<Boolean>> =
+        flow {
+            emit(Response.Loading)
+            try {
+                val postID = firestore.collection(Constants.COLLECTION_NAME_POSTS).document().id
+
+                val keywords = extractKeywords(post.caption)
+                val initialPost = post.copy(
+                    postID = postID,
+                    mediaItems = emptyList(),
+                    keywords = keywords
+                )
+                firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                    .document(postID)
+                    .set(initialPost)
+                    .await()
+
+                val mediaItems = if (imageUris.isNotEmpty()) {
+                    imageUris.map { uri ->
+                        val mimeType = context.contentResolver.getType(uri)
+                        val mediaType = when {
+                            mimeType?.startsWith("image/") == true -> "image"
+                            mimeType?.startsWith("video/") == true -> "video"
+                            mimeType?.startsWith("audio/") == true -> "audio"
+                            else -> "image"
+                        }
+                        val mediaUrl = uploadImageToFirebase(postID, uri)
+                        MediaItem(url = mediaUrl, mediaType = mediaType, thumbnailUrl = null)
+                    }
+                } else {
+                    emptyList()
+                }
+
+                val postWithMedia = initialPost.copy(mediaItems = mediaItems)
+                firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                    .document(postID)
+                    .set(postWithMedia)
+                    .await()
+
+                val postRef = mapOf(
+                    "postId" to postID,
+                    "timestamp" to postWithMedia.timestamp
+                )
+                firestore.collection(Constants.COLLECTION_NAME_USERS)
+                    .document(post.postOwnerID)
+                    .collection("posts")
+                    .document(postID)
+                    .set(postRef)
+                    .await()
+
+                emit(Response.Success(true))
+            } catch (e: Exception) {
+                emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+            }
+        }
+
+    private suspend fun uploadImageToFirebase(postID: String, uri: Uri): String {
+        try {
+            val mimeType = context.contentResolver.getType(uri)
+            val extension = when {
+                mimeType?.startsWith("image/") == true -> ".jpg"
+                mimeType?.startsWith("video/") == true -> ".mp4"
+                mimeType?.startsWith("audio/") == true -> ".mp3"
+                else -> ".jpg"
+            }
+            val fileName = "${System.currentTimeMillis()}$extension"
+            val storageRef =
+                storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID/$fileName")
+            storageRef.putFile(uri).await()
+            return storageRef.downloadUrl.await().toString()
+        } catch (e: Exception) {
+            Log.e("PostRepositoryImpl", "uploadImageToFirebase: $e")
+            throw e
+        }
+    }
+
+    override suspend fun deletePost(
+        postID: String,
+        currentUserID: String
+    ): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
         try {
+            val postSnapshot = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .get()
+                .await()
+
+            if (!postSnapshot.exists()) {
+                emit(Response.Error("Post not found"))
+                return@flow
+            }
+
             firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
                 .delete()
@@ -118,7 +178,27 @@ class PostRepositoryImpl @Inject constructor(
                 .delete()
                 .await()
 
-            storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID").delete().await()
+            val storageRef = storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID")
+            val listResult = storageRef.listAll().await()
+
+            for (item in listResult.items) {
+                item.delete().await()
+            }
+
+            val commentsSnapshot = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .collection("comments")
+                .get()
+                .await()
+
+            for (commentDoc in commentsSnapshot.documents) {
+                firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                    .document(postID)
+                    .collection("comments")
+                    .document(commentDoc.id)
+                    .delete()
+                    .await()
+            }
 
             emit(Response.Success(true))
         } catch (e: Exception) {
@@ -126,7 +206,7 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getPostByID(postID: String): Flow<Response<Post>> = flow {
+    override suspend fun getPostByID(postID: String): Flow<Response<Post>> = flow {
         emit(Response.Loading)
         try {
             val snapshot =
@@ -144,7 +224,7 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getPostsByIDs(postIDs: List<String>): Flow<Response<List<Post>>> = flow {
+    override suspend fun getPostsByIDs(postIDs: List<String>): Flow<Response<List<Post>>> = flow {
         emit(Response.Loading)
         try {
             if (postIDs.isEmpty()) {
@@ -171,28 +251,8 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun toggleLikePost(post: Post, userID: String): Flow<Response<Post>> = flow {
-        emit(Response.Loading)
-        try {
-            val isLiked = post.likes.contains(userID)
-            val updatedLikes = if (isLiked) {
-                post.likes - userID
-            } else {
-                post.likes + userID
-            }
-            val updatedPost = post.copy(likes = updatedLikes)
-            firestore.collection(Constants.COLLECTION_NAME_POSTS)
-                .document(post.postID)
-                .set(updatedPost)
-                .await()
 
-            emit(Response.Success(updatedPost))
-        } catch (e: Exception) {
-            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
-        }
-    }
-
-    override fun getComments(postID: String): Flow<Response<List<Comment>>> = flow {
+    override suspend fun getComments(postID: String): Flow<Response<List<Comment>>> = flow {
         emit(Response.Loading)
         try {
             val snapshot = firestore.collection(Constants.COLLECTION_NAME_POSTS)
@@ -237,7 +297,7 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun addComment(
+    override suspend fun addComment(
         postID: String,
         commentOwnerID: String,
         content: String,
@@ -261,33 +321,18 @@ class PostRepositoryImpl @Inject constructor(
                 .document(commentID)
                 .set(newComment)
                 .await()
+
+            firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .update("commentCount", FieldValue.increment(1))
+                .await()
             emit(Response.Success(true))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
 
-    private suspend fun uploadImageToFirebase(postID: String, uri: Uri): String {
-        try {
-            val mimeType = context.contentResolver.getType(uri)
-            val extension = when {
-                mimeType?.startsWith("image/") == true -> ".jpg"
-                mimeType?.startsWith("video/") == true -> ".mp4"
-                mimeType?.startsWith("audio/") == true -> ".mp3"
-                else -> ".jpg"
-            }
-            val fileName = "${System.currentTimeMillis()}$extension"
-            val storageRef =
-                storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID/$fileName")
-            storageRef.putFile(uri).await()
-            return storageRef.downloadUrl.await().toString()
-        } catch (e: Exception) {
-            Log.e("PostRepositoryImpl", "uploadImageToFirebase: $e")
-            throw e
-        }
-    }
-
-    override fun toggleLikeComment(
+    override suspend fun toggleLikeComment(
         postID: String,
         commentID: String,
         userID: String
@@ -328,4 +373,62 @@ class PostRepositoryImpl @Inject constructor(
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
     }
+
+    override suspend fun logPostView(userID: String, postID: String): Flow<Response<Boolean>> =
+        flow {
+            emit(Response.Loading)
+            try {
+                val activityId = "${userID}_${postID}_view"
+                val activityRef = firestore.collection("userActivity").document(activityId)
+
+                activityRef.set(
+                    mapOf(
+                        "userId" to userID,
+                        "postId" to postID,
+                        "type" to "view",
+                        "timestamp" to FieldValue.serverTimestamp()
+                    ),
+                    SetOptions.merge()
+                ).await()
+
+                emit(Response.Success(true))
+            } catch (e: Exception) {
+                emit(Response.Error(e.localizedMessage ?: "Error logging view"))
+            }
+        }
+
+    override suspend fun toggleLikePost(post: Post, userID: String): Flow<Response<Boolean>> =
+        flow {
+            emit(Response.Loading)
+            try {
+                val postRef = firestore.collection("posts").document(post.postID)
+                val activityId = "${userID}_${post.postID}_like"
+                val activityRef = firestore.collection("userActivity").document(activityId)
+
+                firestore.runTransaction { transaction ->
+                    val snapshot = transaction.get(postRef)
+                    val currentLikes = snapshot.get("likes") as? List<String> ?: emptyList()
+                    val isLiked = userID in currentLikes
+                    val updatedLikes = if (isLiked) currentLikes - userID else currentLikes + userID
+
+                    transaction.update(postRef, "likes", updatedLikes)
+                    if (isLiked) {
+                        transaction.delete(activityRef)
+                    } else {
+                        transaction.set(
+                            activityRef,
+                            mapOf(
+                                "userId" to userID,
+                                "postId" to post.postID,
+                                "type" to "like",
+                                "timestamp" to FieldValue.serverTimestamp()
+                            )
+                        )
+                    }
+                }.await()
+                emit(Response.Success(true))
+            } catch (e: Exception) {
+                emit(Response.Error(e.localizedMessage ?: "Error toggling like"))
+            }
+        }
 }

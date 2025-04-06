@@ -2,6 +2,7 @@ package com.arny.allfy.presentation.ui
 
 import android.util.Log
 import androidx.compose.animation.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,7 +23,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -142,6 +145,7 @@ private fun ProfileContent(
 ) {
     val user = if (isCurrentUser) userState.currentUser else userState.otherUser
     var isFollowing by remember { mutableStateOf(userState.isFollowing) }
+    var selectedTabIndex by remember { mutableStateOf(0) }
 
     LaunchedEffect(key1 = userState.currentUser) {
         if (!isCurrentUser && userState.currentUser.userId.isNotEmpty()) {
@@ -256,9 +260,43 @@ private fun ProfileContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        PostsGrid(navController, userState.postsIds, postViewModel)
+        TabRow(
+            selectedTabIndex = selectedTabIndex,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Tab(
+                selected = selectedTabIndex == 0,
+                onClick = { selectedTabIndex = 0 },
+                icon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.placehoder_image),
+                        contentDescription = null
+                    )
+                },
+            )
+            Tab(
+                selected = selectedTabIndex == 1,
+                onClick = { selectedTabIndex = 1 },
+                icon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_comment),
+                        contentDescription = null
+                    )
+                },
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        PostsGrid(
+            navController = navController,
+            postsIds = userState.postsIds,
+            postViewModel = postViewModel,
+            showMediaPosts = selectedTabIndex == 0
+        )
     }
 }
+
 
 @Composable
 private fun StatisticItem(label: String, value: String) {
@@ -276,23 +314,63 @@ private fun StatisticItem(label: String, value: String) {
 private fun PostsGrid(
     navController: NavController,
     postsIds: List<String>,
-    postViewModel: PostViewModel
+    postViewModel: PostViewModel,
+    showMediaPosts: Boolean
 ) {
-
     LaunchedEffect(postsIds) {
         postViewModel.getPostsByIds(postsIds)
     }
     val postState by postViewModel.postState.collectAsState()
     val loadedPosts = postState.posts.associateBy { it.postID }
+
+    val filteredPostIds = postsIds.filter { postId ->
+        val post = loadedPosts[postId]
+        if (post != null) {
+            if (showMediaPosts) post.mediaItems.isNotEmpty() else post.mediaItems.isEmpty()
+        } else {
+            false
+        }
+    }
+
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+        columns = GridCells.Fixed(if (showMediaPosts) 3 else 1),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        itemsIndexed(postsIds, key = { _, postId -> postId }) { _, postId ->
-            AnimatedPostThumbnail(postId, loadedPosts, navController)
+        itemsIndexed(filteredPostIds, key = { _, postId -> postId }) { _, postId ->
+            if (showMediaPosts) {
+                AnimatedPostThumbnail(postId, loadedPosts, navController)
+            } else {
+                TextOnlyPostItem(postId, loadedPosts, navController)
+            }
         }
+    }
+}
+
+@Composable
+private fun TextOnlyPostItem(
+    postId: String,
+    loadedPosts: Map<String, Post>,
+    navController: NavController
+) {
+    val post = loadedPosts[postId] ?: return
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(8.dp))
+            .clickable { navController.navigate(Screen.PostDetailScreen(postId)) }
+            .padding(12.dp)
+    ) {
+        Text(
+            text = post.caption,
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

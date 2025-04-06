@@ -6,6 +6,6 @@ import javax.inject.Inject
 class CheckIfFollowing @Inject constructor(
     private val userRepository: UserRepository
 ) {
-    operator fun invoke(currentUserId: String, targetUserId: String) =
+    suspend operator fun invoke(currentUserId: String, targetUserId: String) =
         userRepository.checkIfFollowing(currentUserId, targetUserId)
 }

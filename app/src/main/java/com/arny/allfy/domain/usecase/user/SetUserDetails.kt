@@ -11,7 +11,7 @@ class SetUserDetails @Inject constructor(
     private val repository: UserRepository
 
 ) {
-    operator fun invoke(user: User, imageUri: Uri?): Flow<Response<Boolean>> {
+    suspend  operator fun invoke(user: User, imageUri: Uri?): Flow<Response<Boolean>> {
         return repository.setUserDetails(user, imageUri)
     }
 }

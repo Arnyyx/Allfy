@@ -1,5 +1,7 @@
 package com.arny.allfy.domain.model
 
+import com.google.firebase.Timestamp
+
 data class User(
     val userId: String = "",
     val username: String = "",
@@ -7,5 +9,5 @@ data class User(
     val email: String = "",
     val imageUrl: String = "",
     val bio: String? = "",
-    val fcmToken: String = ""
+    val fcmToken: String = "",
 )

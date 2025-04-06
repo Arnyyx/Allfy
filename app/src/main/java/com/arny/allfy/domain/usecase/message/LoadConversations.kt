@@ -9,7 +9,7 @@ import javax.inject.Inject
 class LoadConversations @Inject constructor(
     private val messageRepository: MessageRepository
 ) {
-    operator fun invoke(
+    suspend operator fun invoke(
         userId: String
     ): Flow<Response<List<Conversation>>> {
         return messageRepository.loadConversations(userId)

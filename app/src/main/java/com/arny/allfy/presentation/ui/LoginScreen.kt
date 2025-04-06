@@ -49,7 +49,7 @@ fun LoginScreen(
     LaunchedEffect(authState) {
         when {
             authState.isAuthenticated -> {
-                navController.navigate(Screen.FeedScreen) {
+                navController.navigate(Screen.SplashScreen) {
                     popUpTo(Screen.LoginScreen) { inclusive = true }
                 }
             }

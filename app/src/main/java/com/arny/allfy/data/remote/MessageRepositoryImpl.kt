@@ -25,7 +25,7 @@ class MessageRepositoryImpl @Inject constructor(
     private val storage: FirebaseStorage,
 ) : MessageRepository {
 
-    override fun getMessages(conversationID: String): Flow<List<Message>> = callbackFlow {
+    override suspend fun getMessages(conversationID: String): Flow<List<Message>> = callbackFlow {
         val messagesRef = firebaseDatabase.reference
             .child("conversations")
             .child(conversationID)
@@ -59,7 +59,7 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun loadConversations(userId: String): Flow<Response<List<Conversation>>> =
+    override suspend fun loadConversations(userId: String): Flow<Response<List<Conversation>>> =
         callbackFlow {
             trySend(Response.Loading)
             val conversationRef = firebaseDatabase.reference.child("conversations")
@@ -109,7 +109,10 @@ class MessageRepositoryImpl @Inject constructor(
             awaitClose { conversationRef.removeEventListener(listener) }
         }
 
-    override fun sendMessage(conversationID: String, message: Message): Flow<Response<Boolean>> =
+    override suspend fun sendMessage(
+        conversationID: String,
+        message: Message
+    ): Flow<Response<Boolean>> =
         flow {
             emit(Response.Loading)
             try {
@@ -140,7 +143,7 @@ class MessageRepositoryImpl @Inject constructor(
             }
         }
 
-    override fun sendImages(
+    override suspend fun sendImages(
         conversationID: String,
         imageUris: List<Uri>
     ): Flow<Response<List<String>>> =
@@ -227,7 +230,7 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun initializeConversation(
+    override suspend fun initializeConversation(
         userIds: List<String>
     ): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
@@ -250,7 +253,7 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun sendVoiceMessage(
+    override suspend fun sendVoiceMessage(
         conversationID: String,
         audioUri: Uri
     ): Flow<Response<String>> = flow {

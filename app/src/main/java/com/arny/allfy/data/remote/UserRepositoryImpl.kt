@@ -19,33 +19,37 @@ class UserRepositoryImpl @Inject constructor(
     private val storage: FirebaseStorage
 ) : UserRepository {
 
-    override fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>> = flow {
-        emit(Response.Loading)
-        try {
-            val updates = mutableMapOf<String, Any>()
-            if (imageUri != null) {
-                val storageRef =
-                    storage.getReference("${Constants.COLLECTION_NAME_USERS}/${user.userId}/profile.jpg")
-                storageRef.putFile(imageUri).await()
-                val imageUrl = storageRef.downloadUrl.await().toString()
-                updates["imageUrl"] = imageUrl
+    override suspend fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>> =
+        flow {
+            emit(Response.Loading)
+            try {
+                val updates = mutableMapOf<String, Any>()
+                if (imageUri != null) {
+                    val storageRef =
+                        storage.getReference("${Constants.COLLECTION_NAME_USERS}/${user.userId}/profile.jpg")
+                    storageRef.putFile(imageUri).await()
+                    val imageUrl = storageRef.downloadUrl.await().toString()
+                    updates["imageUrl"] = imageUrl
+                }
+                if (user.username.isNotEmpty()) updates["username"] = user.username
+                if (user.name.isNotEmpty()) updates["name"] = user.name
+                if (user.bio?.isNotEmpty()!!) updates["bio"] = user.bio
+                if (user.email.isNotEmpty()) updates["email"] = user.email
+
+                firestore.collection(Constants.COLLECTION_NAME_USERS)
+                    .document(user.userId)
+                    .update(updates)
+                    .await()
+                emit(Response.Success(true))
+            } catch (e: Exception) {
+                emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
             }
-            if (user.username.isNotEmpty()) updates["username"] = user.username
-            if (user.name.isNotEmpty()) updates["name"] = user.name
-            if (user.bio?.isNotEmpty()!!) updates["bio"] = user.bio
-            if (user.email.isNotEmpty()) updates["email"] = user.email
-
-            firestore.collection(Constants.COLLECTION_NAME_USERS)
-                .document(user.userId)
-                .update(updates)
-                .await()
-            emit(Response.Success(true))
-        } catch (e: Exception) {
-            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
         }
-    }
 
-    override fun followUser(currentUserId: String, targetUserId: String): Flow<Response<Boolean>> =
+    override suspend fun followUser(
+        currentUserId: String,
+        targetUserId: String
+    ): Flow<Response<Boolean>> =
         flow {
             emit(Response.Loading)
             try {
@@ -78,7 +82,7 @@ class UserRepositoryImpl @Inject constructor(
             }
         }
 
-    override fun unfollowUser(
+    override suspend fun unfollowUser(
         currentUserId: String,
         targetUserId: String
     ): Flow<Response<Boolean>> = flow {
@@ -106,6 +110,10 @@ class UserRepositoryImpl @Inject constructor(
 
     override fun getUserDetails(userID: String): Flow<Response<User>> = flow {
         emit(Response.Loading)
+        if (userID.isBlank()) {
+            emit(Response.Error("Invalid userID"))
+            return@flow
+        }
         try {
             val snapshot = firestore.collection(Constants.COLLECTION_NAME_USERS)
                 .document(userID)
@@ -123,24 +131,25 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getFollowers(followerIds: List<String>): Flow<Response<List<User>>> = flow {
-        emit(Response.Loading)
-        try {
-            if (followerIds.isEmpty()) {
-                emit(Response.Success(emptyList()))
-                return@flow
-            }
-            val documents = firestore.collection(Constants.COLLECTION_NAME_USERS)
-                .whereIn("userId", followerIds)
-                .get()
-                .await()
+    override suspend fun getFollowers(followerIds: List<String>): Flow<Response<List<User>>> =
+        flow {
+            emit(Response.Loading)
+            try {
+                if (followerIds.isEmpty()) {
+                    emit(Response.Success(emptyList()))
+                    return@flow
+                }
+                val documents = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                    .whereIn("userId", followerIds)
+                    .get()
+                    .await()
 
-            val followers = documents.mapNotNull { it.toObject(User::class.java) }
-            emit(Response.Success(followers))
-        } catch (e: Exception) {
-            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+                val followers = documents.mapNotNull { it.toObject(User::class.java) }
+                emit(Response.Success(followers))
+            } catch (e: Exception) {
+                emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+            }
         }
-    }
 
     override fun getUsersByIDs(userIDs: List<String>): Flow<Response<List<User>>> = flow {
         emit(Response.Loading)
@@ -161,7 +170,7 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getFollowers(userId: String): Flow<Response<List<User>>> = flow {
+    override suspend fun getFollowers(userId: String): Flow<Response<List<User>>> = flow {
         emit(Response.Loading)
         try {
             val followerDocs = firestore.collection(Constants.COLLECTION_NAME_USERS)
@@ -189,7 +198,7 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getFollowingCount(userId: String): Flow<Response<Int>> = flow {
+    override suspend fun getFollowingCount(userId: String): Flow<Response<Int>> = flow {
         emit(Response.Loading)
         try {
             val snapshot = firestore.collection(Constants.COLLECTION_NAME_USERS)
@@ -203,7 +212,7 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getFollowersCount(userId: String): Flow<Response<Int>> = flow {
+    override suspend fun getFollowersCount(userId: String): Flow<Response<Int>> = flow {
         emit(Response.Loading)
         try {
             val snapshot = firestore.collection(Constants.COLLECTION_NAME_USERS)
@@ -217,7 +226,7 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getPostIds(userId: String): Flow<Response<List<String>>> = flow {
+    override suspend fun getPostIds(userId: String): Flow<Response<List<String>>> = flow {
         emit(Response.Loading)
         try {
             val snapshot = firestore.collection(Constants.COLLECTION_NAME_USERS)
@@ -232,7 +241,7 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun checkIfFollowing(
+    override suspend fun checkIfFollowing(
         currentUserId: String,
         targetUserId: String
     ): Flow<Response<Boolean>> = flow {

@@ -6,7 +6,7 @@ import javax.inject.Inject
 class ToggleLikeComment @Inject constructor(
     private val repository: PostRepository
 ) {
-    operator fun invoke(postID: String, commentID: String, userID: String) =
+    suspend operator fun invoke(postID: String, commentID: String, userID: String) =
         repository.toggleLikeComment(postID, commentID, userID)
 
 }

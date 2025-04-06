@@ -10,7 +10,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -19,6 +23,7 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.arny.allfy.R
+import com.arny.allfy.presentation.common.Dialog
 import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
@@ -35,71 +40,98 @@ fun SettingsScreen(
     postViewModel: PostViewModel,
     userViewModel: UserViewModel
 ) {
-    val authState = authViewModel.authState.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(authState) {
-        if (!authState.value.isAuthenticated && !authState.value.isLoading) {
-            authViewModel.clearAuthState()
-            chatViewModel.clearChatState()
-            postViewModel.clearPostState()
-            userViewModel.clearUserState()
-            navController.navigate(Screen.LoginScreen) {
-                popUpTo(Screen.SettingsScreen) { inclusive = true }
+        when {
+            authState.isLoading -> {}
+            authState.errorMessage != null -> {}
+            !authState.isAuthenticated && authState.errorMessage == null -> {
+                chatViewModel.clearChatState()
+                postViewModel.clearPostState()
+                userViewModel.clearUserState()
+                navController.navigate(Screen.SplashScreen) {
+                    popUpTo(0) { inclusive = true }
+                    launchSingleTop = true
+                }
+                authViewModel.clearAuthState()
             }
         }
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.Close, contentDescription = "Back")
+            Column {
+                TopAppBar(
+                    title = { Text("Settings") },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Back")
+                        }
                     }
+                )
+                if (authState.isLoading) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-            )
+            }
         }
     ) { innerPadding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            item {
-                SettingsSection("Account")
-            }
-            items(accountSettings) { setting ->
-                SettingsItem(setting)
-            }
-
-            item {
-                SettingsSection("Privacy")
-            }
-            items(privacySettings) { setting ->
-                SettingsItem(setting)
-            }
-
-            item {
-                SettingsSection("Help")
-            }
-            items(helpSettings) { setting ->
-                SettingsItem(setting)
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = {
-                        authViewModel.signOut()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                ) {
-                    Text("Log Out")
+            LazyColumn(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item { SettingsSection("Account") }
+                items(accountSettings) { setting ->
+                    SettingsItem(setting)
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+
+                item { SettingsSection("Privacy") }
+                items(privacySettings) { setting ->
+                    SettingsItem(setting)
+                }
+
+                item { SettingsSection("Help") }
+                items(helpSettings) { setting ->
+                    SettingsItem(setting)
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { showLogoutDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        enabled = !authState.isLoading
+                    ) {
+                        Text("Log Out")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             }
+
+            if (showLogoutDialog) {
+                Dialog(
+                    title = "Confirm Logout",
+                    message = "Are you sure you want to log out?",
+                    confirmText = "Yes",
+                    dismissText = "Cancel",
+                    onConfirm = {
+                        authViewModel.signOut()
+                        showLogoutDialog = false
+                    },
+                    onDismiss = { showLogoutDialog = false },
+                )
+            }
+
+            authState.errorMessage?.let { }
         }
     }
 }

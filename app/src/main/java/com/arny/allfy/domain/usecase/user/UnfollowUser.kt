@@ -6,6 +6,6 @@ import javax.inject.Inject
 class UnfollowUser @Inject constructor(
     private val repository: UserRepository
 ) {
-    operator fun invoke(currentUserId: String, targetUserId: String) =
+    suspend operator fun invoke(currentUserId: String, targetUserId: String) =
         repository.unfollowUser(currentUserId, targetUserId)
 }

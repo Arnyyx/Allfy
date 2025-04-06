@@ -22,12 +22,14 @@ import androidx.navigation.NavController
 import com.arny.allfy.R
 import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
+import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Screen
 
 @Composable
 fun SplashScreen(
     navController: NavController,
-    authViewModel: AuthViewModel
+    authViewModel: AuthViewModel,
+    userViewModel: UserViewModel
 ) {
     val scale = remember { Animatable(0f) }
     val authState = authViewModel.authState.collectAsState()
@@ -43,14 +45,21 @@ fun SplashScreen(
         )
     }
 
+    LaunchedEffect(authState.value.currentUserId) {
+        if (authState.value.currentUserId.isNotEmpty()) {
+            userViewModel.getCurrentUser(authState.value.currentUserId)
+            navController.navigate(Screen.FeedScreen) {
+                popUpTo(Screen.SplashScreen) { inclusive = true }
+            }
+        }
+    }
+
+
     LaunchedEffect(authState.value) {
         when {
             authState.value.isLoading -> {}
-
             authState.value.isAuthenticated -> {
-                navController.navigate(Screen.FeedScreen) {
-                    popUpTo(Screen.SplashScreen) { inclusive = true }
-                }
+                authViewModel.getCurrentUserId()
             }
 
             else -> {

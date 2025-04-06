@@ -1,5 +1,6 @@
 package com.arny.allfy.presentation.ui
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -52,6 +54,7 @@ import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.SwipeRefreshState
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.delay
 
@@ -65,18 +68,10 @@ fun FeedScreen(
     val authState by authViewModel.authState.collectAsState()
     val userState by userViewModel.userState.collectAsState()
 
-    LaunchedEffect(Unit) {
-        authViewModel.getCurrentUserId()
-    }
-
-    LaunchedEffect(authState.currentUserId) {
-        authState.currentUserId.let { userId ->
-            userViewModel.getCurrentUser(userId)
-        }
-    }
 
     when {
         userState.isLoadingCurrentUser -> LoadingScreenWithNavigation(navController)
+        userState.errorCurrentUser.isNotEmpty() -> ErrorToast(userState.errorCurrentUser)
         userState.currentUser.userId.isNotEmpty() -> {
             FeedContent(
                 currentUser = userState.currentUser,
@@ -85,8 +80,8 @@ fun FeedScreen(
             )
         }
 
-        userState.errorCurrentUser.isNotEmpty() -> ErrorToast(userState.errorCurrentUser)
         else -> LoadingScreenWithNavigation(navController)
+
     }
 }
 
@@ -99,10 +94,7 @@ private fun FeedContent(
 ) {
     val state by postViewModel.postState.collectAsState()
     val listState = rememberLazyListState()
-    val refreshState =
-        rememberSwipeRefreshState(isRefreshing = state.isLoadingFeed && state.feedPosts.isEmpty())
 
-    // Load feed posts khi có currentUser
     LaunchedEffect(currentUser.userId) {
         if (state.feedPosts.isEmpty() && !state.isLoadingFeed) {
             postViewModel.getFeedPosts(currentUser.userId)
@@ -121,9 +113,7 @@ private fun FeedContent(
                         )
                     },
                     actions = {
-                        IconButton(onClick = {
-                            navController.navigate(Screen.ConversationsScreen)
-                        }) {
+                        IconButton(onClick = { navController.navigate(Screen.ConversationsScreen) }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_message),
                                 contentDescription = "Messages",
@@ -144,39 +134,43 @@ private fun FeedContent(
                 }
             }
         },
-        bottomBar = { BottomNavigation(BottomNavigationItem.Feed, navController) }
+        bottomBar = {
+            BottomNavigation(
+                selectedItem = BottomNavigationItem.Feed,
+                navController = navController,
+                onRefresh = {
+                    postViewModel.clearFeedState()
+                    postViewModel.getFeedPosts(currentUser.userId)
+                }
+            )
+        }
     ) { paddingValues ->
-        SwipeRefresh(
-            state = refreshState,
-            onRefresh = { postViewModel.getFeedPosts(currentUser.userId) }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
-                when {
-                    state.feedPostsError.isNotBlank() -> ErrorScreen(state.feedPostsError)
-                    state.feedPosts.isEmpty() && !state.isLoadingFeed -> EmptyScreen("No posts available")
-                    else -> {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            itemsIndexed(
-                                items = state.feedPosts,
-                                key = { _, post -> post.postID }
-                            ) { _, post ->
-                                AnimatedPostItem(
-                                    post = post,
-                                    currentUser = currentUser,
-                                    postViewModel = postViewModel,
-                                    navController = navController
-                                )
-                            }
+            when {
+                state.feedPostsError.isNotBlank() -> ErrorScreen(state.feedPostsError)
+                state.feedPosts.isEmpty() && !state.isLoadingFeed -> EmptyScreen("No posts available")
+                else -> {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(
+                            items = state.feedPosts,
+                            key = { _, post -> post.postID }
+                        ) { _, post ->
+                            AnimatedPostItem(
+                                post = post,
+                                currentUser = currentUser,
+                                postViewModel = postViewModel,
+                                navController = navController
+                            )
                         }
                     }
                 }
@@ -192,6 +186,10 @@ private fun AnimatedPostItem(
     postViewModel: PostViewModel,
     navController: NavController
 ) {
+    LaunchedEffect(post.postID) {
+        postViewModel.logPostView(currentUser.userId, post.postID)
+    }
+
     AnimatedVisibility(
         visible = true,
         enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 }
@@ -205,7 +203,6 @@ private fun AnimatedPostItem(
     }
 }
 
-// Các composable khác giữ nguyên như trong code gốc
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LoadingScreenWithNavigation(navController: NavController) {
