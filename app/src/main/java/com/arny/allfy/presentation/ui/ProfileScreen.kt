@@ -39,6 +39,10 @@ import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserState
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Screen
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -243,7 +247,6 @@ private fun ProfileContent(
                     onClick = {
                         navController.navigate(
                             Screen.ChatScreen(
-                                currentUserId = userState.currentUser.userId,
                                 otherUserId = userState.otherUser.userId
                             )
                         )

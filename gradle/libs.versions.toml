@@ -2,6 +2,7 @@
 accompanistSwiperefresh = "0.27.0"
 agp = "8.7.3"
 androidxJunit = "1.2.1"
+cameraCamera2 = "1.4.2"
 coilCompose = "2.4.0"
 coilComposeVersion = "2.4.0"
 converterGson = "2.9.0"
@@ -55,6 +56,9 @@ serialization = "1.8.0"
 
 [libraries]
 accompanist-swiperefresh = { module = "com.google.accompanist:accompanist-swiperefresh", version.ref = "accompanistSwiperefresh" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "cameraCamera2" }
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCamera2" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "cameraCamera2" }
 androidx-compose-ui-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "uiToolingPreview" }
 androidx-compose-ui-ui-tooling2 = { module = "androidx.compose.ui:ui-tooling", version.ref = "uiTooling" }

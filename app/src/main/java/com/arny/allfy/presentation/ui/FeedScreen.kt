@@ -48,7 +48,6 @@ import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.BottomNavigation
 import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.common.PostItem
-import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.utils.Screen
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
@@ -273,7 +272,7 @@ private fun EmptyScreen(message: String) {
 private fun ErrorToast(message: String) {
     var showToast by remember { mutableStateOf(true) }
     if (showToast) {
-        Toast(message)
+        Toast.makeText(LocalContext.current, message, Toast.LENGTH_SHORT).show()
         LaunchedEffect(Unit) {
             delay(2000)
             showToast = false

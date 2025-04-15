@@ -1,6 +1,7 @@
 package com.arny.allfy.utils
 
 import kotlinx.serialization.Serializable
+import org.webrtc.SurfaceViewRenderer
 
 @Serializable
 sealed class Screen {
@@ -40,22 +41,14 @@ sealed class Screen {
     @Serializable
     data class ChatScreen(
         val conversationId: String? = null,
-        val currentUserId: String,
         val otherUserId: String
     ) : Screen()
 
-    @Serializable
-    data class IncomingCall(
-        val callerId: String,
-        val calleeId: String,
-        val callId: String
-    ) : Screen()
 
     @Serializable
     data class CallScreen(
         val conversationId: String,
-        val currentUserId: String,
+        val isCaller: Boolean,
         val otherUserId: String
     ) : Screen()
-
 }

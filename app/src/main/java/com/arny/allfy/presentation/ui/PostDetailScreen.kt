@@ -24,7 +24,6 @@ import androidx.navigation.NavController
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.PostItem
-import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response

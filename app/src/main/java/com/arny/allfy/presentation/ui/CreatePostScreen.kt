@@ -52,7 +52,6 @@ import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
-import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.presentation.viewmodel.PostState
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
@@ -462,7 +461,7 @@ private fun UploadStateHandler(
         }
 
         postState.uploadPostSuccess -> {
-            Toast("Upload successful")
+            Toast.makeText(LocalContext.current, "Upload successful", Toast.LENGTH_SHORT).show()
             LaunchedEffect(Unit) {
                 onSuccess()
                 postViewModel.clearUploadPostState()

@@ -100,10 +100,12 @@ exports.sendChatNotification = onValueCreated({
                 body: notificationBody
             },
             data: {
+                type: "message",
                 conversationId: conversationId,
                 messageId: event.params.messageId,
                 senderUsername: senderUsername,
-                type: messageType
+                otherUserId: senderId,
+                messageType: messageType
             }
         };
 
@@ -121,87 +123,95 @@ exports.sendChatNotification = onValueCreated({
 });
 
 exports.sendCallNotification = onValueCreated({
-    ref: '/conversations/{conversationId}/calls/{callId}',
+    ref: '/conversations/{conversationId}/calls/callerId',
     region: 'asia-southeast1'
 }, async (event) => {
-    const callData = event.data.val();
-    if (!callData || !callData.callerId || !callData.calleeId) {
-        functions.logger.error('Missing call data or callerId/calleeId', callData);
+    functions.logger.log('Function triggered for call from callerId:', event.data.val());
+    const callerId = event.data.val();
+    const conversationId = event.params.conversationId;
+
+    if (!callerId) {
+        functions.logger.error('CallerId is missing');
         return null;
     }
 
-    const { callerId, calleeId } = callData;
-    const conversationId = event.params.conversationId;
-    const callId = event.params.callId;
+    const conversationSnapshot = await admin.database()
+        .ref(`/conversations/${conversationId}`)
+        .once('value');
 
-    const conversationRef = admin.database().ref(`/conversations/${conversationId}`);
-    const callStateSnapshot = await conversationRef.child("callState").once('value');
-    let callState = callStateSnapshot.val() || "idle";
-    if (callState !== "pending") {
-        functions.logger.log(`Call state is ${callState} for callId: ${callId}, skipping notification`);
+    if (!conversationSnapshot.exists()) {
+        functions.logger.error('Conversation not found');
+        return null;
+    }
+
+    const conversation = conversationSnapshot.val();
+    const participants = conversation.participants || [];
+
+    if (!Array.isArray(participants)) {
+        functions.logger.error('Participants is not an array');
+        return null;
+    }
+
+    const receiverIds = participants.filter(id => id !== callerId);
+
+    if (receiverIds.length === 0) {
+        functions.logger.log('No receivers found for conversation:', conversationId);
         return null;
     }
 
     const callerDoc = await admin.firestore().collection('users').doc(callerId).get();
-    if (!callerDoc.exists) {
-        functions.logger.error(`Caller document not found for ID: ${callerId}`);
-        return null;
-    }
-    const callerUsername = callerDoc.data().username || 'Unknown';
+    const callerUsername = callerDoc.exists ? callerDoc.data().username || 'Unknown' : 'Unknown';
 
-    const calleeDoc = await admin.firestore().collection('users').doc(calleeId).get();
-    if (!calleeDoc.exists) {
-        functions.logger.error(`Callee document not found for ID: ${calleeId}`);
-        return null;
-    }
-    const calleeFcmToken = calleeDoc.data().fcmToken;
-    if (!calleeFcmToken) {
-        functions.logger.warn(`No FCM token found for callee: ${calleeId}`);
-        return null;
-    }
-
-    const payload = {
-        token: calleeFcmToken,
-        notification: {
-            title: 'Incoming Call',
-            body: `From ${callerUsername}`
-        },
-        data: {
-            type: 'call_invitation',
-            callerId: callerId,
-            calleeId: calleeId,
-            callType: 'voice',
-            callId: callId,
-            conversationId: conversationId
-        },
-        android: {
-            priority: 'high',
-            ttl: 30 * 1000
+    const tokens = [];
+    for (const receiverId of receiverIds) {
+        const userDoc = await admin.firestore().collection('users').doc(receiverId).get();
+        if (userDoc.exists) {
+            const token = userDoc.data().fcmToken;
+            if (token) tokens.push(token);
+            else functions.logger.warn(`No FCM token for user: ${receiverId}`);
+        } else {
+            functions.logger.warn(`User document not found for: ${receiverId}`);
         }
-    };
+    }
+
+    functions.logger.log('Receiver IDs:', receiverIds);
+    functions.logger.log('Fetched tokens:', tokens);
+
+    if (tokens.length === 0) {
+        functions.logger.log('No valid FCM tokens found for receivers');
+        return null;
+    }
+
+    const sendPromises = tokens.map(token => {
+        const payload = {
+            token: token,
+            notification: {
+                title: `${callerUsername} đang gọi`,
+                body: 'Nhấn để tham gia cuộc gọi'
+            },
+            data: {
+                type: 'call',
+                callerId: callerId,
+                conversationId: conversationId,
+                callerUsername: callerUsername
+            }
+        };
+
+        return admin.messaging().send(payload)
+            .then(() => functions.logger.log(`Notification sent to token: ${token}`))
+            .catch(err => functions.logger.error(`Error sending to token ${token}:`, err));
+    });
 
     try {
-        await admin.messaging().send(payload);
-        functions.logger.log(`Call notification sent to ${calleeId} with callId: ${callId}, conversationId: ${conversationId}`);
-    } catch (error) {
-        functions.logger.error('Failed to send call notification:', error);
+        await Promise.all(sendPromises);
+        functions.logger.log('All call notifications processed');
+    } catch (err) {
+        functions.logger.error('Error processing call notifications:', err);
     }
-
-    setTimeout(async () => {
-        const updatedCallStateSnapshot = await conversationRef.child("callState").once('value');
-        callState = updatedCallStateSnapshot.val() || "idle";
-        if (callState === "pending") {
-            await conversationRef.update({
-                "callState": "idle",
-                [`calls/${callId}`]: null,
-                "timestamp": admin.database.ServerValue.TIMESTAMP
-            });
-            functions.logger.log(`Call timed out after 30s, reset to idle for callId: ${callId}`);
-        }
-    }, 30000);
 
     return null;
 });
+
 
 exports.generateVideoThumbnail = onObjectFinalized(
   {

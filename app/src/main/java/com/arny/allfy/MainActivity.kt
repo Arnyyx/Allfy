@@ -80,50 +80,50 @@ class MainActivity : ComponentActivity() {
                         googleAuthClient = googleAuthClient
                     )
                     LaunchedEffect(intent) {
-                        handleIncomingCall(intent)
+                        handleIntent(intent)
                     }
-
                 }
             }
         }
-
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleIncomingCall(intent)
+        handleIntent(intent)
     }
 
-    private fun handleIncomingCall(intent: Intent) {
-        val action = intent.action
-        val callerId = intent.getStringExtra("callerId")
-        val calleeId = intent.getStringExtra("calleeId")
-        val callId = intent.getStringExtra("callId")
-        Log.d(
-            "IncomingCall",
-            "Action: $action, CallerId: $callerId, CalleeId: $calleeId, CallId: $callId"
-        )
-
-        when (action) {
-            "INCOMING_CALL" -> {
-                if (callerId != null && calleeId != null && callId != null) {
+    private fun handleIntent(intent: Intent) {
+        intent.let {
+            when {
+                it.getBooleanExtra("isIncomingCall", false) -> {
+                    val conversationId = it.getStringExtra("conversationId") ?: return@let
+                    val callerId = it.getStringExtra("callerId") ?: return@let
+                    navController.navigate(
+                        Screen.CallScreen(
+                            conversationId = conversationId,
+                            otherUserId = callerId,
+                            isCaller = false,
+                        )
+                    )
                     Log.d("IncomingCall", "Navigate to incoming call screen")
-                    navController.navigate("incoming_call/$callerId/$calleeId/$callId")
                 }
-            }
 
-            "START_CALL" -> {
-                if (callerId != null && calleeId != null) {
-                    navController.navigate("call/$callerId/$calleeId")
-                } else {
+                it.getBooleanExtra("isChatNotification", false) -> {
+                    val conversationId = it.getStringExtra("conversationId") ?: return@let
+                    val otherUserId = it.getStringExtra("otherUserId") ?: return@let
+                    navController.navigate(
+                        Screen.ChatScreen(
+                            conversationId = conversationId,
+                            otherUserId = otherUserId,
+                        )
+                    )
+                    Log.d("ChatNotification", "Navigate to chat screen")
                 }
-            }
-
-            else -> {
             }
         }
     }
+
 
     private fun updateFcmToken(auth: FirebaseAuth, db: FirebaseFirestore) {
         val preferences = getSharedPreferences("FCMPrefs", MODE_PRIVATE)
@@ -201,7 +201,7 @@ fun AllfyApp(
     userViewModel: UserViewModel,
     postViewModel: PostViewModel,
     chatViewModel: ChatViewModel,
-    googleAuthClient: GoogleAuthClient
+    googleAuthClient: GoogleAuthClient,
 ) {
     NavHost(
         navController = navController,
@@ -259,23 +259,17 @@ fun AllfyApp(
                 chatViewModel = chatViewModel,
                 userViewModel = userViewModel,
                 conversationId = args.conversationId,
-                otherUserId = args.otherUserId
+                otherUserId = args.otherUserId,
             )
         }
-        composable<Screen.IncomingCall> {
-            val args = it.toRoute<Screen.IncomingCall>()
-            IncomingCallScreen(
-                callerId = args.callerId,
-                calleeId = args.calleeId,
-                callId = args.callId,
+        composable<Screen.CallScreen> {
+            val args = it.toRoute<Screen.CallScreen>()
+            CallScreen(
+                conversationId = args.conversationId,
+                isCaller = args.isCaller,
+                otherUserId = args.otherUserId,
                 userViewModel = userViewModel,
-                chatViewModel = chatViewModel,
-                onAccept = {
-//                    navHostController.navigate("call/$callerId/$calleeId")
-                },
-                onReject = {
-//                    navHostController.popBackStack()
-                }
+                navController = navController
             )
         }
     }

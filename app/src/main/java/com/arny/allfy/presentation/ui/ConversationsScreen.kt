@@ -256,10 +256,8 @@ private fun FollowerItem(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.clickable {
-                navController.navigate("chat/${currentUser.userId}/${follower.userId}")
                 navController.navigate(
                     Screen.ChatScreen(
-                        currentUserId = currentUser.userId,
                         otherUserId = follower.userId
                     )
                 )
@@ -359,7 +357,6 @@ private fun ConversationsSection(
                             navHostController.navigate(
                                 Screen.ChatScreen(
                                     conversationId = conversation.id,
-                                    currentUserId = currentUser.userId,
                                     otherUserId = otherUserId
                                 )
                             )

@@ -1,6 +1,7 @@
 package com.arny.allfy.presentation.ui
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -32,7 +33,6 @@ import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.User
-import com.arny.allfy.presentation.common.Toast
 import com.arny.allfy.presentation.viewmodel.UserState
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
@@ -65,7 +65,7 @@ fun EditProfileScreen(
     }
 
     toastMessage?.let { message ->
-        Toast(message)
+        Toast.makeText(LocalContext.current, message, Toast.LENGTH_SHORT).show()
         LaunchedEffect(message) {
             kotlinx.coroutines.delay(2000)
             toastMessage = null

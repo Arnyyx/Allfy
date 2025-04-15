@@ -24,67 +24,24 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
 class FirebaseMessagingServiceImpl : FirebaseMessagingService() {
-    companion object {
-        const val CALL_NOTIFICATION_ID = 1
-    }
-
-    private var ringtone: Ringtone? = null
-    private var vibrator: Vibrator? = null
-
-    private val stopEffectsReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            stopRingingAndVibrating()
-        }
-    }
-
-    override fun onCreate() {
-        super.onCreate()
-        ringtone = RingtoneManager.getRingtone(
-            this,
-            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-        )
-        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager =
-                getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            registerReceiver(
-                stopEffectsReceiver,
-                IntentFilter("STOP_CALL_EFFECTS"),
-                Context.RECEIVER_NOT_EXPORTED
-            )
-        } else {
-            registerReceiver(stopEffectsReceiver, IntentFilter("STOP_CALL_EFFECTS"))
-        }
-
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        try {
-            unregisterReceiver(stopEffectsReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Receiver was not registered or already unregistered
-            // Safe to ignore this exception
-        }
-//        stopRingingAndVibrating() // Also clean up audio/vibration
-    }
-
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
         val data = remoteMessage.data
         val notification = remoteMessage.notification
 
         when (data["type"]) {
-            "call_invitation" -> {
-                val callerId = data["callerId"] ?: return
-                val calleeId = data["calleeId"] ?: return
-                val callId = data["callId"] ?: return
-                showCallNotification(callerId, calleeId, callId)
-                startRingingAndVibrating()
+            "call" -> {
+                val callerId = remoteMessage.data["callerId"] ?: return
+                val conversationId = remoteMessage.data["conversationId"] ?: return
+                showCallNotification(callerId, conversationId)
+            }
+
+            "message" -> {
+                val title = notification?.title ?: data["senderUsername"] ?: "New Message"
+                val body = notification?.body ?: "You have a new message"
+                val conversationId = data["conversationId"] ?: return
+                val otherUserId = data["otherUserId"] ?: return
+                sendMessageNotification(title, body, conversationId, otherUserId)
             }
 
             else -> {
@@ -95,91 +52,50 @@ class FirebaseMessagingServiceImpl : FirebaseMessagingService() {
         }
     }
 
-    private fun showCallNotification(callerId: String, calleeId: String, callId: String) {
-        val notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channelId = "call_notifications"
+    private fun showCallNotification(callerId: String, conversationId: String) {
+        val channelId = "call_channel"
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
                 "Call Notifications",
                 NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 1000, 500, 1000)
-                setSound(null, null)
-            }
+            )
             notificationManager.createNotificationChannel(channel)
         }
 
-        val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
-            action = "INCOMING_CALL"
+        val intent = Intent(this, MainActivity::class.java).apply {
             putExtra("callerId", callerId)
-            putExtra("calleeId", calleeId)
-            putExtra("callId", callId)
+            putExtra("conversationId", conversationId)
+            putExtra("isIncomingCall", true)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val fullScreenPendingIntent = PendingIntent.getActivity(
+        val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            fullScreenIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val acceptIntent = Intent(this, CallResponseReceiver::class.java).apply {
-            action = "ACCEPT_CALL"
-            putExtra("callerId", callerId)
-            putExtra("calleeId", calleeId)
-            putExtra("callId", callId)
-        }
-        val rejectIntent = Intent(this, CallResponseReceiver::class.java).apply {
-            action = "REJECT_CALL"
-            putExtra("callerId", callerId)
-            putExtra("calleeId", calleeId)
-            putExtra("callId", callId)
-        }
-        val acceptPendingIntent = PendingIntent.getBroadcast(
-            this,
-            0,
-            acceptIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val rejectPendingIntent = PendingIntent.getBroadcast(
-            this,
-            0,
-            rejectIntent,
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val notification = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.drawable.ic_logo)
-            .setContentTitle("Incoming Call")
-            .setContentText("From $callerId")
+            .setSmallIcon(R.drawable.ic_call)
+            .setContentTitle("Cuộc gọi đến")
+            .setContentText("Có cuộc gọi video từ room $conversationId")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
-            .addAction(R.drawable.ic_call, "Accept", acceptPendingIntent)
-            .addAction(R.drawable.ic_call_end, "Reject", rejectPendingIntent)
-            .setAutoCancel(false)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
             .build()
 
-        notificationManager.notify(CALL_NOTIFICATION_ID, notification)
+        notificationManager.notify(1, notification)
     }
 
-    private fun startRingingAndVibrating() {
-        ringtone?.play()
-        vibrator?.vibrate(longArrayOf(0, 1000, 500, 1000), 0)
-    }
-
-    private fun stopRingingAndVibrating() {
-        ringtone?.let { if (it.isPlaying) it.stop() }
-        vibrator?.cancel()
-        val notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(CALL_NOTIFICATION_ID)
-    }
-
-    private fun sendMessageNotification(title: String, message: String) {
+    private fun sendMessageNotification(
+        title: String,
+        message: String,
+        conversationId: String? = null,
+        otherUserId: String? = null
+    ) {
         val notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "chat_notifications"
@@ -193,11 +109,26 @@ class FirebaseMessagingServiceImpl : FirebaseMessagingService() {
             notificationManager.createNotificationChannel(channel)
         }
 
+        val intent = Intent(this, MainActivity::class.java).apply {
+            putExtra("isChatNotification", true)
+            putExtra("conversationId", conversationId)
+            putExtra("otherUserId", otherUserId)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            System.currentTimeMillis().toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_logo)
             .setContentTitle(title)
             .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
 

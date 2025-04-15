@@ -9,11 +9,29 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -25,8 +43,27 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,9 +85,13 @@ import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.viewmodel.ChatState
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
-import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.formatDuration
 import com.arny.allfy.utils.formatTimestamp
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -61,7 +102,7 @@ fun ChatScreen(
     chatViewModel: ChatViewModel,
     userViewModel: UserViewModel,
     conversationId: String?,
-    otherUserId: String
+    otherUserId: String,
 ) {
     val chatState by chatViewModel.chatState.collectAsState()
     val userState by userViewModel.userState.collectAsState()
@@ -92,8 +133,22 @@ fun ChatScreen(
                     user = userState.otherUser,
                     isLoading = isLoading,
                     onBackClick = { navHostController.popBackStack() },
-                    onVoiceCallClick = { /* TODO: Handle voice call */ },
-                    onVideoCallClick = { /* TODO: Handle video call */ }
+                    onVoiceCallClick = {
+                        if (conversationId != null) {
+                            navHostController.navigate(
+                                Screen.CallScreen(
+                                    conversationId = conversationId,
+                                    otherUserId = otherUserId,
+                                    isCaller = true
+                                )
+                            )
+                        }
+                    },
+                    onVideoCallClick = {
+                        if (conversationId != null) {
+
+                        }
+                    }
                 )
                 if (isLoading) {
                     LinearProgressIndicator(
@@ -157,7 +212,6 @@ fun ChatScreen(
         )
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -283,7 +337,7 @@ private fun ChatContent(
             .padding(paddingValues)
     ) {
         if (chatState.conversationError != null) {
-            ErrorState(chatState.conversationError!!)
+            ErrorState(chatState.conversationError)
         } else {
             ChatMessagesList(
                 messages = messages,
