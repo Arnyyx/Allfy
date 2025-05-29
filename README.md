@@ -16,8 +16,8 @@ Allfy is a mobile social networking application developed using Kotlin and Jetpa
 <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center">
     <img src="https://github.com/user-attachments/assets/37f0d39d-9fae-4fc2-9fb0-02ca2b65315f" width="250"/>
     <img src="https://github.com/user-attachments/assets/85174f8a-4239-4065-9659-608a8cc5bc96" width="250"/>
-    <img src="https://https://github.com/user-attachments/assets/f2bc34d7-a87c-4a29-aede-3f81e8c21fa1" width="250"/>
-    <img src="https://https://github.com/user-attachments/assets/7bfeaf37-a30d-404d-8325-5dbdd7456134" width="250"/>
+    <img src="https://github.com/user-attachments/assets/f2bc34d7-a87c-4a29-aede-3f81e8c21fa1" width="250"/>
+    <img src="https://github.com/user-attachments/assets/7bfeaf37-a30d-404d-8325-5dbdd7456134" width="250"/>
     <img src="https://github.com/user-attachments/assets/bb0da195-3104-4280-91ed-f0e48cdb5bb4" width="250"/>
     <img src="https://github.com/user-attachments/assets/caae57c4-5746-460b-978f-8baff46129a2" width="250"/>
 </div>
