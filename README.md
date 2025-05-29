@@ -14,12 +14,12 @@ Allfy is a mobile social networking application developed using Kotlin and Jetpa
 
 ## Screenshots
 <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center">
-    <img src="https://github.com/user-attachments/assets/e7e1be8c-cf63-4b3e-9371-77fd05dc7046" width="250"/>
-    <img src="https://github.com/user-attachments/assets/d9e8731a-26cf-4c7f-8abd-baadd28b2d47" width="250"/>
-    <img src="https://github.com/user-attachments/assets/0339aaf2-9a91-4899-90a8-2beee555ca99" width="250"/>
-    <img src="https://github.com/user-attachments/assets/9e1168e1-54bd-4848-b0d5-465cae0970fb" width="250"/>
-    <img src="https://github.com/user-attachments/assets/bb50d58a-5878-49f3-8883-489affd3c740" width="250"/>
-    <img src="https://github.com/user-attachments/assets/d8dd5bdb-788f-47e7-8e01-00242d8029aa" width="250"/>
+    <img src="https://github.com/user-attachments/assets/37f0d39d-9fae-4fc2-9fb0-02ca2b65315f" width="250"/>
+    <img src="https://github.com/user-attachments/assets/85174f8a-4239-4065-9659-608a8cc5bc96" width="250"/>
+    <img src="https://https://github.com/user-attachments/assets/f2bc34d7-a87c-4a29-aede-3f81e8c21fa1" width="250"/>
+    <img src="https://https://github.com/user-attachments/assets/7bfeaf37-a30d-404d-8325-5dbdd7456134" width="250"/>
+    <img src="https://github.com/user-attachments/assets/bb0da195-3104-4280-91ed-f0e48cdb5bb4" width="250"/>
+    <img src="https://github.com/user-attachments/assets/caae57c4-5746-460b-978f-8baff46129a2" width="250"/>
 </div>
 
 ## Technologies Used
