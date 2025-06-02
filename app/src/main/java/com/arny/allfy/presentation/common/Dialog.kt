@@ -18,7 +18,7 @@ import androidx.compose.ui.window.DialogProperties
 fun Dialog(
     title: String,
     message: String,
-    confirmText: String = "Delete",
+    confirmText: String = "Yes",
     dismissText: String = "Cancel",
     onConfirm: () -> Unit,
     onDismiss: () -> Unit

@@ -7,6 +7,7 @@ import com.arny.allfy.domain.model.Message
 import com.arny.allfy.domain.usecase.message.MessageUseCases
 import com.arny.allfy.presentation.state.ChatState
 import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.isSuccess
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,7 +48,6 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             messageUseCases.sendMessage(conversationId, message).collect { response ->
                 _chatState.update { it.copy(sendMessageState = response) }
-
                 if (response is Response.Success) {
                     _chatState.update { it.copy(messageInput = "") }
                 }
@@ -79,6 +79,15 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    fun deleteMessage(conversationId: String, messageId: String) {
+        viewModelScope.launch {
+            _chatState.update { it.copy(deleteMessageState = Response.Loading) }
+            messageUseCases.deleteMessage(conversationId, messageId).collect { response ->
+                _chatState.update { it.copy(deleteMessageState = response) }
+            }
+        }
+    }
+
     // Reset Functions
     fun resetLoadConversationsState() {
         _chatState.update { it.copy(loadConversationsState = Response.Idle) }
@@ -98,6 +107,10 @@ class ChatViewModel @Inject constructor(
 
     fun resetInitializeConversationState() {
         _chatState.update { it.copy(initializeConversationState = Response.Idle) }
+    }
+
+    fun resetDeleteMessageState() {
+        _chatState.update { it.copy(deleteMessageState = Response.Idle) }
     }
 
     fun clearChatState() {

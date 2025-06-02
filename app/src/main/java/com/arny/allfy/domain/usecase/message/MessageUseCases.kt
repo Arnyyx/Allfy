@@ -8,5 +8,6 @@ data class MessageUseCases(
     val sendImages: SendImages,
     val getMessages: GetMessages,
     val sendVoiceMessage: SendVoiceMessage,
-    val initializeConversation: InitializeConversation
+    val initializeConversation: InitializeConversation,
+    val deleteMessage: DeleteMessage
 )

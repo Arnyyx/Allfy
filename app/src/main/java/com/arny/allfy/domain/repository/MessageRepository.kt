@@ -19,10 +19,9 @@ interface MessageRepository {
         conversationId: String,
         userId: String,
         messageId: String
-    ): Result<Unit>
+    ): Flow<Response<Boolean>>
 
-    suspend fun deleteMessage(conversationId: String, messageId: String): Result<Unit>
+    suspend fun deleteMessage(conversationId: String, messageId: String): Flow<Response<Boolean>>
     suspend fun initializeConversation(userIds: List<String>): Flow<Response<Boolean>>
     suspend fun sendVoiceMessage(conversationID: String, audioUri: Uri): Flow<Response<Boolean>>
-
 }

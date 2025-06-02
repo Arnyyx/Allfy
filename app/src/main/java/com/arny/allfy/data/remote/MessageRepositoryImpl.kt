@@ -103,7 +103,6 @@ class MessageRepositoryImpl @Inject constructor(
 
                 override fun onCancelled(error: DatabaseError) {
                     trySend(Response.Error(error.message))
-//                    close(error.toException())
                 }
             })
             awaitClose { conversationRef.removeEventListener(listener) }
@@ -149,15 +148,13 @@ class MessageRepositoryImpl @Inject constructor(
     ): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
         try {
-            val imageUrls = mutableListOf<String>()
             val senderId = FirebaseAuth.getInstance().currentUser?.uid
                 ?: throw Exception("User not authenticated")
             for (uri in imageUris) {
                 val storageRef =
-                    storage.reference.child("chat_images/${System.currentTimeMillis()}_${uri.lastPathSegment}")
+                    storage.reference.child("chat_media/$conversationID/images/${System.currentTimeMillis()}_${uri.lastPathSegment}")
                 val uploadTask = storageRef.putFile(uri).await()
                 val downloadUrl = uploadTask.storage.downloadUrl.await().toString()
-                imageUrls.add(downloadUrl)
 
                 val message = Message(
                     id = "",
@@ -198,8 +195,10 @@ class MessageRepositoryImpl @Inject constructor(
         conversationId: String,
         userId: String,
         messageId: String
-    ): Result<Unit> {
-        return try {
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+
+        try {
             firebaseDatabase.reference
                 .child("conversations")
                 .child(conversationId)
@@ -207,24 +206,90 @@ class MessageRepositoryImpl @Inject constructor(
                 .child(userId)
                 .setValue(messageId)
                 .await()
-            Result.success(Unit)
+            emit(Response.Success(true))
         } catch (e: Exception) {
-            Result.failure(e)
+            emit(Response.Error(e.message ?: "Failed to mark message as read"))
         }
     }
 
-    override suspend fun deleteMessage(conversationId: String, messageId: String): Result<Unit> {
-        return try {
-            firebaseDatabase.reference
+    override suspend fun deleteMessage(
+        conversationId: String,
+        messageId: String
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+        try {
+            val messageSnapshot = firebaseDatabase.reference
                 .child("conversations")
                 .child(conversationId)
                 .child("messages")
                 .child(messageId)
-                .removeValue()
+                .get()
                 .await()
-            Result.success(Unit)
+
+            if (messageSnapshot.exists()) {
+                val message = messageSnapshot.getValue(Message::class.java)
+                val messageType = MessageType.valueOf(
+                    messageSnapshot.child("type").getValue(String::class.java) ?: "TEXT"
+                )
+
+                if (messageType == MessageType.IMAGE || messageType == MessageType.VOICE) {
+                    val mediaUrl = message?.content
+                    if (mediaUrl != null) {
+                        val storageRef = storage.getReferenceFromUrl(mediaUrl)
+                        storageRef.delete().await()
+                    }
+                }
+
+                firebaseDatabase.reference
+                    .child("conversations")
+                    .child(conversationId)
+                    .child("messages")
+                    .child(messageId)
+                    .removeValue()
+                    .await()
+
+                val lastMessageSnapshot = firebaseDatabase.reference
+                    .child("conversations")
+                    .child(conversationId)
+                    .child("lastMessage")
+                    .get()
+                    .await()
+
+                if (lastMessageSnapshot.exists() && lastMessageSnapshot.child("id")
+                        .getValue(String::class.java) == messageId
+                ) {
+                    val messagesSnapshot = firebaseDatabase.reference
+                        .child("conversations")
+                        .child(conversationId)
+                        .child("messages")
+                        .orderByChild("timestamp")
+                        .limitToLast(1)
+                        .get()
+                        .await()
+
+                    val newLastMessage =
+                        messagesSnapshot.children.firstOrNull()?.getValue(Message::class.java)
+                            ?.apply {
+                                type = MessageType.valueOf(
+                                    messagesSnapshot.children.firstOrNull()?.child("type")
+                                        ?.getValue(String::class.java) ?: "TEXT"
+                                )
+                            }
+
+                    firebaseDatabase.reference
+                        .child("conversations")
+                        .child(conversationId)
+                        .updateChildren(
+                            mapOf(
+                                "lastMessage" to newLastMessage,
+                                "timestamp" to (newLastMessage?.timestamp ?: ServerValue.TIMESTAMP)
+                            )
+                        ).await()
+                }
+            }
+            emit(Response.Success(true))
         } catch (e: Exception) {
-            Result.failure(e)
+            emit(Response.Error(e.message ?: "Failed to delete message"))
         }
     }
 
@@ -244,7 +309,6 @@ class MessageRepositoryImpl @Inject constructor(
             )
             conversationRef.setValue(newConversation).await()
 
-
             emit(Response.Success(true))
         } catch (e: Exception) {
             emit(Response.Error(e.message ?: "Unknown error"))
@@ -261,7 +325,7 @@ class MessageRepositoryImpl @Inject constructor(
                 ?: throw Exception("User not authenticated")
 
             val storageRef =
-                storage.reference.child("chat_audio/${System.currentTimeMillis()}_${audioUri.lastPathSegment}")
+                storage.reference.child("chat_media/$conversationID/audio/${System.currentTimeMillis()}_${audioUri.lastPathSegment}")
             val uploadTask = storageRef.putFile(audioUri).await()
             val downloadUrl = uploadTask.storage.downloadUrl.await().toString()
 

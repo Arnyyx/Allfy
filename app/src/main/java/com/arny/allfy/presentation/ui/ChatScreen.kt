@@ -4,7 +4,6 @@ import android.Manifest
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -16,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -82,9 +83,11 @@ import com.arny.allfy.R
 import com.arny.allfy.domain.model.Message
 import com.arny.allfy.domain.model.MessageType
 import com.arny.allfy.domain.model.User
+import com.arny.allfy.presentation.common.Dialog
 import com.arny.allfy.presentation.state.ChatState
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
+import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.formatDuration
 import com.arny.allfy.utils.formatTimestamp
@@ -92,10 +95,6 @@ import com.arny.allfy.utils.getDataOrNull
 import com.arny.allfy.utils.getErrorMessageOrNull
 import com.arny.allfy.utils.isError
 import com.arny.allfy.utils.isLoading
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -111,8 +110,10 @@ fun ChatScreen(
     val chatState by chatViewModel.chatState.collectAsState()
     val userState by userViewModel.userState.collectAsState()
     val currentUserId = userState.currentUserState.getDataOrNull()?.userId ?: ""
+    val context = LocalContext.current
 
     var isConversationInitialized by remember { mutableStateOf(conversationId != null) }
+    var showDeleteDialog by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(conversationId, currentUserId, otherUserId) {
         if (conversationId != null) {
@@ -127,13 +128,15 @@ fun ChatScreen(
             userState.otherUserState.isLoading ||
             chatState.sendMessageState.isLoading ||
             chatState.sendImagesState.isLoading ||
-            chatState.sendVoiceMessageState.isLoading
+            chatState.sendVoiceMessageState.isLoading ||
+            chatState.deleteMessageState.isLoading
 
     val error = chatState.loadConversationsState.getErrorMessageOrNull()
         ?: chatState.sendMessageState.getErrorMessageOrNull()
         ?: chatState.sendImagesState.getErrorMessageOrNull()
         ?: chatState.sendVoiceMessageState.getErrorMessageOrNull()
         ?: chatState.initializeConversationState.getErrorMessageOrNull()
+        ?: chatState.deleteMessageState.getErrorMessageOrNull()
 
     Scaffold(
         topBar = {
@@ -155,7 +158,7 @@ fun ChatScreen(
                     },
                     onVideoCallClick = {
                         if (conversationId != null) {
-
+                            // TODO: Implement video call navigation
                         }
                     }
                 )
@@ -223,8 +226,40 @@ fun ChatScreen(
                 if (converId != null) {
                     chatViewModel.sendVoiceMessage(converId, uri)
                 }
+            },
+            onDeleteMessage = { messageId ->
+                showDeleteDialog = messageId
             }
         )
+        if (showDeleteDialog != null) {
+            Dialog(
+                title = "Delete Message",
+                message = "Are you sure you want to delete this message?",
+                confirmText = "Delete",
+                dismissText = "Cancel",
+                onConfirm = {
+                    showDeleteDialog?.let { messageId ->
+                        val conversations =
+                            chatState.loadConversationsState.getDataOrNull() ?: emptyList()
+                        val converId = conversationId ?: conversations.firstOrNull {
+                            it.participants.containsAll(listOf(currentUserId, otherUserId))
+                        }?.id
+                        if (converId != null) {
+                            chatViewModel.deleteMessage(converId, messageId)
+                        }
+                        showDeleteDialog = null
+                    }
+                },
+                onDismiss = { showDeleteDialog = null }
+            )
+        }
+    }
+
+    LaunchedEffect(chatState.deleteMessageState) {
+        if (chatState.deleteMessageState is Response.Success) {
+            chatViewModel.resetDeleteMessageState()
+            Toast.makeText(context, "Message deleted", Toast.LENGTH_SHORT).show()
+        }
     }
 }
 
@@ -310,7 +345,7 @@ private fun AsyncImageWithPlaceholder(
             .data(imageUrl)
             .crossfade(true)
             .placeholder(R.drawable.ic_user)
-            .error(R.drawable.ic_user) // Hiển thị khi lỗi
+            .error(R.drawable.ic_user)
             .build()
     )
     Image(
@@ -333,7 +368,8 @@ private fun ChatContent(
     onMessageInputChanged: (String) -> Unit,
     onSendMessage: (Message) -> Unit,
     onSendImages: (List<Uri>) -> Unit,
-    onSendVoiceMessage: (Uri) -> Unit
+    onSendVoiceMessage: (Uri) -> Unit,
+    onDeleteMessage: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val imagePicker =
@@ -358,7 +394,8 @@ private fun ChatContent(
             ChatMessagesList(
                 messages = messages,
                 currentUserId = currentUserId,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                onDeleteMessage = onDeleteMessage
             )
             ChatInput(
                 messageInput = messageInput,
@@ -409,7 +446,8 @@ private fun ErrorState(errorMessage: String) {
 private fun ChatMessagesList(
     messages: List<Message>,
     currentUserId: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDeleteMessage: (String) -> Unit
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -427,7 +465,8 @@ private fun ChatMessagesList(
         ) { message ->
             AnimatedMessageItem(
                 message = message,
-                isFromCurrentUser = message.senderId == currentUserId
+                isFromCurrentUser = message.senderId == currentUserId,
+                onLongPress = { onDeleteMessage(message.id) }
             )
         }
     }
@@ -444,7 +483,8 @@ private fun ChatMessagesList(
 @Composable
 private fun AnimatedMessageItem(
     message: Message,
-    isFromCurrentUser: Boolean
+    isFromCurrentUser: Boolean,
+    onLongPress: () -> Unit
 ) {
     val context = LocalContext.current
     val mediaPlayer = remember { MediaPlayer() }
@@ -456,7 +496,13 @@ private fun AnimatedMessageItem(
         exit = fadeOut(animationSpec = tween(300))
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = { onLongPress() }
+                    )
+                },
             horizontalAlignment = if (isFromCurrentUser) Alignment.End else Alignment.Start
         ) {
             Box(
@@ -487,7 +533,6 @@ private fun AnimatedMessageItem(
                                 .sizeIn(maxWidth = 200.dp, maxHeight = 200.dp),
                             contentScale = ContentScale.Crop
                         )
-
                     }
 
                     MessageType.VOICE -> {
@@ -643,12 +688,6 @@ private fun ChatInput(
             .navigationBarsPadding()
             .background(MaterialTheme.colorScheme.surface)
     ) {
-        if (isSendingMessage) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -47,7 +47,6 @@ fun PostDetailScreen(
         }
     }
 
-    // Handle delete success
     LaunchedEffect(postState.deletePostState) {
         when (val deleteState = postState.deletePostState) {
             is Response.Success -> {
