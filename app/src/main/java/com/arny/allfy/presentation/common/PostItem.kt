@@ -1,6 +1,7 @@
 package com.arny.allfy.presentation.common
 
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -43,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -72,6 +74,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arny.allfy.R
@@ -79,6 +82,7 @@ import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.state.PostState
 import com.arny.allfy.presentation.viewmodel.PostViewModel
+import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.getDataOrNull
 import com.arny.allfy.utils.isLoading
@@ -90,11 +94,10 @@ fun PostItem(
     postViewModel: PostViewModel = hiltViewModel(),
     navController: NavController
 ) {
-    // Observe ViewModel state
     val postState by postViewModel.postState.collectAsState()
     val loadingPosts by postViewModel.loadingPosts.collectAsState()
+    val context = LocalContext.current
 
-    // Derive like and comment states
     val isLiked by remember(postState, post, currentUser) {
         derivedStateOf {
             val singlePost = postState.getPostState.getDataOrNull()
@@ -130,7 +133,32 @@ fun PostItem(
     val isCommentLoading by remember(loadingPosts, post) {
         derivedStateOf { loadingPosts[post.postID]?.contains("comment") ?: false }
     }
+    val isDeleteLoading by remember(loadingPosts, post) {
+        derivedStateOf { loadingPosts[post.postID]?.contains("delete") ?: false }
+    }
     val showComments = remember { mutableStateOf(false) }
+
+    LaunchedEffect(postState.deletePostState) {
+        when (val deleteState = postState.deletePostState) {
+            is Response.Success -> {
+                navController.navigate(Screen.ProfileScreen()) {
+                    popUpTo(Screen.SplashScreen) { inclusive = true }
+                }
+                postViewModel.resetDeletePostState()
+            }
+
+            is Response.Error -> {
+                Toast.makeText(
+                    context,
+                    "Failed to delete post: ${deleteState.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+                postViewModel.resetDeletePostState()
+            }
+
+            else -> {}
+        }
+    }
 
     Card(
         modifier = Modifier
@@ -154,6 +182,7 @@ fun PostItem(
                 postOwnerImageUrl = post.postOwnerImageUrl,
                 navController = navController,
                 currentUser = currentUser,
+                isDeletingPost = isDeleteLoading,
                 onDeletePost = { postViewModel.deletePost(post.postID, post.postOwnerID) }
             )
             if (post.mediaItems.isNotEmpty()) PostImages(post)
@@ -166,7 +195,7 @@ fun PostItem(
                 showComments = showComments,
                 onLikeClick = { postViewModel.toggleLikePost(post, currentUser.userId) }
             )
-            if (isLikeLoading || isCommentLoading) {
+            if (isLikeLoading || isCommentLoading || isDeleteLoading) {
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -201,89 +230,109 @@ private fun PostHeader(
     var showMenu by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(8.dp)
+    Column(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable {
-                navController.navigate(Screen.ProfileScreen(post.postOwnerID))
-            }
+            modifier = Modifier.padding(8.dp)
         ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(postOwnerImageUrl.ifEmpty { null })
-                    .crossfade(true)
-                    .placeholder(R.drawable.ic_user)
-                    .error(R.drawable.ic_user)
-                    .build(),
-                contentDescription = "User Avatar",
-                placeholder = painterResource(R.drawable.ic_user),
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = postOwnerUsername,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-        Box {
-            IconButton(onClick = { showMenu = true }) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "More Options"
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable {
+                    navController.navigate(Screen.ProfileScreen(post.postOwnerID))
+                }
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(postOwnerImageUrl.ifEmpty { null })
+                        .crossfade(true)
+                        .placeholder(R.drawable.ic_user)
+                        .error(R.drawable.ic_user)
+                        .build(),
+                    contentDescription = "User Avatar",
+                    placeholder = painterResource(R.drawable.ic_user),
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = postOwnerUsername,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
                 )
             }
 
-            DropdownMenu(
-                expanded = showMenu,
-                onDismissRequest = { showMenu = false }
-            ) {
-                if (post.postOwnerID == currentUser.userId) {
+            Spacer(modifier = Modifier.weight(1f))
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    if (isDeletingPost) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More Options"
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showMenu && !isDeletingPost,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    if (post.postOwnerID == currentUser.userId) {
+                        DropdownMenuItem(
+                            text = { Text("Edit Post") },
+                            onClick = {
+                                onEditPost()
+                                showMenu = false
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Post"
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete Post") },
+                            onClick = {
+                                showDeleteConfirmDialog = true
+                                showMenu = false
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete Post"
+                                )
+                            },
+                            enabled = !isDeletingPost
+                        )
+                    }
                     DropdownMenuItem(
-                        text = { Text("Edit Post") },
+                        text = { Text("Report Post") },
                         onClick = {
-                            onEditPost()
                             showMenu = false
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit Post"
-                            )
                         }
                     )
-                    DropdownMenuItem(
-                        text = { Text("Delete Post") },
-                        onClick = {
-                            showDeleteConfirmDialog = true
-                            showMenu = false
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete Post"
-                            )
-                        },
-                        enabled = !isDeletingPost
-                    )
                 }
-                DropdownMenuItem(
-                    text = { Text("Report Post") },
-                    onClick = {
-                        showMenu = false
-                    }
-                )
             }
         }
+
+        if (isDeletingPost) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
     }
+
     if (showDeleteConfirmDialog) {
         Dialog(
             title = "Delete Post?",
@@ -294,7 +343,7 @@ private fun PostHeader(
                 onDeletePost()
                 showDeleteConfirmDialog = false
             },
-            onDismiss = { showDeleteConfirmDialog = false },
+            onDismiss = { showDeleteConfirmDialog = false }
         )
     }
 }

@@ -56,6 +56,7 @@ import com.arny.allfy.presentation.state.PostState
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.getDataOrNull
 import com.arny.allfy.utils.getErrorMessageOrNull
 import com.arny.allfy.utils.isError
@@ -189,7 +190,11 @@ fun CreatePostScreen(
                 UploadStateHandler(
                     postState = postState,
                     postViewModel = postViewModel,
-                    onSuccess = { navHostController.popBackStack() }
+                    onSuccess = {
+                        navHostController.navigate(Screen.ProfileScreen()) {
+                            popUpTo(Screen.CreatePostScreen) { inclusive = true }
+                        }
+                    }
                 )
             }
         }

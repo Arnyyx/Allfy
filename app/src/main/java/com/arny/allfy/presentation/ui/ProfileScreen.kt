@@ -1,6 +1,7 @@
 package com.arny.allfy.presentation.ui
 
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -54,6 +55,8 @@ fun ProfileScreen(
     userId: String? = null
 ) {
     val userState by userViewModel.userState.collectAsState()
+    val postState by postViewModel.postState.collectAsState()
+    val context = LocalContext.current
     val isCurrentUser = userId == null
 
     LaunchedEffect(userId) {
@@ -83,6 +86,34 @@ fun ProfileScreen(
             val currentUser = (userState.currentUserState as Response.Success<User>).data
             val otherUser = (userState.otherUserState as Response.Success<User>).data
             userViewModel.checkIfFollowing(currentUser.userId, otherUser.userId)
+        }
+    }
+
+    LaunchedEffect(postState.deletePostState) {
+        when (val deleteState = postState.deletePostState) {
+            is Response.Success -> {
+                Toast.makeText(context, "Post deleted successfully", Toast.LENGTH_SHORT).show()
+
+                val userResponse =
+                    if (isCurrentUser) userState.currentUserState else userState.otherUserState
+                if (userResponse is Response.Success) {
+                    val user = userResponse.data
+                    userViewModel.getPostIds(user.userId)
+                }
+
+                postViewModel.resetDeletePostState()
+            }
+
+            is Response.Error -> {
+                Toast.makeText(
+                    context,
+                    "Failed to delete post: ${deleteState.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+                postViewModel.resetDeletePostState()
+            }
+
+            else -> {}
         }
     }
 
@@ -136,10 +167,14 @@ fun ProfileScreen(
                         else -> userState.otherUserState is Response.Loading ||
                                 userState.currentUserState is Response.Loading
                     }
-                    AnimatedVisibility(visible = isLoading) {
+
+                    // Show delete loading in top bar
+                    val isDeleting = postState.deletePostState is Response.Loading
+
+                    AnimatedVisibility(visible = isLoading || isDeleting) {
                         LinearProgressIndicator(
                             modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.primary
+                            color = if (isDeleting) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                         )
                     }
                 }
