@@ -43,9 +43,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,8 +77,11 @@ import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
+import com.arny.allfy.presentation.state.PostState
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.utils.Screen
+import com.arny.allfy.utils.getDataOrNull
+import com.arny.allfy.utils.isLoading
 
 @Composable
 fun PostItem(
@@ -85,18 +90,47 @@ fun PostItem(
     postViewModel: PostViewModel = hiltViewModel(),
     navController: NavController
 ) {
-    val context = LocalContext.current
-    val isLiked by remember(post.likes) {
-        derivedStateOf { post.likes.contains(currentUser.userId) }
+    // Observe ViewModel state
+    val postState by postViewModel.postState.collectAsState()
+    val loadingPosts by postViewModel.loadingPosts.collectAsState()
+
+    // Derive like and comment states
+    val isLiked by remember(postState, post, currentUser) {
+        derivedStateOf {
+            val singlePost = postState.getPostState.getDataOrNull()
+            val feedPost =
+                postState.feedPostsState.getDataOrNull()?.find { it.postID == post.postID }
+            (singlePost?.postID == post.postID && singlePost.likes.contains(currentUser.userId))
+                    || (feedPost?.likes?.contains(currentUser.userId) ?: post.likes.contains(
+                currentUser.userId
+            ))
+        }
     }
-    val likeCount by remember(post.likes) {
-        derivedStateOf { post.likes.size }
+    val likeCount by remember(postState, post) {
+        derivedStateOf {
+            val singlePost = postState.getPostState.getDataOrNull()
+            val feedPost =
+                postState.feedPostsState.getDataOrNull()?.find { it.postID == post.postID }
+            if (singlePost?.postID == post.postID) singlePost.likes.size
+            else feedPost?.likes?.size ?: post.likes.size
+        }
     }
-    val commentCount by remember(post.commentCount) {
-        derivedStateOf { post.commentCount }
+    val commentCount by remember(postState, post) {
+        derivedStateOf {
+            val singlePost = postState.getPostState.getDataOrNull()
+            val feedPost =
+                postState.feedPostsState.getDataOrNull()?.find { it.postID == post.postID }
+            if (singlePost?.postID == post.postID) singlePost.commentCount
+            else feedPost?.commentCount ?: post.commentCount
+        }
+    }
+    val isLikeLoading by remember(loadingPosts, post) {
+        derivedStateOf { loadingPosts[post.postID]?.contains("like") ?: false }
+    }
+    val isCommentLoading by remember(loadingPosts, post) {
+        derivedStateOf { loadingPosts[post.postID]?.contains("comment") ?: false }
     }
     val showComments = remember { mutableStateOf(false) }
-    var isLikeLoading by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -106,9 +140,7 @@ fun PostItem(
                 detectTapGestures(
                     onDoubleTap = {
                         if (!isLiked) {
-                            isLikeLoading = true
                             postViewModel.toggleLikePost(post, currentUser.userId)
-                            isLikeLoading = false // Reset sau khi toggle
                         }
                     }
                 )
@@ -132,12 +164,15 @@ fun PostItem(
                 likeCount = likeCount,
                 commentCount = commentCount,
                 showComments = showComments,
-                onLikeClick = {
-                    isLikeLoading = true
-                    postViewModel.toggleLikePost(post, currentUser.userId)
-                    isLikeLoading = false
-                }
+                onLikeClick = { postViewModel.toggleLikePost(post, currentUser.userId) }
             )
+            if (isLikeLoading || isCommentLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                )
+            }
         }
     }
 
@@ -262,7 +297,6 @@ private fun PostHeader(
             onDismiss = { showDeleteConfirmDialog = false },
         )
     }
-
 }
 
 @Composable
@@ -293,7 +327,7 @@ private fun PostImages(post: Post) {
                     "video" -> {
                         VideoPlayer(
                             url = mediaItem.url,
-                            thumbnailUrl = mediaItem.thumbnailUrl, // Truyền thumbnailUrl
+                            thumbnailUrl = mediaItem.thumbnailUrl,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -423,7 +457,7 @@ private fun PostActions(
     isLikeLoading: Boolean,
     likeCount: Int,
     commentCount: Int,
-    showComments: MutableState<Boolean>,
+    showComments: androidx.compose.runtime.MutableState<Boolean>,
     onLikeClick: () -> Unit
 ) {
     Row(
@@ -481,7 +515,7 @@ private fun LikeButton(
     isLoading: Boolean,
     onClick: () -> Unit
 ) {
-    var scale by remember { mutableStateOf(1f) }
+    var scale by remember { mutableFloatStateOf(1f) }
     val animatedScale by animateFloatAsState(
         targetValue = scale,
         animationSpec = spring(

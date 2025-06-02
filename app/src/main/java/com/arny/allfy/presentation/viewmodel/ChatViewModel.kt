@@ -1,14 +1,12 @@
 package com.arny.allfy.presentation.viewmodel
 
 import android.net.Uri
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.arny.allfy.domain.model.Conversation
 import com.arny.allfy.domain.model.Message
-import com.arny.allfy.domain.usecase.message.*
+import com.arny.allfy.domain.usecase.message.MessageUseCases
+import com.arny.allfy.presentation.state.ChatState
 import com.arny.allfy.utils.Response
-import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +19,7 @@ import javax.inject.Inject
 class ChatViewModel @Inject constructor(
     private val messageUseCases: MessageUseCases
 ) : ViewModel() {
+
     private val _chatState = MutableStateFlow(ChatState())
     val chatState: StateFlow<ChatState> = _chatState.asStateFlow()
 
@@ -35,27 +34,10 @@ class ChatViewModel @Inject constructor(
     fun loadConversations(userId: String) {
         viewModelScope.launch {
             messageUseCases.loadConversations(userId).collect { response ->
-                when (response) {
-                    is Response.Loading -> _chatState.update { it.copy(isLoadingConversations = true) }
-                    is Response.Success -> _chatState.update {
-                        it.copy(
-                            isLoadingConversations = false,
-                            conversations = response.data
-                        )
-                    }
-
-                    is Response.Error -> _chatState.update {
-                        it.copy(
-                            isLoadingConversations = false,
-                            conversationError = response.message
-                        )
-                    }
-
-                }
+                _chatState.update { it.copy(loadConversationsState = response) }
             }
         }
     }
-
 
     fun onMessageInputChanged(input: String) {
         _chatState.update { it.copy(messageInput = input) }
@@ -64,23 +46,10 @@ class ChatViewModel @Inject constructor(
     fun sendMessage(conversationId: String, message: Message) {
         viewModelScope.launch {
             messageUseCases.sendMessage(conversationId, message).collect { response ->
-                when (response) {
-                    is Response.Loading -> _chatState.update { it.copy(isSendingMessage = true) }
-                    is Response.Success -> {
-                        _chatState.update {
-                            it.copy(
-                                isSendingMessage = false,
-                                messageInput = ""
-                            )
-                        }
-                    }
+                _chatState.update { it.copy(sendMessageState = response) }
 
-                    is Response.Error -> _chatState.update {
-                        it.copy(
-                            isSendingMessage = false,
-                            sendMessageError = response.message
-                        )
-                    }
+                if (response is Response.Success) {
+                    _chatState.update { it.copy(messageInput = "") }
                 }
             }
         }
@@ -89,42 +58,7 @@ class ChatViewModel @Inject constructor(
     fun sendImages(conversationId: String, imageUris: List<Uri>) {
         viewModelScope.launch {
             messageUseCases.sendImages(conversationId, imageUris).collect { response ->
-                when (response) {
-                    is Response.Loading -> _chatState.update { it.copy(isSendingMessage = true) }
-                    is Response.Success -> {
-                        _chatState.update {
-                            it.copy(isSendingMessage = false)
-                        }
-                    }
-
-                    is Response.Error -> _chatState.update {
-                        it.copy(
-                            isSendingMessage = false,
-                            sendMessageError = response.message
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    fun initializeConversation(userIds: List<String>) {
-        viewModelScope.launch {
-            messageUseCases.initializeConversation(userIds).collect { response ->
-                when (response) {
-                    is Response.Loading -> _chatState.update { it.copy(isInitializingConversation = true) }
-
-                    is Response.Success -> {
-                        _chatState.update { it.copy(isInitializingConversation = false) }
-                    }
-
-                    is Response.Error -> _chatState.update {
-                        it.copy(
-                            isInitializingConversation = false,
-                            initializeConversationError = response.message
-                        )
-                    }
-                }
+                _chatState.update { it.copy(sendImagesState = response) }
             }
         }
     }
@@ -132,40 +66,41 @@ class ChatViewModel @Inject constructor(
     fun sendVoiceMessage(conversationId: String, audioUri: Uri) {
         viewModelScope.launch {
             messageUseCases.sendVoiceMessage(conversationId, audioUri).collect { response ->
-                when (response) {
-                    is Response.Loading -> _chatState.update { it.copy(isSendingMessage = true) }
-                    is Response.Success -> {
-                        _chatState.update {
-                            it.copy(isSendingMessage = false)
-                        }
-                    }
-
-                    is Response.Error -> _chatState.update {
-                        it.copy(
-                            isSendingMessage = false,
-                            sendMessageError = response.message
-                        )
-                    }
-                }
+                _chatState.update { it.copy(sendVoiceMessageState = response) }
             }
         }
+    }
+
+    fun initializeConversation(userIds: List<String>) {
+        viewModelScope.launch {
+            messageUseCases.initializeConversation(userIds).collect { response ->
+                _chatState.update { it.copy(initializeConversationState = response) }
+            }
+        }
+    }
+
+    // Reset Functions
+    fun resetLoadConversationsState() {
+        _chatState.update { it.copy(loadConversationsState = Response.Idle) }
+    }
+
+    fun resetSendMessageState() {
+        _chatState.update { it.copy(sendMessageState = Response.Idle) }
+    }
+
+    fun resetSendImagesState() {
+        _chatState.update { it.copy(sendImagesState = Response.Idle) }
+    }
+
+    fun resetSendVoiceMessageState() {
+        _chatState.update { it.copy(sendVoiceMessageState = Response.Idle) }
+    }
+
+    fun resetInitializeConversationState() {
+        _chatState.update { it.copy(initializeConversationState = Response.Idle) }
     }
 
     fun clearChatState() {
         _chatState.value = ChatState()
     }
 }
-
-data class ChatState(
-    val messages: List<Message> = emptyList(),
-    val isLoadingConversations: Boolean = false,
-    val conversations: List<Conversation> = emptyList(),
-    val conversationError: String? = null,
-
-    val isSendingMessage: Boolean = false,
-    val sendMessageError: String? = null,
-    val messageInput: String = "",
-
-    val isInitializingConversation: Boolean = false,
-    val initializeConversationError: String? = null
-)

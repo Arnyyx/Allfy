@@ -43,6 +43,8 @@ import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.formatTimestamp
+import com.arny.allfy.utils.getDataOrNull
+import com.arny.allfy.utils.isLoading
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -62,24 +64,33 @@ fun ConversationsScreen(
     val userState by userViewModel.userState.collectAsState()
     val chatState by chatViewModel.chatState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
-    val userMap = userState.users.associateBy { it.userId }
 
-    LaunchedEffect(userState.currentUser) {
-        chatViewModel.loadConversations(userState.currentUser.userId)
-        userViewModel.getFollowers(userState.currentUser.userId)
+    val currentUser = userState.currentUserState.getDataOrNull()
+    val users = userState.usersState.getDataOrNull() ?: emptyList()
+    val followers = userState.followersState.getDataOrNull() ?: emptyList()
+    val conversations = chatState.loadConversationsState.getDataOrNull() ?: emptyList()
+    val userMap = users.associateBy { it.userId }
 
+    LaunchedEffect(currentUser) {
+        currentUser?.let { user ->
+            chatViewModel.loadConversations(user.userId)
+            userViewModel.getFollowers(user.userId)
+        }
     }
 
-    LaunchedEffect(chatState.conversations) {
-        val conversations = chatState.conversations
-        val participantIds =
-            conversations.flatMap { it.participants }.toSet() - userState.currentUser.userId
-        userViewModel.getUsersByIDs(participantIds.toList())
+    LaunchedEffect(conversations) {
+        if (conversations.isNotEmpty() && currentUser != null) {
+            val participantIds =
+                conversations.flatMap { it.participants }.toSet() - currentUser.userId
+            if (participantIds.isNotEmpty()) {
+                userViewModel.getUsersByIDs(participantIds.toList())
+            }
+        }
     }
 
-
-    val isLoading =
-        chatState.isLoadingConversations || userState.isLoadingUsers || userState.isLoadingFollowers
+    val isLoading = chatState.loadConversationsState.isLoading ||
+            userState.usersState.isLoading ||
+            userState.followersState.isLoading
 
     Scaffold(
         topBar = {
@@ -103,18 +114,17 @@ fun ConversationsScreen(
         ) {
             SearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
             FollowersSection(
-                followers = userState.followers,
-                currentUser = userState.currentUser,
+                followers = followers,
+                currentUser = currentUser ?: User(),
                 navHostController = navHostController,
             )
             ConversationsSection(
-                conversations = chatState.conversations,
+                conversations = conversations,
                 navHostController = navHostController,
                 userMap = userMap,
-                currentUser = userState.currentUser,
+                currentUser = currentUser ?: User(),
                 searchQuery = searchQuery
             )
-
         }
     }
 }
@@ -247,8 +257,6 @@ private fun FollowerItem(
     navController: NavHostController,
     currentUser: User
 ) {
-    val isOnlineState by getOnlineStatus(follower.userId).collectAsState(initial = false)
-
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(72.dp)
@@ -269,15 +277,6 @@ private fun FollowerItem(
                     .size(64.dp)
                     .clip(CircleShape)
             )
-            if (isOnlineState) {
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Color.Green)
-                        .align(Alignment.BottomEnd)
-                )
-            }
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
@@ -322,14 +321,12 @@ private fun ConversationsSection(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    val conversationss =
-        conversations
-            .filter {
-                val otherUserId =
-                    it.participants.firstOrNull { id -> id != currentUser.userId } ?: ""
-                val otherUser = userMap[otherUserId]
-                otherUser?.username?.contains(searchQuery, ignoreCase = true) ?: true
-            }
+    val conversationss = conversations.filter {
+        val otherUserId =
+            it.participants.firstOrNull { id -> id != currentUser.userId } ?: ""
+        val otherUser = userMap[otherUserId]
+        otherUser?.username?.contains(searchQuery, ignoreCase = true) ?: true
+    }
     if (conversationss.isEmpty()) {
         EmptyState("No conversations found")
     } else {
@@ -426,12 +423,12 @@ private fun ConversationItem(
             ) {
                 Text(
                     text = when (lastMessage?.type) {
-                        MessageType.IMAGE -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi ảnh" else "${otherUser?.username ?: ""} đã gửi ảnh"
-                        MessageType.VIDEO -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi video" else "${otherUser?.username ?: ""} đã gửi video"
-                        MessageType.FILE -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi tệp" else "${otherUser?.username ?: ""} đã gửi tệp"
-                        MessageType.VOICE -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi tin nhắn thoại" else "${otherUser?.username ?: ""} đã gửi tin nhắn thoại"
-                        MessageType.VOICE_CALL -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi cuộc gọi thoại" else "${otherUser?.username ?: ""} đã gửi cuộc gọi thoại"
-                        MessageType.VIDEO_CALL -> if (lastMessage.senderId == currentUserId) "Bạn đã gửi cuộc gọi video" else "${otherUser?.username ?: ""} đã gửi cuộc gọi video"
+                        MessageType.IMAGE -> if (lastMessage.senderId == currentUserId) "You sent an image" else "${otherUser?.username ?: ""} sent an image"
+                        MessageType.VIDEO -> if (lastMessage.senderId == currentUserId) "You sent a video" else "${otherUser?.username ?: ""} sent a video"
+                        MessageType.FILE -> if (lastMessage.senderId == currentUserId) "You sent a file" else "${otherUser?.username ?: ""} sent a file"
+                        MessageType.VOICE -> if (lastMessage.senderId == currentUserId) "You sent a voice message" else "${otherUser?.username ?: ""} sent a voice message"
+                        MessageType.VOICE_CALL -> if (lastMessage.senderId == currentUserId) "You sent a voice call" else "${otherUser?.username ?: ""} sent a voice call"
+                        MessageType.VIDEO_CALL -> if (lastMessage.senderId == currentUserId) "You sent a video call" else "${otherUser?.username ?: ""} sent a video call"
                         else -> lastMessage?.content ?: ""
                     },
                     style = MaterialTheme.typography.bodyMedium,
@@ -454,21 +451,6 @@ private fun ConversationItem(
 }
 
 @Composable
-private fun ErrorMessage(message: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = message,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
 private fun EmptyState(message: String) {
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -480,21 +462,4 @@ private fun EmptyState(message: String) {
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
     }
-}
-
-fun getOnlineStatus(userId: String): Flow<Boolean> = callbackFlow {
-    val db = FirebaseDatabase.getInstance().reference.child("onlineStatus").child(userId)
-    val listener = object : ValueEventListener {
-        override fun onDataChange(snapshot: DataSnapshot) {
-            val isOnline = snapshot.child("isOnline").getValue(Boolean::class.java) ?: false
-            trySend(isOnline)
-        }
-
-        override fun onCancelled(error: DatabaseError) {
-            Log.e("RealtimeDB", "Error fetching online status: ${error.message}")
-            trySend(false)
-        }
-    }
-    db.addValueEventListener(listener)
-    awaitClose { db.removeEventListener(listener) }
 }

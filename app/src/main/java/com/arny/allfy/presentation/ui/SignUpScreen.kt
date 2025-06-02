@@ -26,12 +26,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.arny.allfy.R
 import com.arny.allfy.data.remote.GoogleAuthClient
-import com.arny.allfy.presentation.viewmodel.AuthState
+import com.arny.allfy.presentation.state.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
+import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -46,6 +46,34 @@ fun SignUpScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val authState by authViewModel.authState.collectAsState()
+
+    LaunchedEffect(authState.isAuthenticated) {
+        if (authState.isAuthenticated) {
+            navController.navigate(Screen.ProfileScreen()) {
+                popUpTo(Screen.SignUpScreen) { inclusive = true }
+            }
+        }
+    }
+
+    LaunchedEffect(authState.signUpState) {
+        when (val state = authState.signUpState) {
+            is Response.Error -> {
+                Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
+                authViewModel.resetSignUpState()
+            }
+            else -> {}
+        }
+    }
+
+    LaunchedEffect(authState.signInGoogleState) {
+        when (val state = authState.signInGoogleState) {
+            is Response.Error -> {
+                Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
+                authViewModel.resetSignInGoogleState()
+            }
+            else -> {}
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -68,8 +96,7 @@ fun SignUpScreen(
                     authState = authState,
                     googleAuthClient = googleAuthClient,
                     scope = scope,
-                    context = context,
-                    navController = navController
+                    context = context
                 )
                 LoginPrompt(navController)
             }
@@ -83,27 +110,14 @@ private fun SignUpForm(
     authState: AuthState,
     googleAuthClient: GoogleAuthClient,
     scope: CoroutineScope,
-    context: Any,
-    navController: NavHostController
+    context: Any
 ) {
     val usernameState = remember { mutableStateOf("") }
     val emailState = remember { mutableStateOf("") }
     val passwordState = remember { mutableStateOf("") }
 
-    LaunchedEffect(authState) {
-        when {
-            authState.isAuthenticated -> {
-                navController.navigate(Screen.ProfileScreen()) {
-                    popUpTo(Screen.SignUpScreen) { inclusive = true }
-                }
-            }
-
-            authState.errorMessage != null -> {
-                Toast.makeText(context as Activity, authState.errorMessage, Toast.LENGTH_SHORT)
-                    .show()
-            }
-        }
-    }
+    val isLoading = authState.signUpState is Response.Loading ||
+            authState.signInGoogleState is Response.Loading
 
     Spacer(modifier = Modifier.height(48.dp))
 
@@ -125,6 +139,7 @@ private fun SignUpForm(
             keyboardType = KeyboardType.Text,
             imeAction = ImeAction.Next
         ),
+        enabled = !isLoading,
         colors = TextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
@@ -146,6 +161,7 @@ private fun SignUpForm(
             keyboardType = KeyboardType.Email,
             imeAction = ImeAction.Next
         ),
+        enabled = !isLoading,
         colors = TextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
@@ -168,6 +184,7 @@ private fun SignUpForm(
             imeAction = ImeAction.Done
         ),
         visualTransformation = PasswordVisualTransformation(),
+        enabled = !isLoading,
         colors = TextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
@@ -192,12 +209,12 @@ private fun SignUpForm(
             .height(50.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3897F0)),
         shape = RoundedCornerShape(8.dp),
-        enabled = !authState.isLoading &&
+        enabled = !isLoading &&
                 usernameState.value.isNotBlank() &&
                 emailState.value.isNotBlank() &&
                 passwordState.value.isNotBlank()
     ) {
-        if (authState.isLoading) {
+        if (isLoading && authState.signUpState is Response.Loading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(24.dp),
                 color = Color.White,
@@ -233,19 +250,25 @@ private fun SignUpForm(
             .fillMaxWidth()
             .height(50.dp),
         shape = RoundedCornerShape(8.dp),
-        enabled = !authState.isLoading
+        enabled = !isLoading
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_google),
-                contentDescription = "Google Icon",
+        if (isLoading && authState.signInGoogleState is Response.Loading) {
+            CircularProgressIndicator(
                 modifier = Modifier.size(24.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Sign up with Google", color = MaterialTheme.colorScheme.onSurface)
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_google),
+                    contentDescription = "Google Icon",
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Sign up with Google", color = MaterialTheme.colorScheme.onSurface)
+            }
         }
     }
 
@@ -266,7 +289,7 @@ private fun DividerWithText(text: String) {
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Divider(
+        HorizontalDivider(
             modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
         )
@@ -276,7 +299,7 @@ private fun DividerWithText(text: String) {
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             style = MaterialTheme.typography.bodySmall
         )
-        Divider(
+        HorizontalDivider(
             modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
         )

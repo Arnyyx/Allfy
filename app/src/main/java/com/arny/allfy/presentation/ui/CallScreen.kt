@@ -1,41 +1,35 @@
 package com.arny.allfy.presentation.ui
 
 import android.content.Context
-import android.util.Log
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.navigation.NavHostController
-import com.arny.allfy.utils.CallState
-import com.arny.allfy.utils.CallStatus
-import com.arny.allfy.utils.WebRTCClient
-import org.webrtc.EglBase
-import org.webrtc.SurfaceViewRenderer
-import org.webrtc.VideoTrack
-import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
-import android.Manifest
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.User
+import com.arny.allfy.presentation.viewmodel.CallViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
+import com.arny.allfy.utils.getDataOrNull
+import com.arny.allfy.utils.isLoading
+import org.webrtc.EglBase
+import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoTrack
 
 @Composable
 fun CallScreen(
@@ -46,42 +40,33 @@ fun CallScreen(
     navController: NavHostController
 ) {
     val context = LocalContext.current
-    val eglBase = remember { EglBase.create() }
-    var callState by remember { mutableStateOf(CallState(CallStatus.PENDING)) }
-    var localVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
-    var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
+    val callViewModel: CallViewModel = hiltViewModel()
+    val callState by callViewModel.callState.collectAsState()
+    val localVideoTrack by callViewModel.localVideoTrack.collectAsState()
+    val remoteVideoTrack by callViewModel.remoteVideoTrack.collectAsState()
     val userState by userViewModel.userState.collectAsState()
+
+    // Extract current user from new state structure
+    val currentUser = userState.currentUserState.getDataOrNull()
+
+    LaunchedEffect(Unit) {
+        callViewModel.initialize(
+            conversationId = conversationId,
+            isCaller = isCaller,
+            callerId = currentUser?.userId ?: ""
+        )
+    }
 
     LaunchedEffect(otherUserId) {
         userViewModel.getUserDetails(otherUserId)
     }
 
-    val webRTCClient = remember(conversationId, isCaller) {
-        WebRTCClient(
-            context = context,
-            eglBaseContext = eglBase.eglBaseContext,
-            conversationId = conversationId,
-            isCaller = isCaller,
-            callerId = userState.currentUser.userId,
-            onVideoTrackReceived = { track ->
-                remoteVideoTrack = track
-            },
-            onStateChange = { state ->
-                callState = state
-                if (state.status == CallStatus.ENDED || state.status == CallStatus.ERROR) {
-                    navController.popBackStack()
-                }
-            }
-        )
-    }
-
     val requestPermissionsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions[Manifest.permission.CAMERA] == true && permissions[Manifest.permission.RECORD_AUDIO] == true) {
+        if (permissions[android.Manifest.permission.CAMERA] == true && permissions[android.Manifest.permission.RECORD_AUDIO] == true) {
             if (isCaller) {
-                localVideoTrack = webRTCClient.getLocalVideoTrack()
-                webRTCClient.startCall()
+                callViewModel.startCall()
             }
         } else {
             Toast.makeText(
@@ -93,24 +78,15 @@ fun CallScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.CAMERA
-            ) != PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!callViewModel.hasPermissions()) {
             requestPermissionsLauncher.launch(
                 arrayOf(
-                    Manifest.permission.CAMERA,
-                    Manifest.permission.RECORD_AUDIO
+                    android.Manifest.permission.CAMERA,
+                    android.Manifest.permission.RECORD_AUDIO
                 )
             )
         } else if (isCaller) {
-            localVideoTrack = webRTCClient.getLocalVideoTrack()
-            webRTCClient.startCall()
+            callViewModel.startCall()
         }
     }
 
@@ -118,44 +94,37 @@ fun CallScreen(
         callState = callState,
         localVideoTrack = localVideoTrack,
         remoteVideoTrack = remoteVideoTrack,
-        webRTCClient = webRTCClient,
-        user = userState.otherUser,
+        user = userState.otherUserState.getDataOrNull(),
         isCaller = isCaller,
-        isLoading = userState.isLoadingOtherUser,
+        isLoading = userState.otherUserState.isLoading,
         requestPermissionsLauncher = requestPermissionsLauncher,
         context = context,
-        eglBase = eglBase,
+        callViewModel = callViewModel,
         navController = navController,
-        onAcceptCall = {
-            webRTCClient.acceptCall()
-            localVideoTrack = webRTCClient.getLocalVideoTrack()
-        }
+        onAcceptCall = { callViewModel.acceptCall() },
+        onRejectCall = { callViewModel.rejectCall() },
+        onEndCall = { callViewModel.endCall() }
     )
-
-    DisposableEffect(callState.status) {
-        onDispose {
-            if (callState.status == CallStatus.ENDED || callState.status == CallStatus.ERROR) {
-                webRTCClient.cleanup()
-                eglBase.release()
-            }
-        }
-    }
 }
+
 @Composable
 fun CallScreenContent(
-    callState: CallState,
+    callState: com.arny.allfy.utils.CallState,
     localVideoTrack: VideoTrack?,
     remoteVideoTrack: VideoTrack?,
-    webRTCClient: WebRTCClient,
     user: User?,
     isCaller: Boolean,
     isLoading: Boolean,
     requestPermissionsLauncher: ActivityResultLauncher<Array<String>>,
     context: Context,
-    eglBase: EglBase,
+    callViewModel: CallViewModel,
     navController: NavHostController,
-    onAcceptCall: () -> Unit // Thêm callback cho Accept
+    onAcceptCall: () -> Unit,
+    onRejectCall: () -> Unit,
+    onEndCall: () -> Unit
 ) {
+    val eglBase = remember { EglBase.create() }
+
     Box(modifier = Modifier.fillMaxSize()) {
         remoteVideoTrack?.let { track ->
             AndroidView(
@@ -242,11 +211,11 @@ fun CallScreenContent(
             }
             Text(
                 text = when (callState.status) {
-                    CallStatus.PENDING -> if (isCaller) "Calling..." else "Incoming Call"
-                    CallStatus.CONNECTING -> "Connecting..."
-                    CallStatus.CONNECTED -> "Connected"
-                    CallStatus.ENDED -> "Call Ended"
-                    CallStatus.ERROR -> "Error: ${callState.errorMessage ?: "Unknown"}"
+                    com.arny.allfy.utils.CallStatus.PENDING -> if (isCaller) "Calling..." else "Incoming Call"
+                    com.arny.allfy.utils.CallStatus.CONNECTING -> "Connecting..."
+                    com.arny.allfy.utils.CallStatus.CONNECTED -> "Connected"
+                    com.arny.allfy.utils.CallStatus.ENDED -> "Call Ended"
+                    com.arny.allfy.utils.CallStatus.ERROR -> "Error: ${callState.errorMessage ?: "Unknown"}"
                 },
                 color = Color.White,
                 style = MaterialTheme.typography.bodyMedium
@@ -254,7 +223,7 @@ fun CallScreenContent(
         }
 
         when (callState.status) {
-            CallStatus.ERROR -> {
+            com.arny.allfy.utils.CallStatus.ERROR -> {
                 Text(
                     text = "Error: ${callState.errorMessage ?: "Unknown error"}",
                     color = Color.Red,
@@ -263,7 +232,7 @@ fun CallScreenContent(
                         .padding(16.dp)
                 )
                 Button(
-                    onClick = { webRTCClient.endCall() },
+                    onClick = onEndCall,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(16.dp)
@@ -272,7 +241,7 @@ fun CallScreenContent(
                 }
             }
 
-            CallStatus.PENDING -> if (!isCaller) {
+            com.arny.allfy.utils.CallStatus.PENDING -> if (!isCaller) {
                 Column(
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -287,29 +256,21 @@ fun CallScreenContent(
                     Spacer(modifier = Modifier.height(16.dp))
                     Row {
                         Button(onClick = {
-                            if (ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.CAMERA
-                                ) != PackageManager.PERMISSION_GRANTED ||
-                                ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.RECORD_AUDIO
-                                ) != PackageManager.PERMISSION_GRANTED
-                            ) {
+                            if (!callViewModel.hasPermissions()) {
                                 requestPermissionsLauncher.launch(
                                     arrayOf(
-                                        Manifest.permission.CAMERA,
-                                        Manifest.permission.RECORD_AUDIO
+                                        android.Manifest.permission.CAMERA,
+                                        android.Manifest.permission.RECORD_AUDIO
                                     )
                                 )
                             } else {
-                                onAcceptCall() // Sử dụng callback thay vì gọi trực tiếp
+                                onAcceptCall()
                             }
                         }) {
                             Text("Accept")
                         }
                         Spacer(modifier = Modifier.width(16.dp))
-                        Button(onClick = { webRTCClient.rejectCall() }) {
+                        Button(onClick = onRejectCall) {
                             Text("Reject")
                         }
                     }
@@ -318,7 +279,7 @@ fun CallScreenContent(
 
             else -> {
                 Button(
-                    onClick = { webRTCClient.endCall() },
+                    onClick = onEndCall,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(16.dp)
@@ -326,6 +287,12 @@ fun CallScreenContent(
                     Text("End Call")
                 }
             }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            eglBase.release()
         }
     }
 }

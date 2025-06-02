@@ -1,12 +1,15 @@
 package com.arny.allfy.di
 
+import android.app.Application
 import android.content.Context
 import com.arny.allfy.data.remote.AuthenticationRepositoryImpl
+import com.arny.allfy.data.remote.CallRepositoryImpl
 import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.data.remote.MessageRepositoryImpl
 import com.arny.allfy.data.remote.PostRepositoryImpl
 import com.arny.allfy.data.remote.UserRepositoryImpl
 import com.arny.allfy.domain.repository.AuthenticationRepository
+import com.arny.allfy.domain.repository.CallRepository
 import com.arny.allfy.domain.repository.MessageRepository
 import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.domain.repository.UserRepository
@@ -192,4 +195,10 @@ class AllfyModule {
         loadConversations = LoadConversations(repository),
         sendVoiceMessage = SendVoiceMessage(repository)
     )
+
+    @Provides
+    @Singleton
+    fun provideCallRepository(firebaseDatabase: FirebaseDatabase): CallRepository {
+        return CallRepositoryImpl(firebaseDatabase)
+    }
 }

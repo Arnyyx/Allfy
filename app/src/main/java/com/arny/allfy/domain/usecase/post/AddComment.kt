@@ -1,5 +1,6 @@
 package com.arny.allfy.domain.usecase.post
 
+import android.net.Uri
 import com.arny.allfy.domain.repository.PostRepository
 import com.arny.allfy.utils.Response
 import kotlinx.coroutines.flow.Flow
@@ -10,10 +11,11 @@ class AddComment @Inject constructor(
 ) {
     suspend operator fun invoke(
         postID: String,
-        userID: String,
+        commentOwnerID: String,
         content: String,
-        parentCommentID: String? = null
+        parentCommentID: String?,
+        imageUri: Uri?
     ): Flow<Response<Boolean>> {
-        return repository.addComment(postID, userID, content, parentCommentID)
+        return repository.addComment(postID, commentOwnerID, content, parentCommentID, imageUri)
     }
 }

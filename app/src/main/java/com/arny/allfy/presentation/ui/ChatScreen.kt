@@ -82,12 +82,16 @@ import com.arny.allfy.R
 import com.arny.allfy.domain.model.Message
 import com.arny.allfy.domain.model.MessageType
 import com.arny.allfy.domain.model.User
-import com.arny.allfy.presentation.viewmodel.ChatState
+import com.arny.allfy.presentation.state.ChatState
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.formatDuration
 import com.arny.allfy.utils.formatTimestamp
+import com.arny.allfy.utils.getDataOrNull
+import com.arny.allfy.utils.getErrorMessageOrNull
+import com.arny.allfy.utils.isError
+import com.arny.allfy.utils.isLoading
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -106,7 +110,7 @@ fun ChatScreen(
 ) {
     val chatState by chatViewModel.chatState.collectAsState()
     val userState by userViewModel.userState.collectAsState()
-    val currentUserId = userState.currentUser.userId
+    val currentUserId = userState.currentUserState.getDataOrNull()?.userId ?: ""
 
     var isConversationInitialized by remember { mutableStateOf(conversationId != null) }
 
@@ -119,18 +123,23 @@ fun ChatScreen(
         userViewModel.getUserDetails(otherUserId)
     }
 
-    val isLoading =
-        chatState.isLoadingConversations || userState.isLoadingOtherUser || chatState.isSendingMessage
+    val isLoading = chatState.loadConversationsState.isLoading ||
+            userState.otherUserState.isLoading ||
+            chatState.sendMessageState.isLoading ||
+            chatState.sendImagesState.isLoading ||
+            chatState.sendVoiceMessageState.isLoading
 
-    val error = chatState.conversationError
-        ?: chatState.sendMessageError
-        ?: chatState.initializeConversationError
+    val error = chatState.loadConversationsState.getErrorMessageOrNull()
+        ?: chatState.sendMessageState.getErrorMessageOrNull()
+        ?: chatState.sendImagesState.getErrorMessageOrNull()
+        ?: chatState.sendVoiceMessageState.getErrorMessageOrNull()
+        ?: chatState.initializeConversationState.getErrorMessageOrNull()
 
     Scaffold(
         topBar = {
             Column {
                 ChatTopBar(
-                    user = userState.otherUser,
+                    user = userState.otherUserState.getDataOrNull() ?: User(),
                     isLoading = isLoading,
                     onBackClick = { navHostController.popBackStack() },
                     onVoiceCallClick = {
@@ -174,27 +183,32 @@ fun ChatScreen(
             messageInput = chatState.messageInput,
             currentUserId = currentUserId,
             conversationId = conversationId,
-            sendMessageState = chatState.isSendingMessage,
+            sendMessageState = isLoading,
             onMessageInputChanged = chatViewModel::onMessageInputChanged,
             onSendMessage = { message ->
                 if (!isConversationInitialized) {
                     chatViewModel.initializeConversation(listOf(currentUserId, otherUserId))
                     isConversationInitialized = true
-                    if (!chatState.isInitializingConversation) {
-                        val converId = chatState.conversations.firstOrNull {
+                    if (!chatState.initializeConversationState.isLoading) {
+                        val conversations =
+                            chatState.loadConversationsState.getDataOrNull() ?: emptyList()
+                        val converId = conversations.firstOrNull {
                             it.participants.containsAll(listOf(currentUserId, otherUserId))
                         }?.id ?: return@ChatContent
                         chatViewModel.sendMessage(converId, message)
                     }
                 } else {
-                    val converId = conversationId ?: chatState.conversations.firstOrNull {
+                    val conversations =
+                        chatState.loadConversationsState.getDataOrNull() ?: emptyList()
+                    val converId = conversationId ?: conversations.firstOrNull {
                         it.participants.containsAll(listOf(currentUserId, otherUserId))
                     }?.id ?: return@ChatContent
                     chatViewModel.sendMessage(converId, message)
                 }
             },
             onSendImages = { uris ->
-                val converId = conversationId ?: chatState.conversations.firstOrNull {
+                val conversations = chatState.loadConversationsState.getDataOrNull() ?: emptyList()
+                val converId = conversationId ?: conversations.firstOrNull {
                     it.participants.containsAll(listOf(currentUserId, otherUserId))
                 }?.id
                 if (converId != null) {
@@ -202,7 +216,8 @@ fun ChatScreen(
                 }
             },
             onSendVoiceMessage = { uri ->
-                val converId = conversationId ?: chatState.conversations.firstOrNull {
+                val conversations = chatState.loadConversationsState.getDataOrNull() ?: emptyList()
+                val converId = conversationId ?: conversations.firstOrNull {
                     it.participants.containsAll(listOf(currentUserId, otherUserId))
                 }?.id
                 if (converId != null) {
@@ -336,8 +351,9 @@ private fun ChatContent(
             .background(MaterialTheme.colorScheme.background)
             .padding(paddingValues)
     ) {
-        if (chatState.conversationError != null) {
-            ErrorState(chatState.conversationError)
+        val conversationError = chatState.loadConversationsState.getErrorMessageOrNull()
+        if (conversationError != null) {
+            ErrorState(conversationError)
         } else {
             ChatMessagesList(
                 messages = messages,

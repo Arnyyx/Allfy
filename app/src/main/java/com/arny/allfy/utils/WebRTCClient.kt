@@ -2,13 +2,19 @@ package com.arny.allfy.utils
 
 import android.content.Context
 import android.util.Log
-import com.google.firebase.database.*
-import kotlinx.coroutines.tasks.await
+import com.arny.allfy.domain.repository.CallRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import org.webrtc.*
-import org.webrtc.PeerConnection.*
-import java.util.concurrent.Executors
 import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.DefaultVideoDecoderFactory
+import org.webrtc.PeerConnection.*
+import java.util.concurrent.Executors
+import javax.inject.Inject
 
 enum class CallStatus {
     PENDING, CONNECTING, CONNECTED, ENDED, ERROR
@@ -19,19 +25,19 @@ data class CallState(
     val errorMessage: String? = null
 )
 
-class WebRTCClient(
+class WebRTCClient @Inject constructor(
     private val context: Context,
     private val eglBaseContext: EglBase.Context?,
     private val conversationId: String,
     private val isCaller: Boolean,
     private val callerId: String,
+    private val callRepository: CallRepository,
     private val onVideoTrackReceived: (VideoTrack) -> Unit,
     private val onStateChange: (CallState) -> Unit
 ) {
     private val TAG = "WebRTCClient"
-    private val database = FirebaseDatabase.getInstance().reference
-    private val callRef = database.child("conversations").child(conversationId).child("calls")
     private val executor = Executors.newSingleThreadExecutor()
+    private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var peerConnectionFactory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
     private var localVideoTrack: VideoTrack? = null
@@ -42,9 +48,6 @@ class WebRTCClient(
     private var remoteIceCandidates = mutableListOf<IceCandidate>()
     private var isCameraInitialized = false
     private var isDisposed = false
-    private var sdpListener: ValueEventListener? = null
-    private var iceListener: ValueEventListener? = null
-    private var statusListener: ValueEventListener? = null
 
     private val sdpConstraints = MediaConstraints().apply {
         mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
@@ -77,27 +80,26 @@ class WebRTCClient(
                 .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBaseContext))
                 .createPeerConnectionFactory()
 
-            val iceServers =
-                listOf(
-                    IceServer.builder("turn:global.relay.metered.ca:80")
-                        .setUsername("b297fb6c8b566cfecc2c34bf")
-                        .setPassword("Ztt+3/fglCFMbG+H")
-                        .createIceServer(),
-                    IceServer.builder("turn:global.relay.metered.ca:80?transport=tcp")
-                        .setUsername("b297fb6c8b566cfecc2c34bf")
-                        .setPassword("Ztt+3/fglCFMbG+H")
-                        .createIceServer(),
-                    IceServer.builder("turn:global.relay.metered.ca:443")
-                        .setUsername("b297fb6c8b566cfecc2c34bf")
-                        .setPassword("Ztt+3/fglCFMbG+H")
-                        .createIceServer(),
-                    IceServer.builder("turns:global.relay.metered.ca:443?transport=tcp")
-                        .setUsername("b297fb6c8b566cfecc2c34bf")
-                        .setPassword("Ztt+3/fglCFMbG+H")
-                        .createIceServer(),
-                    IceServer.builder("stun:stun.relay.metered.ca:80").createIceServer(),
-                    IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
-                )
+            val iceServers = listOf(
+                IceServer.builder("turn:global.relay.metered.ca:80")
+                    .setUsername("b297fb6c8b566cfecc2c34bf")
+                    .setPassword("Ztt+3/fglCFMbG+H")
+                    .createIceServer(),
+                IceServer.builder("turn:global.relay.metered.ca:80?transport=tcp")
+                    .setUsername("b297fb6c8b566cfecc2c34bf")
+                    .setPassword("Ztt+3/fglCFMbG+H")
+                    .createIceServer(),
+                IceServer.builder("turn:global.relay.metered.ca:443")
+                    .setUsername("b297fb6c8b566cfecc2c34bf")
+                    .setPassword("Ztt+3/fglCFMbG+H")
+                    .createIceServer(),
+                IceServer.builder("turns:global.relay.metered.ca:443?transport=tcp")
+                    .setUsername("b297fb6c8b566cfecc2c34bf")
+                    .setPassword("Ztt+3/fglCFMbG+H")
+                    .createIceServer(),
+                IceServer.builder("stun:stun.relay.metered.ca:80").createIceServer(),
+                IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
+            )
             val rtcConfig = RTCConfiguration(iceServers).apply {
                 sdpSemantics = SdpSemantics.UNIFIED_PLAN
                 iceTransportsType = IceTransportsType.ALL
@@ -111,16 +113,13 @@ class WebRTCClient(
 
                     override fun onIceCandidate(candidate: IceCandidate) {
                         if (isDisposed) return
-                        executor.execute {
-                            callRef.child("iceCandidates").push().setValue(
-                                mapOf(
-                                    "sdpMid" to candidate.sdpMid,
-                                    "sdpMLineIndex" to candidate.sdpMLineIndex,
-                                    "sdp" to candidate.sdp
-                                )
-                            ).addOnFailureListener {
-                                handleError("Failed to send ICE candidate: ${it.message}")
-                            }
+                        coroutineScope.launch {
+                            callRepository.sendIceCandidate(conversationId, candidate)
+                                .collect { response ->
+                                    if (response is Response.Error) {
+                                        handleError("Failed to send ICE candidate: ${response.message}")
+                                    }
+                                }
                         }
                     }
 
@@ -187,7 +186,6 @@ class WebRTCClient(
         }
     }
 
-
     private fun initializeCameraAndAudio() {
         if (isCameraInitialized || isDisposed) return
         try {
@@ -217,7 +215,6 @@ class WebRTCClient(
                 val streamId = "stream1"
                 if (localVideoTrack != null) {
                     peerConnection?.addTrack(localVideoTrack!!, listOf(streamId))
-
                 }
                 if (localAudioTrack != null) {
                     peerConnection?.addTrack(localAudioTrack!!, listOf(streamId))
@@ -239,73 +236,28 @@ class WebRTCClient(
     }
 
     private fun setupFirebaseSignaling() {
-        sdpListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (isDisposed) return
-                try {
-                    val sdpData =
-                        snapshot.getValue(object : GenericTypeIndicator<Map<String, Any>>() {})
-                    if (sdpData != null) {
-                        val type = sdpData["type"] as? String ?: return
-                        val description = sdpData["description"] as? String ?: return
-                        remoteSdp = SessionDescription(
-                            if (type == "offer") SessionDescription.Type.OFFER
-                            else SessionDescription.Type.ANSWER,
-                            description
-                        )
-                        if (!isCaller && type == "offer") {
-                            onStateChange(CallState(CallStatus.PENDING))
-                        } else if (isCaller && type == "answer") {
-                            handleRemoteSdp()
-                        }
-                    }
-                } catch (e: Exception) {
-                    handleError("Failed to process SDP: ${e.message}")
+        coroutineScope.launch {
+            callRepository.listenSdp(conversationId, { sdp ->
+                remoteSdp = sdp
+                if (!isCaller && sdp.type == SessionDescription.Type.OFFER) {
+                    onStateChange(CallState(CallStatus.PENDING))
+                } else if (isCaller && sdp.type == SessionDescription.Type.ANSWER) {
+                    handleRemoteSdp()
                 }
-            }
+            }, { error ->
+                handleError("Firebase SDP error: $error")
+            }).collect()
 
-            override fun onCancelled(error: DatabaseError) {
-                if (isDisposed) return
-                handleError("Firebase SDP error: ${error.message}")
-            }
-        }
-        callRef.child("sdp").addValueEventListener(sdpListener!!)
-
-        iceListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (isDisposed) return
-                try {
-                    for (data in snapshot.children) {
-                        val candidateData =
-                            data.getValue(object : GenericTypeIndicator<Map<String, Any>>() {})
-                        if (candidateData != null) {
-                            val sdpMid = candidateData["sdpMid"] as? String ?: continue
-                            val sdpMLineIndex =
-                                (candidateData["sdpMLineIndex"] as? Long)?.toInt() ?: continue
-                            val sdp = candidateData["sdp"] as? String ?: continue
-                            val candidate = IceCandidate(sdpMid, sdpMLineIndex, sdp)
-                            remoteIceCandidates.add(candidate)
-                            if (peerConnection?.remoteDescription != null && !isDisposed) {
-                                peerConnection?.addIceCandidate(candidate)
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    handleError("Failed to process ICE candidate: ${e.message}")
+            callRepository.listenIceCandidates(conversationId, { candidate ->
+                remoteIceCandidates.add(candidate)
+                if (peerConnection?.remoteDescription != null && !isDisposed) {
+                    peerConnection?.addIceCandidate(candidate)
                 }
-            }
+            }, { error ->
+                handleError("Firebase ICE error: $error")
+            }).collect()
 
-            override fun onCancelled(error: DatabaseError) {
-                if (isDisposed) return
-                handleError("Firebase ICE error: ${error.message}")
-            }
-        }
-        callRef.child("iceCandidates").addValueEventListener(iceListener!!)
-
-        statusListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (isDisposed) return
-                val status = snapshot.getValue(String::class.java)
+            callRepository.listenCallStatus(conversationId, { status, errorMsg ->
                 when (status) {
                     "ENDED" -> {
                         onStateChange(CallState(CallStatus.ENDED))
@@ -313,21 +265,13 @@ class WebRTCClient(
                     }
 
                     "ERROR" -> {
-                        callRef.child("error").get().addOnSuccessListener { errorSnapshot ->
-                            val errorMsg =
-                                errorSnapshot.getValue(String::class.java) ?: "Unknown error"
-                            onStateChange(CallState(CallStatus.ERROR, errorMsg))
-                        }
+                        onStateChange(CallState(CallStatus.ERROR, errorMsg))
                     }
                 }
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                if (isDisposed) return
-                handleError("Firebase status error: ${error.message}")
-            }
+            }, { error ->
+                handleError("Firebase status error: $error")
+            }).collect()
         }
-        callRef.child("status").addValueEventListener(statusListener!!)
     }
 
     private fun handleRemoteSdp() {
@@ -340,7 +284,6 @@ class WebRTCClient(
 
                         override fun onSetSuccess() {
                             if (isDisposed) return
-
                             onStateChange(CallState(CallStatus.CONNECTING))
                             if (!isCaller && sdp.type == SessionDescription.Type.OFFER) {
                                 if (localVideoTrack != null) {
@@ -348,27 +291,27 @@ class WebRTCClient(
                                         localVideoTrack!!,
                                         listOf("stream1")
                                     )
-
                                 }
                                 if (localAudioTrack != null) {
                                     peerConnection?.addTrack(localAudioTrack!!, listOf("stream1"))
-
                                 }
                                 peerConnection?.createAnswer(object : SdpObserver {
                                     override fun onCreateSuccess(answer: SessionDescription?) {
                                         if (isDisposed) return
-
                                         peerConnection?.setLocalDescription(object : SdpObserver {
                                             override fun onCreateSuccess(p0: SessionDescription?) {}
                                             override fun onSetSuccess() {
                                                 if (isDisposed) return
-                                                callRef.child("sdp").setValue(
-                                                    mapOf(
-                                                        "type" to "answer",
-                                                        "description" to answer?.description
-                                                    )
-                                                ).addOnFailureListener {
-                                                    handleError("Failed to send answer: ${it.message}")
+                                                coroutineScope.launch {
+                                                    callRepository.sendSdp(
+                                                        conversationId,
+                                                        "answer",
+                                                        answer?.description ?: ""
+                                                    ).collect { response ->
+                                                        if (response is Response.Error) {
+                                                            handleError("Failed to send answer: ${response.message}")
+                                                        }
+                                                    }
                                                 }
                                             }
 
@@ -417,16 +360,23 @@ class WebRTCClient(
                             override fun onCreateSuccess(p0: SessionDescription?) {}
                             override fun onSetSuccess() {
                                 if (isDisposed) return
-                                callRef.child("sdp").setValue(
-                                    mapOf(
-                                        "type" to "offer",
-                                        "description" to offer?.description
-                                    )
-                                ).addOnSuccessListener {
-                                    callRef.child("status").setValue("PENDING")
-                                    callRef.child("callerId").setValue(callerId)
-                                }.addOnFailureListener {
-                                    handleError("Failed to send offer: ${it.message}")
+                                coroutineScope.launch {
+                                    callRepository.sendSdp(
+                                        conversationId,
+                                        "offer",
+                                        offer?.description ?: ""
+                                    ).collect { response ->
+                                        if (response is Response.Success) {
+                                            callRepository.updateCallStatus(
+                                                conversationId,
+                                                "PENDING"
+                                            ).collect()
+                                            callRepository.setCallerId(conversationId, callerId)
+                                                .collect()
+                                        } else if (response is Response.Error) {
+                                            handleError("Failed to send offer: ${response.message}")
+                                        }
+                                    }
                                 }
                             }
 
@@ -464,22 +414,25 @@ class WebRTCClient(
         }
     }
 
-
     fun rejectCall() {
         if (isDisposed) return
         executor.execute {
-            callRef.child("status").setValue("ENDED")
-            onStateChange(CallState(CallStatus.ENDED))
-            cleanup()
+            coroutineScope.launch {
+                callRepository.updateCallStatus(conversationId, "ENDED").collect()
+                onStateChange(CallState(CallStatus.ENDED))
+                cleanup()
+            }
         }
     }
 
     fun endCall() {
         if (isDisposed) return
         executor.execute {
-            callRef.child("status").setValue("ENDED")
-            onStateChange(CallState(CallStatus.ENDED))
-            cleanup()
+            coroutineScope.launch {
+                callRepository.updateCallStatus(conversationId, "ENDED").collect()
+                onStateChange(CallState(CallStatus.ENDED))
+                cleanup()
+            }
         }
     }
 
@@ -491,9 +444,10 @@ class WebRTCClient(
         if (isDisposed) return
         Log.e(TAG, message)
         executor.execute {
-            callRef.child("status").setValue("ERROR")
-            callRef.child("error").setValue(message)
-            onStateChange(CallState(status, message))
+            coroutineScope.launch {
+                callRepository.updateCallStatus(conversationId, "ERROR", message).collect()
+                onStateChange(CallState(status, message))
+            }
         }
     }
 
@@ -501,29 +455,26 @@ class WebRTCClient(
         if (isDisposed) return
         try {
             executor.execute {
-                videoCapturer?.stopCapture()
-                videoCapturer?.dispose()
-                audioSource?.dispose()
-                peerConnection?.close()
-                peerConnection?.dispose()
-                peerConnectionFactory?.dispose()
-                localVideoTrack?.dispose()
-                localAudioTrack?.dispose()
-                videoCapturer = null
-                audioSource = null
-                localVideoTrack = null
-                localAudioTrack = null
-                isCameraInitialized = false
+                coroutineScope.launch {
+                    videoCapturer?.stopCapture()
+                    videoCapturer?.dispose()
+                    audioSource?.dispose()
+                    peerConnection?.close()
+                    peerConnection?.dispose()
+                    peerConnectionFactory?.dispose()
+                    localVideoTrack?.dispose()
+                    localAudioTrack?.dispose()
+                    videoCapturer = null
+                    audioSource = null
+                    localVideoTrack = null
+                    localAudioTrack = null
+                    isCameraInitialized = false
 
-                sdpListener?.let { callRef.child("sdp").removeEventListener(it) }
-                iceListener?.let { callRef.child("iceCandidates").removeEventListener(it) }
-                statusListener?.let { callRef.child("status").removeEventListener(it) }
-                sdpListener = null
-                iceListener = null
-                statusListener = null
+                    callRepository.cleanupCall(conversationId).collect()
 
-                callRef.removeValue()
-                isDisposed = true
+                    isDisposed = true
+                    coroutineScope.cancel()
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Cleanup failed: ${e.message}")

@@ -10,28 +10,31 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color.Companion.Black
 import androidx.compose.ui.graphics.Color.Companion.Transparent
+import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color.White,
+    primary = White,
     secondary = PurpleGrey80,
     tertiary = Pink80,
-    background = Color.Black,
-    surfaceContainer = Color.Black,
-    secondaryContainer = Color.Black,
-    onSecondaryContainer = Color.White,
-    surface = Color.Black
+    background = Black,
+    surfaceContainer = Black,
+    secondaryContainer = Black,
+    onSecondaryContainer = White,
+    surface = Black,
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color.Black,
+    surface = White,
+    primary = Black,
     secondary = PurpleGrey40,
     tertiary = Pink40,
     background = Transparent,
-    surfaceContainer = Transparent,
-    secondaryContainer = Color.Transparent,
-    onSecondaryContainer = Color.Black
+    surfaceContainer = White,
+    secondaryContainer = Transparent,
+    onSecondaryContainer = Black,
 
     /* Other default colors to override
     background = Color(0xFFFFFBFE),
@@ -51,10 +54,6 @@ fun AllfyTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-//        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-//            val context = LocalContext.current
-//            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-//        }
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }

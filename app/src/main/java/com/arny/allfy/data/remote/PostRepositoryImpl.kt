@@ -1,6 +1,5 @@
 package com.arny.allfy.data.remote
 
-import KeywordExtractor.extractKeywords
 import android.content.Context
 import android.net.Uri
 import android.util.Log
@@ -24,6 +23,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.UUID
 import javax.inject.Inject
+import KeywordExtractor.extractKeywords
 
 class PostRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
@@ -56,6 +56,7 @@ class PostRepositoryImpl @Inject constructor(
                 val query = firestore.collection(Constants.COLLECTION_NAME_POSTS)
                     .whereIn("postID", recommendedPostIds)
                     .orderBy("timestamp", Query.Direction.DESCENDING)
+                    .limit(limit.toLong())
 
                 val finalQuery = if (lastVisible != null) {
                     query.startAfter(lastVisible.timestamp)
@@ -251,65 +252,108 @@ class PostRepositoryImpl @Inject constructor(
         }
     }
 
-
-    override suspend fun getComments(postID: String): Flow<Response<List<Comment>>> = flow {
+    override suspend fun getComments(
+        postID: String,
+        lastVisible: Comment?,
+        limit: Int
+    ): Flow<Response<List<Comment>>> = flow {
         emit(Response.Loading)
         try {
-            val snapshot = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+            val baseQuery = firestore.collection(Constants.COLLECTION_NAME_POSTS)
                 .document(postID)
                 .collection("comments")
                 .orderBy("timestamp", Query.Direction.DESCENDING)
-                .get()
-                .await()
+                .limit(limit.toLong())
 
-            val comments = if (snapshot.isEmpty) {
-                emptyList()
+            val finalQuery = if (lastVisible != null) {
+                // Sử dụng timestamp của lastVisible comment để pagination
+                baseQuery.startAfter(lastVisible.timestamp)
             } else {
-                snapshot.toObjects(Comment::class.java)
+                baseQuery
             }
 
-            if (comments.isEmpty()) {
-                emit(Response.Success(emptyList()))
+            val snapshot = finalQuery.get().await()
+
+            if (snapshot.isEmpty) {
+                emit(Response.Success(emptyList(), hasMore = false))
                 return@flow
             }
 
+            val comments = snapshot.toObjects(Comment::class.java)
+                .filter { it.commentOwnerID.isNotEmpty() } // Filter invalid comments
+
+            if (comments.isEmpty()) {
+                emit(Response.Success(emptyList(), hasMore = false))
+                return@flow
+            }
+
+            // Get user data for all comment owners
             val userIds = comments.map { it.commentOwnerID }.distinct()
 
-            val userSnapshots = firestore.collection(Constants.COLLECTION_NAME_USERS)
-                .whereIn(FieldPath.documentId(), userIds)
-                .get()
-                .await()
+            val userDataMap = if (userIds.isNotEmpty()) {
+                val userSnapshots = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                    .whereIn(FieldPath.documentId(), userIds)
+                    .get()
+                    .await()
 
-            val userDataMap = userSnapshots.documents.associate { doc ->
-                doc.id to Pair(doc.getString("username"), doc.getString("imageUrl"))
+                userSnapshots.documents.associate { doc ->
+                    doc.id to Pair(
+                        doc.getString("username") ?: "",
+                        doc.getString("imageUrl") ?: ""
+                    )
+                }
+            } else {
+                emptyMap()
             }
 
-            val fullComments = comments.map { comment ->
-                val (username, imageUrl) = userDataMap[comment.commentOwnerID] ?: ("" to "")
-                comment.copy(
-                    commentOwnerUserName = username ?: "",
-                    commentOwnerProfilePicture = imageUrl ?: ""
-                )
+            // Map comments with user data
+            val fullComments = comments.mapNotNull { comment ->
+                val (username, imageUrl) = userDataMap[comment.commentOwnerID] ?: ("Unknown" to "")
+
+                // Skip comments without valid owner data
+                if (username.isEmpty() && userDataMap.containsKey(comment.commentOwnerID)) {
+                    null
+                } else {
+                    comment.copy(
+                        commentOwnerUserName = username,
+                        commentOwnerProfilePicture = imageUrl
+                    )
+                }
             }
-            emit(Response.Success(fullComments))
+
+            // Determine if there are more comments
+            val hasMore = fullComments.size == limit
+
+            emit(Response.Success(fullComments, hasMore = hasMore))
+
         } catch (e: Exception) {
-            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+            Log.e("Repository", "Error loading comments", e)
+            emit(Response.Error(e.localizedMessage ?: "Failed to load comments"))
         }
     }
+
 
     override suspend fun addComment(
         postID: String,
         commentOwnerID: String,
         content: String,
-        parentCommentID: String?
+        parentCommentID: String?,
+        imageUri: Uri?
     ): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
         try {
             val commentID = UUID.randomUUID().toString()
+            var imageUrl: String? = null
+
+            if (imageUri != null) {
+                imageUrl = uploadCommentImage(postID, commentID, imageUri)
+            }
+
             val newComment = hashMapOf(
                 "commentID" to commentID,
                 "commentOwnerID" to commentOwnerID,
                 "content" to content,
+                "imageUrl" to imageUrl,
                 "timestamp" to Timestamp.now(),
                 "likes" to emptyList<String>(),
                 "parentCommentID" to parentCommentID
@@ -329,6 +373,24 @@ class PostRepositoryImpl @Inject constructor(
             emit(Response.Success(true))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+        }
+    }
+
+    private suspend fun uploadCommentImage(postID: String, commentID: String, uri: Uri): String {
+        try {
+            val mimeType = context.contentResolver.getType(uri)
+            val extension = when {
+                mimeType?.startsWith("image/") == true -> ".jpg"
+                else -> ".jpg"
+            }
+            val fileName = "${System.currentTimeMillis()}$extension"
+            val storageRef =
+                storage.reference.child("${Constants.COLLECTION_NAME_POSTS}/$postID/comments/$commentID/$fileName")
+            storageRef.putFile(uri).await()
+            return storageRef.downloadUrl.await().toString()
+        } catch (e: Exception) {
+            Log.e("PostRepositoryImpl", "uploadCommentImage: $e")
+            throw e
         }
     }
 

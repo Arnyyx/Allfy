@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,9 +29,10 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.arny.allfy.R
 import com.arny.allfy.data.remote.GoogleAuthClient
-import com.arny.allfy.presentation.viewmodel.AuthState
+import com.arny.allfy.presentation.state.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.utils.Screen
+import com.arny.allfy.utils.Response
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -46,21 +46,34 @@ fun LoginScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(authState) {
-        when {
-            authState.isAuthenticated -> {
-                navController.navigate(Screen.SplashScreen) {
-                    popUpTo(Screen.LoginScreen) { inclusive = true }
-                }
+    LaunchedEffect(authState.isAuthenticated) {
+        if (authState.isAuthenticated) {
+            navController.navigate(Screen.SplashScreen) {
+                popUpTo(Screen.LoginScreen) { inclusive = true }
+            }
+        }
+    }
+
+    // Handle sign in errors
+    LaunchedEffect(authState.signInEmailState) {
+        when (val state = authState.signInEmailState) {
+            is Response.Error -> {
+                Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
+                authViewModel.resetSignInEmailState()
             }
 
-            !authState.errorMessage.isNullOrBlank() -> {
-                Toast.makeText(
-                    context,
-                    authState.errorMessage,
-                    Toast.LENGTH_SHORT
-                ).show()
+            else -> {}
+        }
+    }
+
+    LaunchedEffect(authState.signInGoogleState) {
+        when (val state = authState.signInGoogleState) {
+            is Response.Error -> {
+                Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
+                authViewModel.resetSignInGoogleState()
             }
+
+            else -> {}
         }
     }
 
@@ -90,7 +103,6 @@ fun LoginScreen(
                 SignUpPrompt(navController)
             }
         }
-
     }
 }
 
@@ -104,6 +116,9 @@ private fun LoginForm(
 ) {
     val emailState = remember { mutableStateOf("") }
     val passwordState = remember { mutableStateOf("") }
+
+    val isLoading = authState.signInEmailState is Response.Loading ||
+            authState.signInGoogleState is Response.Loading
 
     Spacer(modifier = Modifier.height(48.dp))
 
@@ -125,6 +140,7 @@ private fun LoginForm(
             keyboardType = KeyboardType.Email,
             imeAction = ImeAction.Next
         ),
+        enabled = !isLoading,
         colors = TextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
@@ -147,6 +163,7 @@ private fun LoginForm(
             imeAction = ImeAction.Done
         ),
         visualTransformation = PasswordVisualTransformation(),
+        enabled = !isLoading,
         colors = TextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
@@ -167,22 +184,24 @@ private fun LoginForm(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    when {
-        authState.isLoading -> CircularProgressIndicator()
-        else -> {
-            Button(
-                onClick = {
-                    authViewModel.signInWithEmail(emailState.value, passwordState.value)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3897F0)),
-                shape = RoundedCornerShape(8.dp),
-                enabled = emailState.value.isNotBlank() && passwordState.value.isNotBlank()
-            ) {
-                Text("Log In", color = Color.White, fontWeight = FontWeight.Bold)
-            }
+    Button(
+        onClick = {
+            authViewModel.signInWithEmail(emailState.value, passwordState.value)
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3897F0)),
+        shape = RoundedCornerShape(8.dp),
+        enabled = emailState.value.isNotBlank() && passwordState.value.isNotBlank() && !isLoading
+    ) {
+        if (isLoading && authState.signInEmailState is Response.Loading) {
+            CircularProgressIndicator(
+                color = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        } else {
+            Text("Log In", color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
 
@@ -198,31 +217,32 @@ private fun LoginForm(
                 val result = googleAuthClient.signIn(context as Activity)
                 result.googleIdToken?.let { idToken ->
                     authViewModel.signInWithGoogle(idToken)
-                } ?: run {
-                    Toast.makeText(
-                        context,
-                        result.errorMessage ?: "Google Sign In failed",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                } ?: run { }
             }
         },
         modifier = Modifier
             .fillMaxWidth()
             .height(50.dp),
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(8.dp),
+        enabled = !isLoading
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_google),
-                contentDescription = "Google Icon",
+        if (isLoading && authState.signInGoogleState is Response.Loading) {
+            CircularProgressIndicator(
                 modifier = Modifier.size(24.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Continue with Google", color = MaterialTheme.colorScheme.onSurface)
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_google),
+                    contentDescription = "Google Icon",
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Continue with Google", color = MaterialTheme.colorScheme.onSurface)
+            }
         }
     }
 
@@ -240,7 +260,7 @@ private fun DividerWithText(text: String) {
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Divider(
+        HorizontalDivider(
             modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
         )

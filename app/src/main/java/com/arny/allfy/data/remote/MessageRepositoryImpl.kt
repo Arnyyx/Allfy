@@ -146,55 +146,53 @@ class MessageRepositoryImpl @Inject constructor(
     override suspend fun sendImages(
         conversationID: String,
         imageUris: List<Uri>
-    ): Flow<Response<List<String>>> =
-        flow {
-            emit(Response.Loading)
-            try {
-                val imageUrls = mutableListOf<String>()
-                val senderId = FirebaseAuth.getInstance().currentUser?.uid
-                    ?: throw Exception("User not authenticated")
-                for (uri in imageUris) {
-                    val storageRef =
-                        storage.reference.child("chat_images/${System.currentTimeMillis()}_${uri.lastPathSegment}")
-                    val uploadTask = storageRef.putFile(uri).await()
-                    val downloadUrl = uploadTask.storage.downloadUrl.await().toString()
-                    imageUrls.add(downloadUrl)
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+        try {
+            val imageUrls = mutableListOf<String>()
+            val senderId = FirebaseAuth.getInstance().currentUser?.uid
+                ?: throw Exception("User not authenticated")
+            for (uri in imageUris) {
+                val storageRef =
+                    storage.reference.child("chat_images/${System.currentTimeMillis()}_${uri.lastPathSegment}")
+                val uploadTask = storageRef.putFile(uri).await()
+                val downloadUrl = uploadTask.storage.downloadUrl.await().toString()
+                imageUrls.add(downloadUrl)
 
-                    val message = Message(
-                        id = "",
-                        senderId = senderId,
-                        content = downloadUrl,
-                        timestamp = System.currentTimeMillis(),
-                        type = MessageType.IMAGE
-                    )
-                    val messageRef = firebaseDatabase.reference
-                        .child("conversations")
-                        .child(conversationID)
-                        .child("messages")
-                        .push()
+                val message = Message(
+                    id = "",
+                    senderId = senderId,
+                    content = downloadUrl,
+                    timestamp = System.currentTimeMillis(),
+                    type = MessageType.IMAGE
+                )
+                val messageRef = firebaseDatabase.reference
+                    .child("conversations")
+                    .child(conversationID)
+                    .child("messages")
+                    .push()
 
-                    val messageWithId = message.copy(
-                        id = messageRef.key ?: throw Exception("Failed to generate message ID")
-                    )
+                val messageWithId = message.copy(
+                    id = messageRef.key ?: throw Exception("Failed to generate message ID")
+                )
 
-                    firebaseDatabase.reference
-                        .child("conversations")
-                        .child(conversationID)
-                        .updateChildren(
-                            mapOf(
-                                "lastMessage" to messageWithId,
-                                "timestamp" to ServerValue.TIMESTAMP
-                            )
-                        ).await()
+                firebaseDatabase.reference
+                    .child("conversations")
+                    .child(conversationID)
+                    .updateChildren(
+                        mapOf(
+                            "lastMessage" to messageWithId,
+                            "timestamp" to ServerValue.TIMESTAMP
+                        )
+                    ).await()
 
-                    messageRef.setValue(messageWithId).await()
-                }
-                emit(Response.Success(imageUrls))
-            } catch (e: Exception) {
-                emit(Response.Error(e.message ?: "Failed to upload images"))
+                messageRef.setValue(messageWithId).await()
             }
+            emit(Response.Success(true))
+        } catch (e: Exception) {
+            emit(Response.Error(e.message ?: "Failed to upload images"))
         }
-
+    }
 
     override suspend fun markMessageAsRead(
         conversationId: String,
@@ -256,7 +254,7 @@ class MessageRepositoryImpl @Inject constructor(
     override suspend fun sendVoiceMessage(
         conversationID: String,
         audioUri: Uri
-    ): Flow<Response<String>> = flow {
+    ): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
         try {
             val senderId = FirebaseAuth.getInstance().currentUser?.uid
@@ -295,7 +293,7 @@ class MessageRepositoryImpl @Inject constructor(
                 ).await()
 
             messageRef.setValue(messageWithId).await()
-            emit(Response.Success(downloadUrl))
+            emit(Response.Success(true))
         } catch (e: Exception) {
             emit(Response.Error(e.message ?: "Failed to send voice message"))
         }

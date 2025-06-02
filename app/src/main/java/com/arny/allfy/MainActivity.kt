@@ -245,7 +245,7 @@ fun AllfyApp(
         }
         composable<Screen.PostDetailScreen> {
             val postID = it.toRoute<Screen.PostDetailScreen>().postID
-            PostDetailScreen(postID, navController, postViewModel, userViewModel)
+            PostDetailScreen(postID, navController, postViewModel, userViewModel, authViewModel)
         }
         composable<Screen.ConversationsScreen> {
             ConversationsScreen(

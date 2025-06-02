@@ -9,7 +9,11 @@ import javax.inject.Inject
 class GetComments @Inject constructor(
     private val repository: PostRepository
 ) {
-    suspend  operator fun invoke(postID: String): Flow<Response<List<Comment>>> {
-        return repository.getComments(postID)
+    suspend operator fun invoke(
+        postID: String,
+        lastVisible: Comment? = null,
+        limit: Int = 10
+    ): Flow<Response<List<Comment>>> {
+        return repository.getComments(postID, lastVisible, limit)
     }
 }

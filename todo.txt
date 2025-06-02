@@ -1,0 +1,9 @@
+Instagram clone (Android Kotlin, Firebase, WebRTC, Python):
+
+- Tối ưu newsfeed dựa vào hoạt động của người dùng (hiện đang đang sử dụng NearestNeighbors của Python)
+- Làm tính năng call/video call (hiện đang dùng WebRTC, signaling bằng Firebase)
+- Like, share, cmt bài viết
+- Follow người dùng
+- Các thông báo đẩy khi có tin nhắn, like, cmt,...
+- Các tính năng khác như Instagram
+

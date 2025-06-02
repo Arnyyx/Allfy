@@ -1,7 +1,5 @@
 package com.arny.allfy.domain.model
 
-import com.google.firebase.Timestamp
-
 data class User(
     val userId: String = "",
     val username: String = "",

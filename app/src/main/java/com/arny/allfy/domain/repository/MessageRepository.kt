@@ -12,7 +12,7 @@ interface MessageRepository {
     suspend fun sendImages(
         conversationID: String,
         imageUris: List<Uri>
-    ): Flow<Response<List<String>>>
+    ): Flow<Response<Boolean>>
 
     suspend fun getMessages(conversationID: String): Flow<List<Message>>
     suspend fun markMessageAsRead(
@@ -23,6 +23,6 @@ interface MessageRepository {
 
     suspend fun deleteMessage(conversationId: String, messageId: String): Result<Unit>
     suspend fun initializeConversation(userIds: List<String>): Flow<Response<Boolean>>
-    suspend fun sendVoiceMessage(conversationID: String, audioUri: Uri): Flow<Response<String>>
+    suspend fun sendVoiceMessage(conversationID: String, audioUri: Uri): Flow<Response<Boolean>>
 
 }

@@ -1,31 +1,19 @@
 package com.arny.allfy.presentation.ui
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.arny.allfy.domain.model.Post
-import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.PostItem
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
+import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.utils.Response
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,20 +22,38 @@ fun PostDetailScreen(
     postID: String,
     navController: NavController,
     postViewModel: PostViewModel,
-    userViewModel: UserViewModel
+    userViewModel: UserViewModel,
+    authViewModel: AuthViewModel
 ) {
     val postState by postViewModel.postState.collectAsState()
     val userState by userViewModel.userState.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
+
+    val currentUserId = authState.currentUserId
 
     LaunchedEffect(postID) {
         postViewModel.getPostByID(postID)
+        postViewModel.resetLikePostState()
+        postViewModel.resetAddCommentState()
+    }
+
+    LaunchedEffect(currentUserId) {
+        if (currentUserId.isNotEmpty() && userState.currentUserState is Response.Idle) {
+            userViewModel.getCurrentUser(currentUserId)
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    postState.post.postOwnerUsername
+                    when (val postResponse = postState.getPostState) {
+                        is Response.Success -> {
+                            Text(postResponse.data.postOwnerUsername)
+                        }
+
+                        else -> Text("Post")
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -60,29 +66,73 @@ fun PostDetailScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            when {
-                postState.isLoadingPost -> {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                }
-            }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                item {
-                    PostItem(
-                        post = postState.post,
-                        currentUser = userState.currentUser,
-                        navController = navController
+            when (val postResponse = postState.getPostState) {
+                is Response.Loading -> {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter)
                     )
                 }
-            }
 
+                is Response.Error -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = postResponse.message,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                is Response.Success -> {
+                    when (val userResponse = userState.currentUserState) {
+                        is Response.Success -> {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                item {
+                                    PostItem(
+                                        post = postResponse.data,
+                                        currentUser = userResponse.data,
+                                        navController = navController,
+                                        postViewModel = postViewModel
+                                    )
+                                }
+                            }
+                        }
+
+                        is Response.Loading -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.align(Alignment.Center)
+                            )
+                        }
+
+                        is Response.Error -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Error loading user",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+
+                        is Response.Idle -> {}
+                    }
+                }
+
+                is Response.Idle -> {}
+            }
         }
     }
 }
-

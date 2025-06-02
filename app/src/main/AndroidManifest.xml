@@ -48,14 +48,6 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
-        <receiver
-            android:name=".receivers.CallResponseReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="ACCEPT_CALL" />
-                <action android:name="REJECT_CALL" />
-            </intent-filter>
-        </receiver>
     </application>
 
 </manifest>

@@ -31,7 +31,7 @@ enum class BottomNavigationItem(val icon: ImageVector, val route: Screen, val la
     Feed(Icons.Default.Home, Screen.FeedScreen, "Home"),
     Search(Icons.Default.Search, Screen.SearchScreen, "Search"),
     Create(Icons.Default.Add, Screen.CreatePostScreen, "Create"),
-    Profile(Icons.Default.Person, Screen.ProfileScreen(), "Profile")
+    Profile(Icons.Default.Person, Screen.ProfileScreen(), "Profile"),
 }
 
 @Composable
@@ -42,9 +42,7 @@ fun BottomNavigation(
     onRefresh: (() -> Unit)? = null,
 ) {
     NavigationBar(
-        modifier = modifier
-            .height(64.dp)
-            .background(Color.Transparent),
+        modifier = modifier.height(64.dp),
         containerColor = Color.Transparent,
         tonalElevation = 4.dp
     ) {

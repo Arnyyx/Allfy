@@ -2,7 +2,6 @@ package com.arny.allfy.data.remote
 
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.repository.AuthenticationRepository
-import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
 import com.google.firebase.auth.FirebaseAuth

@@ -11,7 +11,7 @@ class SendVoiceMessage @Inject constructor(
 ) {
     suspend operator fun invoke(
         conversationID: String, audioUri: Uri,
-    ): Flow<Response<String>> {
+    ): Flow<Response<Boolean>> {
         return messageRepository.sendVoiceMessage(conversationID, audioUri)
     }
 }

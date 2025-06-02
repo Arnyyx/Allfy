@@ -5,30 +5,24 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.arny.allfy.R
 import com.arny.allfy.presentation.common.Dialog
-import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
+import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,22 +37,28 @@ fun SettingsScreen(
     val authState by authViewModel.authState.collectAsState()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(authState) {
-        when {
-            authState.isLoading -> {}
-            authState.errorMessage != null -> {}
-            !authState.isAuthenticated && authState.errorMessage == null -> {
-                chatViewModel.clearChatState()
-                postViewModel.clearPostState()
-                userViewModel.clearUserState()
-                navController.navigate(Screen.SplashScreen) {
-                    popUpTo(0) { inclusive = true }
-                    launchSingleTop = true
+    LaunchedEffect(authState.signOutState, authState.isAuthenticated) {
+        when (authState.signOutState) {
+            is Response.Success -> {
+                if (!authState.isAuthenticated) {
+                    chatViewModel.clearChatState()
+                    postViewModel.clearPostState()
+                    userViewModel.clearUserState()
+                    navController.navigate(Screen.SplashScreen) {
+                        popUpTo(0) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                    authViewModel.clearAuthState()
                 }
-                authViewModel.clearAuthState()
             }
+
+            is Response.Error -> {}
+
+            else -> {}
         }
     }
+
+    val isLoading = authState.signOutState is Response.Loading
 
     Scaffold(
         topBar = {
@@ -71,7 +71,7 @@ fun SettingsScreen(
                         }
                     }
                 )
-                if (authState.isLoading) {
+                if (isLoading) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -109,15 +109,23 @@ fun SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
-                        enabled = !authState.isLoading
+                        enabled = !isLoading
                     ) {
-                        Text("Log Out")
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("Log Out")
+                        }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
 
             if (showLogoutDialog) {
+
                 Dialog(
                     title = "Confirm Logout",
                     message = "Are you sure you want to log out?",
@@ -127,11 +135,9 @@ fun SettingsScreen(
                         authViewModel.signOut()
                         showLogoutDialog = false
                     },
-                    onDismiss = { showLogoutDialog = false },
+                    onDismiss = { showLogoutDialog = false }
                 )
             }
-
-            authState.errorMessage?.let { }
         }
     }
 }
@@ -156,7 +162,7 @@ fun SettingsItem(setting: SettingItem) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = ImageVector.vectorResource(id = setting.icon as Int),
+            imageVector = ImageVector.vectorResource(id = setting.icon),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurface
         )
@@ -167,14 +173,14 @@ fun SettingsItem(setting: SettingItem) {
         )
         Spacer(modifier = Modifier.weight(1f))
         Icon(
-            imageVector = Icons.Default.KeyboardArrowRight,
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
-data class SettingItem(val title: String, val icon: Any)
+data class SettingItem(val title: String, val icon: Int)
 
 val accountSettings = listOf(
     SettingItem("Personal Information", R.drawable.ic_person),

@@ -52,10 +52,15 @@ import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
-import com.arny.allfy.presentation.viewmodel.PostState
+import com.arny.allfy.presentation.state.PostState
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.getDataOrNull
+import com.arny.allfy.utils.getErrorMessageOrNull
+import com.arny.allfy.utils.isError
+import com.arny.allfy.utils.isLoading
+import com.arny.allfy.utils.isSuccess
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +74,9 @@ fun CreatePostScreen(
     val postState by postViewModel.postState.collectAsState()
     var captionText by remember { mutableStateOf("") }
     var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+
+    val currentUser = userState.currentUserState.getDataOrNull() ?: User()
+
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
@@ -99,18 +107,18 @@ fun CreatePostScreen(
                             return@CreatePostTopBar
                         }
                         val post = Post(
-                            postOwnerID = userState.currentUser.userId,
-                            postOwnerUsername = userState.currentUser.username,
-                            postOwnerImageUrl = userState.currentUser.imageUrl,
+                            postOwnerID = currentUser.userId,
+                            postOwnerUsername = currentUser.username,
+                            postOwnerImageUrl = currentUser.imageUrl,
                             caption = captionText,
                             mediaItems = emptyList()
                         )
                         postViewModel.uploadPost(post, selectedImageUris)
                     },
-                    isLoading = postState.isUploadingPost,
+                    isLoading = postState.uploadPostState.isLoading,
                     isShareEnabled = captionText.isNotBlank() || selectedImageUris.isNotEmpty()
                 )
-                if (postState.isUploadingPost) {
+                if (postState.uploadPostState.isLoading) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary
@@ -135,14 +143,14 @@ fun CreatePostScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AsyncImageWithPlaceholder(
-                        imageUrl = userState.currentUser.imageUrl,
+                        imageUrl = currentUser.imageUrl,
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape),
                         contentScale = ContentScale.Crop
                     )
                     Text(
-                        text = userState.currentUser.username,
+                        text = currentUser.username,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(start = 12.dp)
@@ -187,7 +195,6 @@ fun CreatePostScreen(
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -449,22 +456,24 @@ private fun UploadStateHandler(
     onSuccess: () -> Unit
 ) {
     when {
-        postState.isUploadingPost -> {}
+        postState.uploadPostState.isLoading -> {}
 
-        postState.uploadPostError.isNotEmpty() -> {
-            Text(
-                text = postState.uploadPostError,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(16.dp)
-            )
+        postState.uploadPostState.isError -> {
+            postState.uploadPostState.getErrorMessageOrNull()?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         }
 
-        postState.uploadPostSuccess -> {
+        postState.uploadPostState.isSuccess -> {
             Toast.makeText(LocalContext.current, "Upload successful", Toast.LENGTH_SHORT).show()
             LaunchedEffect(Unit) {
                 onSuccess()
-                postViewModel.clearUploadPostState()
+                postViewModel.resetUploadPostState()
             }
         }
     }

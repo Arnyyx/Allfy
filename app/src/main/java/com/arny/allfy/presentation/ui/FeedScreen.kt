@@ -49,6 +49,7 @@ import com.arny.allfy.presentation.common.BottomNavigation
 import com.arny.allfy.presentation.common.BottomNavigationItem
 import com.arny.allfy.presentation.common.PostItem
 import com.arny.allfy.utils.Screen
+import com.arny.allfy.utils.Response
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
@@ -67,20 +68,32 @@ fun FeedScreen(
     val authState by authViewModel.authState.collectAsState()
     val userState by userViewModel.userState.collectAsState()
 
+    val currentUserId = authState.currentUserId
 
-    when {
-        userState.isLoadingCurrentUser -> LoadingScreenWithNavigation(navController)
-        userState.errorCurrentUser.isNotEmpty() -> ErrorToast(userState.errorCurrentUser)
-        userState.currentUser.userId.isNotEmpty() -> {
+    LaunchedEffect(authState.isAuthenticated) {
+        if (authState.isAuthenticated && currentUserId.isEmpty()) {
+            authViewModel.getCurrentUserId()
+        }
+    }
+
+    LaunchedEffect(currentUserId) {
+        if (currentUserId.isNotEmpty() && userState.currentUserState is Response.Idle) {
+            userViewModel.getCurrentUser(currentUserId)
+        }
+    }
+
+    when (val currentUserResponse = userState.currentUserState) {
+        is Response.Loading -> LoadingScreenWithNavigation(navController)
+        is Response.Error -> ErrorToast(currentUserResponse.message)
+        is Response.Success -> {
             FeedContent(
-                currentUser = userState.currentUser,
+                currentUser = currentUserResponse.data,
                 postViewModel = postViewModel,
                 navController = navController
             )
         }
 
-        else -> LoadingScreenWithNavigation(navController)
-
+        is Response.Idle -> LoadingScreenWithNavigation(navController)
     }
 }
 
@@ -95,7 +108,7 @@ private fun FeedContent(
     val listState = rememberLazyListState()
 
     LaunchedEffect(currentUser.userId) {
-        if (state.feedPosts.isEmpty() && !state.isLoadingFeed) {
+        if (state.feedPostsState is Response.Idle) {
             postViewModel.getFeedPosts(currentUser.userId)
         }
     }
@@ -125,7 +138,7 @@ private fun FeedContent(
                         titleContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
-                if (state.isLoadingFeed && state.feedPosts.isEmpty()) {
+                if (state.feedPostsState is Response.Loading) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary
@@ -138,7 +151,7 @@ private fun FeedContent(
                 selectedItem = BottomNavigationItem.Feed,
                 navController = navController,
                 onRefresh = {
-                    postViewModel.clearFeedState()
+                    postViewModel.resetFeedPostsState()
                     postViewModel.getFeedPosts(currentUser.userId)
                 }
             )
@@ -150,29 +163,36 @@ private fun FeedContent(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            when {
-                state.feedPostsError.isNotBlank() -> ErrorScreen(state.feedPostsError)
-                state.feedPosts.isEmpty() && !state.isLoadingFeed -> EmptyScreen("No posts available")
-                else -> {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        itemsIndexed(
-                            items = state.feedPosts,
-                            key = { _, post -> post.postID }
-                        ) { _, post ->
-                            AnimatedPostItem(
-                                post = post,
-                                currentUser = currentUser,
-                                postViewModel = postViewModel,
-                                navController = navController
-                            )
+            when (val feedPostsResponse = state.feedPostsState) {
+                is Response.Loading -> {}
+                is Response.Error -> ErrorScreen(feedPostsResponse.message)
+                is Response.Success -> {
+                    val posts = feedPostsResponse.data
+                    if (posts.isEmpty()) {
+                        EmptyScreen("No posts available")
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            itemsIndexed(
+                                items = posts,
+                                key = { _, post -> post.postID }
+                            ) { _, post ->
+                                AnimatedPostItem(
+                                    post = post,
+                                    currentUser = currentUser,
+                                    postViewModel = postViewModel,
+                                    navController = navController
+                                )
+                            }
                         }
                     }
                 }
+
+                is Response.Idle -> {}
             }
         }
     }

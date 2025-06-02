@@ -12,7 +12,7 @@ class SendImages @Inject constructor(
     suspend operator fun invoke(
         conversationID: String,
         imageUris: List<Uri>
-    ): Flow<Response<List<String>>> {
+    ): Flow<Response<Boolean>> {
         return messageRepository.sendImages(conversationID, imageUris)
     }
 }

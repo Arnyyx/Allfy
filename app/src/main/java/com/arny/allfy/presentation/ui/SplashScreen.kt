@@ -2,34 +2,31 @@ package com.arny.allfy.presentation.ui
 
 import android.app.Activity
 import android.util.Log
-import android.view.animation.OvershootInterpolator
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.runtime.remember
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.NavController
 import com.arny.allfy.R
-import com.arny.allfy.presentation.viewmodel.AuthState
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
+import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
+import com.arny.allfy.utils.getDataOrNull
 
 @Composable
 fun SplashScreen(
@@ -38,7 +35,8 @@ fun SplashScreen(
     userViewModel: UserViewModel
 ) {
     val scale = remember { Animatable(0f) }
-    val authState = authViewModel.authState.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
+    val userState by userViewModel.userState.collectAsState()
     val context = LocalContext.current
     val activity = context as? Activity
     val intent = activity?.intent
@@ -47,80 +45,92 @@ fun SplashScreen(
         scale.animateTo(
             targetValue = 0.5f,
             animationSpec = tween(
-                durationMillis = 500,
+                durationMillis = 1,
                 easing = { it * it }
             )
         )
     }
 
-    LaunchedEffect(authState.value.currentUserId, intent) {
-        if (authState.value.currentUserId.isNotEmpty()) {
-            userViewModel.getCurrentUser(authState.value.currentUserId)
-
-            intent?.let {
-                when {
-                    it.getBooleanExtra("isChatNotification", false) -> {
-                        val conversationId = it.getStringExtra("conversationId") ?: return@let
-                        val otherUserId = it.getStringExtra("otherUserId") ?: return@let
-                        navController.navigate(
-                            Screen.ChatScreen(
-                                conversationId = conversationId,
-                                otherUserId = otherUserId
-                            )
-                        )
-                    }
-
-                    it.getBooleanExtra("isIncomingCall", false) -> {
-                        val conversationId = it.getStringExtra("conversationId") ?: return@let
-                        val callerId = it.getStringExtra("callerId") ?: return@let
-                        navController.navigate(
-                            Screen.CallScreen(
-                                conversationId = conversationId,
-                                isCaller = false,
-                                otherUserId = callerId
-                            )
-                        )
-                    }
-
-                    else -> {
-                        navController.navigate(Screen.FeedScreen) {
-                            popUpTo(Screen.SplashScreen) { inclusive = true }
-                        }
-                    }
-                }
-            } ?: run {
-                navController.navigate(Screen.FeedScreen) {
-                    popUpTo(Screen.SplashScreen) { inclusive = true }
-                }
-
-
-            }
+    LaunchedEffect(authState.isAuthenticated) {
+        Log.d("SplashScreen", "Is authenticated: ${authState.isAuthenticated}")
+        if (authState.isAuthenticated && authState.currentUserId.isEmpty()) {
+            authViewModel.getCurrentUserId()
         }
     }
 
-    LaunchedEffect(authState.value) {
-        when {
-            authState.value.isLoading -> {}
+    // Load current user when ID is available
+    LaunchedEffect(authState.currentUserId) {
+        if (authState.currentUserId.isNotEmpty()) {
+            Log.d("SplashScreen", "Current user ID: ${authState.currentUserId}")
+            userViewModel.getCurrentUser(authState.currentUserId)
+        }
+    }
 
-            authState.value.isAuthenticated -> {
-                authViewModel.getCurrentUserId()
-            }
-
-            else -> {
+    // Handle navigation based on user state
+    LaunchedEffect(userState.currentUserState, authState.isAuthenticated) {
+        when (val currentUserResponse = userState.currentUserState) {
+            is Response.Success -> {
+                Log.d("SplashScreen", userState.currentUserState.getDataOrNull().toString())
                 intent?.let {
-                    if (!it.hasExtra("isChatNotification") && !it.hasExtra("isIncomingCall")) {
-                        navController.navigate(Screen.LoginScreen) {
-                            popUpTo(Screen.SplashScreen) { inclusive = true }
+                    when {
+                        it.getBooleanExtra("isChatNotification", false) -> {
+                            val conversationId = it.getStringExtra("conversationId") ?: return@let
+                            val otherUserId = it.getStringExtra("otherUserId") ?: return@let
+                            navController.navigate(
+                                Screen.ChatScreen(
+                                    conversationId = conversationId,
+                                    otherUserId = otherUserId
+                                )
+                            )
+                        }
+
+                        it.getBooleanExtra("isIncomingCall", false) -> {
+                            val conversationId = it.getStringExtra("conversationId") ?: return@let
+                            val callerId = it.getStringExtra("callerId") ?: return@let
+                            navController.navigate(
+                                Screen.CallScreen(
+                                    conversationId = conversationId,
+                                    isCaller = false,
+                                    otherUserId = callerId
+                                )
+                            )
+                        }
+
+                        else -> {
+                            navController.navigate(Screen.FeedScreen) {
+                                Log.d("SplashScreen", "Navigate to feed screen")
+                                popUpTo(Screen.SplashScreen) { inclusive = true }
+                            }
                         }
                     }
-                } ?: navController.navigate(Screen.LoginScreen) {
+                } ?: run {
+                    navController.navigate(Screen.FeedScreen) {
+                        popUpTo(Screen.SplashScreen) { inclusive = true }
+                    }
+                }
+            }
+
+            is Response.Error -> {
+                Toast.makeText(context, currentUserResponse.message, Toast.LENGTH_SHORT).show()
+                // Navigate to login if user load fails
+                navController.navigate(Screen.LoginScreen) {
                     popUpTo(Screen.SplashScreen) { inclusive = true }
                 }
             }
-        }
 
-        authState.value.errorMessage?.let { error ->
-            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+            else -> {
+                if (!authState.isAuthenticated) {
+                    intent?.let {
+                        if (!it.hasExtra("isChatNotification") && !it.hasExtra("isIncomingCall")) {
+                            navController.navigate(Screen.LoginScreen) {
+                                popUpTo(Screen.SplashScreen) { inclusive = true }
+                            }
+                        }
+                    } ?: navController.navigate(Screen.LoginScreen) {
+                        popUpTo(Screen.SplashScreen) { inclusive = true }
+                    }
+                }
+            }
         }
     }
 
@@ -130,5 +140,16 @@ fun SplashScreen(
             contentDescription = "Logo",
             modifier = Modifier.scale(scale.value)
         )
+
+        // Show loading indicator at bottom if loading user
+        if (userState.currentUserState is Response.Loading ||
+            authState.getCurrentUserIdState is Response.Loading
+        ) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+            )
+        }
     }
 }

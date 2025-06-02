@@ -3,6 +3,7 @@ package com.arny.allfy.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arny.allfy.domain.usecase.authentication.AuthenticationUseCases
+import com.arny.allfy.presentation.state.AuthState
 import com.arny.allfy.utils.Response
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import javax.inject.Inject
 class AuthViewModel @Inject constructor(
     private val authUseCases: AuthenticationUseCases,
 ) : ViewModel() {
+
     private val _authState = MutableStateFlow(AuthState())
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
@@ -24,46 +26,29 @@ class AuthViewModel @Inject constructor(
     }
 
     private fun checkAuthStatus() {
-        if (authUseCases.isAuthenticated()) {
-            _authState.update { it.copy(isAuthenticated = true) }
-        } else {
-            _authState.update { it.copy(isAuthenticated = false) }
-        }
+        val isAuth = authUseCases.isAuthenticated()
+        _authState.update { it.copy(isAuthenticated = isAuth) }
     }
 
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
             authUseCases.signInWithEmail(email, password).collect { response ->
-                when (response) {
-                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
-                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
-                    is Response.Success -> _authState.update {
-                        it.copy(
-                            isLoading = false,
-                            isAuthenticated = true
-                        )
-                    }
+                _authState.update { it.copy(signInEmailState = response) }
 
+                if (response is Response.Success) {
+                    _authState.update { it.copy(isAuthenticated = true) }
                 }
             }
-
         }
     }
 
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
             authUseCases.signInWithGoogle(idToken).collect { response ->
-                when (response) {
-                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
-                    is Response.Success -> _authState.update {
-                        it.copy(
-                            isLoading = false,
-                            isAuthenticated = true
-                        )
+                _authState.update { it.copy(signInGoogleState = response) }
 
-                    }
-
-                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
+                if (response is Response.Success) {
+                    _authState.update { it.copy(isAuthenticated = true) }
                 }
             }
         }
@@ -72,45 +57,25 @@ class AuthViewModel @Inject constructor(
     fun signUp(username: String, email: String, password: String) {
         viewModelScope.launch {
             authUseCases.signUp(username, email, password).collect { response ->
-                when (response) {
-                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
-                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
-                    is Response.Success -> {
-                        _authState.update { it.copy(isLoading = false) }
-                        signInWithEmail(email, password)
-                    }
+                _authState.update { it.copy(signUpState = response) }
+
+                if (response is Response.Success) {
+                    signInWithEmail(email, password)
                 }
             }
         }
     }
 
-
     fun signOut() {
         viewModelScope.launch {
             authUseCases.signOut().collect { response ->
-                when (response) {
-                    is Response.Loading -> _authState.update {
-                        it.copy(
-                            isLoading = true,
-                            errorMessage = null
-                        )
-                    }
+                _authState.update { it.copy(signOutState = response) }
 
-                    is Response.Success -> {
-                        _authState.update {
-                            it.copy(
-                                isLoading = false,
-                                isAuthenticated = false,
-                                currentUserId = "",
-                                errorMessage = null
-                            )
-                        }
-                    }
-
-                    is Response.Error -> _authState.update {
+                if (response is Response.Success) {
+                    _authState.update {
                         it.copy(
-                            isLoading = false,
-                            errorMessage = response.message
+                            isAuthenticated = false,
+                            currentUserId = ""
                         )
                     }
                 }
@@ -121,34 +86,37 @@ class AuthViewModel @Inject constructor(
     fun getCurrentUserId() {
         viewModelScope.launch {
             authUseCases.getCurrentUserId().collect { response ->
-                when (response) {
-                    is Response.Loading -> _authState.update { it.copy(isLoading = true) }
-                    is Response.Error -> _authState.update { it.copy(errorMessage = response.message) }
-                    is Response.Success -> _authState.update {
-                        it.copy(
-                            isLoading = false,
-                            currentUserId = response.data,
-                        )
-                    }
+                _authState.update { it.copy(getCurrentUserIdState = response) }
 
+                if (response is Response.Success) {
+                    _authState.update { it.copy(currentUserId = response.data) }
                 }
-
             }
         }
     }
 
+    // Reset Functions
+    fun resetSignInEmailState() {
+        _authState.update { it.copy(signInEmailState = Response.Idle) }
+    }
+
+    fun resetSignInGoogleState() {
+        _authState.update { it.copy(signInGoogleState = Response.Idle) }
+    }
+
+    fun resetSignUpState() {
+        _authState.update { it.copy(signUpState = Response.Idle) }
+    }
+
+    fun resetSignOutState() {
+        _authState.update { it.copy(signOutState = Response.Idle) }
+    }
+
+    fun resetGetCurrentUserIdState() {
+        _authState.update { it.copy(getCurrentUserIdState = Response.Idle) }
+    }
+
     fun clearAuthState() {
-        viewModelScope.launch {
-            _authState.value = AuthState()
-        }
+        _authState.value = AuthState()
     }
 }
-
-data class AuthState(
-    val isLoading: Boolean = false,
-    val isAuthenticated: Boolean = false,
-    val errorMessage: String? = null,
-
-    val currentUserId: String = ""
-)
-
