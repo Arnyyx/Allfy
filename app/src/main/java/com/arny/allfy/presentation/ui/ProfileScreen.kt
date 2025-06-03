@@ -658,8 +658,16 @@ private fun ProfileDetails(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 StatisticItem("Posts", postsIds.size.toString())
-                StatisticItem("Followers", followersCount.toString())
-                StatisticItem("Following", followingCount.toString())
+                StatisticItem(
+                    label = "Followers",
+                    value = followersCount.toString(),
+                    onClick = { navController.navigate(Screen.FollowScreen(user.userId, 0)) }
+                )
+                StatisticItem(
+                    label = "Following",
+                    value = followingCount.toString(),
+                    onClick = { navController.navigate(Screen.FollowScreen(user.userId, 1)) }
+                )
             }
         }
         Column(modifier = Modifier.padding(top = 8.dp)) {
@@ -765,11 +773,24 @@ private fun ProfileDetails(
 }
 
 @Composable
-private fun StatisticItem(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+private fun StatisticItem(
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null
+) {
+    Column(
+        modifier = Modifier
+            .clickable(enabled = onClick != null) { onClick?.invoke() }
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Text(
-            label,
+            text = value,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = label,
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )

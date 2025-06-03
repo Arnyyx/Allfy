@@ -42,6 +42,9 @@ sealed class Screen {
     data class PostDetailScreen(val postID: String) : Screen()
 
     @Serializable
+    data class FollowScreen(val userId: String, val initialTab: Int) : Screen()
+
+    @Serializable
     data class ChatScreen(
         val conversationId: String? = null,
         val otherUserId: String

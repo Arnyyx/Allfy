@@ -10,6 +10,7 @@ data class UserState(
     val followUserState: Response<Boolean> = Response.Idle,
     val unfollowUserState: Response<Boolean> = Response.Idle,
     val followersState: Response<List<User>> = Response.Idle,
+    val followingsState: Response<List<User>> = Response.Idle,
     val followingCountState: Response<Int> = Response.Idle,
     val followersCountState: Response<Int> = Response.Idle,
     val postsIdsState: Response<List<String>> = Response.Idle,

@@ -151,6 +151,34 @@ class UserRepositoryImpl @Inject constructor(
             }
         }
 
+    override suspend fun getFollowings(userId: String): Flow<Response<List<User>>> = flow {
+        emit(Response.Loading)
+        try {
+            val followingDocs = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                .document(userId)
+                .collection("following")
+                .get()
+                .await()
+
+            val followingIds =
+                followingDocs.map { it.getString("userId") ?: "" }.filter { it.isNotEmpty() }
+            if (followingIds.isEmpty()) {
+                emit(Response.Success(emptyList()))
+                return@flow
+            }
+
+            val userDocs = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                .whereIn("userId", followingIds)
+                .get()
+                .await()
+
+            val followings = userDocs.mapNotNull { it.toObject(User::class.java) }
+            emit(Response.Success(followings))
+        } catch (e: Exception) {
+            emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+        }
+    }
+
     override fun getUsersByIDs(userIDs: List<String>): Flow<Response<List<User>>> = flow {
         emit(Response.Loading)
         try {

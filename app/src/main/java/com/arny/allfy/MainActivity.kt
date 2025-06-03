@@ -292,5 +292,9 @@ fun AllfyApp(
                 },
             )
         }
+        composable<Screen.FollowScreen> {
+            val args = it.toRoute<Screen.FollowScreen>()
+            FollowScreen(navController, userViewModel, args.userId, args.initialTab)
+        }
     }
 }

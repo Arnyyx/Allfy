@@ -16,6 +16,21 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+data class UserState(
+    val currentUserState: Response<User> = Response.Idle,
+    val otherUserState: Response<User> = Response.Idle,
+    val updateProfileState: Response<Boolean> = Response.Idle,
+    val followUserState: Response<Boolean> = Response.Idle,
+    val unfollowUserState: Response<Boolean> = Response.Idle,
+    val followersState: Response<List<User>> = Response.Idle,
+    val followingsState: Response<List<User>> = Response.Idle,
+    val followingCountState: Response<Int> = Response.Idle,
+    val followersCountState: Response<Int> = Response.Idle,
+    val postsIdsState: Response<List<String>> = Response.Idle,
+    val checkIfFollowingState: Response<Boolean> = Response.Idle,
+    val usersState: Response<List<User>> = Response.Idle
+)
+
 @HiltViewModel
 class UserViewModel @Inject constructor(
     private val userUseCases: UserUseCases,
@@ -40,7 +55,6 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Update Profile
     fun updateUserProfile(updatedUser: User, imageUri: Uri?) {
         viewModelScope.launch {
             userUseCases.setUserDetails(updatedUser, imageUri).collect { response ->
@@ -51,7 +65,6 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Follow User
     fun followUser(currentUserId: String, targetUserId: String) {
         viewModelScope.launch {
             userUseCases.followUser(currentUserId, targetUserId).collect { response ->
@@ -62,7 +75,6 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Unfollow User
     fun unfollowUser(currentUserId: String, targetUserId: String) {
         viewModelScope.launch {
             userUseCases.unfollowUser(currentUserId, targetUserId).collect { response ->
@@ -73,7 +85,6 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Get Followers
     fun getFollowers(userId: String) {
         viewModelScope.launch {
             userUseCases.getFollowers(userId).collect { response ->
@@ -82,7 +93,14 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Get Following Count
+    fun getFollowings(userId: String) {
+        viewModelScope.launch {
+            userUseCases.getFollowings(userId).collect { response ->
+                _userState.update { it.copy(followingsState = response) }
+            }
+        }
+    }
+
     fun getFollowingCount(userId: String) {
         viewModelScope.launch {
             userUseCases.getFollowingCount(userId).collect { response ->
@@ -91,7 +109,6 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Get Followers Count
     fun getFollowersCount(userId: String) {
         viewModelScope.launch {
             userUseCases.getFollowersCount(userId).collect { response ->
@@ -100,7 +117,6 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Get Post IDs
     fun getPostIds(userId: String) {
         viewModelScope.launch {
             userUseCases.getPostIds(userId).collect { response ->
@@ -109,7 +125,6 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Check If Following
     fun checkIfFollowing(currentUserId: String, targetUserId: String) {
         viewModelScope.launch {
             userUseCases.checkIfFollowing(currentUserId, targetUserId).collect { response ->
@@ -118,7 +133,6 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Get Users by IDs
     fun getUsersByIDs(userIDs: List<String>) {
         viewModelScope.launch {
             userUseCases.getUsersByIDs(userIDs).collect { response ->
@@ -127,7 +141,6 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    // Reset Functions
     fun resetCurrentUserState() {
         _userState.update { it.copy(currentUserState = Response.Idle) }
     }
@@ -152,6 +165,10 @@ class UserViewModel @Inject constructor(
         _userState.update { it.copy(followersState = Response.Idle) }
     }
 
+    fun resetFollowingsState() {
+        _userState.update { it.copy(followingsState = Response.Idle) }
+    }
+
     fun resetFollowingCountState() {
         _userState.update { it.copy(followingCountState = Response.Idle) }
     }
@@ -172,7 +189,6 @@ class UserViewModel @Inject constructor(
         _userState.update { it.copy(usersState = Response.Idle) }
     }
 
-    // Reset All States
     fun clearUserState() {
         _userState.value = UserState()
     }

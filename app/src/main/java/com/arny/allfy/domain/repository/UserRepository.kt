@@ -15,6 +15,8 @@ interface UserRepository {
 
     suspend fun getFollowers(followerIds: List<String>): Flow<Response<List<User>>>
     suspend fun getFollowers(userId: String): Flow<Response<List<User>>>
+    suspend fun getFollowings(userId: String): Flow<Response<List<User>>>
+
     suspend fun getFollowingCount(userId: String): Flow<Response<Int>>
     suspend fun getFollowersCount(userId: String): Flow<Response<Int>>
     suspend fun getPostIds(userId: String): Flow<Response<List<String>>>

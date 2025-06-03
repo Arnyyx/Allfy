@@ -46,6 +46,7 @@ import com.arny.allfy.domain.usecase.user.FollowUser
 import com.arny.allfy.domain.usecase.user.GetFollowersCount
 import com.arny.allfy.domain.usecase.user.GetFollowers
 import com.arny.allfy.domain.usecase.user.GetFollowingCount
+import com.arny.allfy.domain.usecase.user.GetFollowings
 import com.arny.allfy.domain.usecase.user.GetPostIds
 import com.arny.allfy.domain.usecase.user.GetUserDetails
 import com.arny.allfy.domain.usecase.user.GetUsersByIDs
@@ -167,7 +168,8 @@ class AllfyModule {
         getFollowingCount = GetFollowingCount(repository),
         getFollowersCount = GetFollowersCount(repository),
         getPostIds = GetPostIds(repository),
-        checkIfFollowing = CheckIfFollowing(repository)
+        checkIfFollowing = CheckIfFollowing(repository),
+        getFollowings = GetFollowings(repository)
     )
 
 

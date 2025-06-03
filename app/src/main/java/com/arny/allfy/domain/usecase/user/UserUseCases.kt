@@ -7,6 +7,7 @@ class UserUseCases(
     val followUser: FollowUser,
     val unfollowUser: UnfollowUser,
     val getFollowers: GetFollowers,
+    val getFollowings: GetFollowings,
     val getFollowingCount: GetFollowingCount,
     val getFollowersCount: GetFollowersCount,
     val getPostIds: GetPostIds,
