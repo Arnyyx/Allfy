@@ -287,8 +287,9 @@ fun AllfyApp(
         composable<Screen.QRScannerScreen> {
             QRScannerScreen(
                 navController = navController,
-                onQRScanned = { },
-                onScanFromGallery = { }
+                onQRScanned = { qrContent ->
+                    handleQRResult(qrContent, navController, navController.context)
+                },
             )
         }
     }

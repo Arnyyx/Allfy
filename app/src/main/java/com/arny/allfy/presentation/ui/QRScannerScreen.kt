@@ -1,10 +1,15 @@
-// QRScannerScreen.kt
 package com.arny.allfy.presentation.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -12,9 +17,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Image
@@ -27,35 +30,75 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import com.arny.allfy.ui.theme.*
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import com.arny.allfy.utils.decodeQRFromImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 
 @Composable
 fun QRScannerScreen(
     navController: NavController,
-    onQRScanned: (String) -> Unit,
-    onScanFromGallery: () -> Unit
+    onQRScanned: (String) -> Unit
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
     var hasFlash by remember { mutableStateOf(false) }
     var isFlashOn by remember { mutableStateOf(false) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
+    var isProcessingImage by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
+    // Launcher for picking image from gallery
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { selectedUri ->
+            isProcessingImage = true
+            coroutineScope.launch {
+                try {
+                    val qrResult = decodeQRFromImage(context, selectedUri)
+                    withContext(Dispatchers.Main) {
+                        isProcessingImage = false
+                        if (qrResult != null) {
+                            onQRScanned(qrResult)
+                            navController.popBackStack() // Quay lại sau khi quét thành công
+                        } else {
+                            Toast.makeText(context, "No QR code found in image", Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        isProcessingImage = false
+                        Toast.makeText(
+                            context,
+                            "Error reading image: ${e.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
+
+    // Animation for scan line
     val scanLineAnimation = rememberInfiniteTransition(label = "scanLine")
     val scanLinePosition by scanLineAnimation.animateFloat(
         initialValue = 0f,
@@ -67,6 +110,7 @@ fun QRScannerScreen(
         label = "scanLinePosition"
     )
 
+    // Animation for pulse effect
     val pulseAnimation = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by pulseAnimation.animateFloat(
         initialValue = 0.3f,
@@ -85,6 +129,7 @@ fun QRScannerScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Camera preview
         AndroidView(
             factory = { ctx ->
                 val previewView = PreviewView(ctx)
@@ -118,7 +163,7 @@ fun QRScannerScreen(
                             imageAnalyzer
                         )
 
-                        preview.setSurfaceProvider(previewView.surfaceProvider)
+                        preview.surfaceProvider = previewView.surfaceProvider
                         hasFlash = camera?.cameraInfo?.hasFlashUnit() == true
 
                     } catch (e: Exception) {
@@ -131,6 +176,7 @@ fun QRScannerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
+        // Overlay with scan area
         Canvas(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -269,7 +315,7 @@ fun QRScannerScreen(
                     )
             ) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White
                 )
@@ -305,7 +351,7 @@ fun QRScannerScreen(
             }
         }
 
-        // Instructions
+        // Instructions and Gallery button
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -313,6 +359,16 @@ fun QRScannerScreen(
                 .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Loading indicator when processing image
+            AnimatedVisibility(visible = isProcessingImage) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
             Text(
                 text = "Position QR code within the frame",
                 style = MaterialTheme.typography.bodyLarge,
@@ -334,7 +390,7 @@ fun QRScannerScreen(
 
             // Gallery button
             OutlinedButton(
-                onClick = onScanFromGallery,
+                onClick = { imagePickerLauncher.launch("image/*") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -342,6 +398,7 @@ fun QRScannerScreen(
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = Color.White
                 ),
+                enabled = !isProcessingImage // Disable button while processing
             ) {
                 Icon(
                     Icons.Default.Image,
@@ -354,154 +411,6 @@ fun QRScannerScreen(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )
-            }
-        }
-    }
-}
-
-@Composable
-fun QRCodeDisplay(
-    qrCodeBitmap: android.graphics.Bitmap,
-    username: String,
-    onDismiss: () -> Unit,
-    onSaveToGallery: () -> Unit
-) {
-    val rotationAnimation = rememberInfiniteTransition(label = "rotation")
-    val rotation by rotationAnimation.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(20000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
-    )
-
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Share Profile",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Profile info
-                Text(
-                    text = "@$username",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // QR Code with animated border
-                Box(
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Animated gradient border
-                    Canvas(
-                        modifier = Modifier.size(240.dp)
-                    ) {
-                        drawCircle(
-                            brush = androidx.compose.ui.graphics.Brush.sweepGradient(
-                                colors = listOf(
-                                    QRPrimary,
-                                    QRSecondary,
-                                    QRTertiary,
-                                    QRPrimary
-                                ),
-                                center = center
-                            ),
-                            radius = size.minDimension / 2,
-                            style = Stroke(width = 3.dp.toPx())
-                        )
-                    }
-
-                    // QR Code container
-                    Surface(
-                        modifier = Modifier.size(220.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White,
-                        shadowElevation = 8.dp
-                    ) {
-                        Box(
-                            modifier = Modifier.padding(16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            androidx.compose.foundation.Image(
-                                bitmap = qrCodeBitmap.asImageBitmap(),
-                                contentDescription = "QR Code",
-                                modifier = Modifier.size(180.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Text(
-                    text = "Scan this code to visit my profile",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = QRTextSecondary,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Action buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onSaveToGallery,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Download,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save")
-                    }
-
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Done", fontWeight = FontWeight.Medium)
-                    }
-                }
             }
         }
     }

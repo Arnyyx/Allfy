@@ -68,6 +68,7 @@ import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
+import com.arny.allfy.utils.decodeQRFromImage
 import com.arny.allfy.utils.getDataOrNull
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
@@ -77,6 +78,7 @@ import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeWriter
 import com.journeyapps.barcodescanner.BarcodeEncoder
 import com.arny.allfy.utils.handleQRResult
+import com.arny.allfy.utils.saveQRCodeToGallery
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -92,13 +94,15 @@ fun ProfileScreen(
     val userState by userViewModel.userState.collectAsState()
     val postState by postViewModel.postState.collectAsState()
     val context = LocalContext.current
-    val isCurrentUser = userId == null
     var showQrOptionsDialog by remember { mutableStateOf(false) }
     var showQrCodeDialog by remember { mutableStateOf(false) }
     var showImageViewer by remember { mutableStateOf(false) }
     var qrCodeBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isProcessingImage by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+
+    val currentUserId = (userState.currentUserState as? Response.Success)?.data?.userId
+    val isCurrentUser = userId == null || userId == currentUserId
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -307,10 +311,6 @@ fun ProfileScreen(
                     } else {
                         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                     }
-                },
-                onScanFromGallery = {
-                    showQrOptionsDialog = false
-                    imagePickerLauncher.launch("image/*")
                 }
             )
         }
@@ -369,7 +369,6 @@ private fun QROptionsDialog(
     onDismiss: () -> Unit,
     onShowQRCode: () -> Unit,
     onScanWithCamera: () -> Unit,
-    onScanFromGallery: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -406,15 +405,8 @@ private fun QROptionsDialog(
                 QROptionItem(
                     icon = Icons.Default.CameraAlt,
                     title = "Scan with Camera",
-                    subtitle = "Open camera to scan QR code",
+                    subtitle = "Open camera to scan QR code or choose from gallery",
                     onClick = onScanWithCamera
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                QROptionItem(
-                    icon = Icons.Default.Image,
-                    title = "Scan from Gallery",
-                    subtitle = "Choose QR code image from gallery",
-                    onClick = onScanFromGallery
                 )
             }
         }
@@ -494,7 +486,7 @@ private fun QRCodeDisplayDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Share @$username",
+                        text = "@$username",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontSize = 20.sp,
                             fontWeight = FontWeight.SemiBold
@@ -558,7 +550,7 @@ private fun QRCodeDisplayDialog(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save to Gallery")
+                        Text("Save")
                     }
                     OutlinedButton(
                         onClick = onDismiss,
@@ -576,48 +568,6 @@ private fun QRCodeDisplayDialog(
     }
 }
 
-private suspend fun decodeQRFromImage(context: Context, uri: Uri): String? {
-    return withContext(Dispatchers.IO) {
-        try {
-            val inputStream = context.contentResolver.openInputStream(uri)
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
-            val width = bitmap.width
-            val height = bitmap.height
-            val pixels = IntArray(width * height)
-            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-            val source = RGBLuminanceSource(width, height, pixels)
-            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
-            MultiFormatReader().decode(binaryBitmap).text
-        } catch (e: Exception) {
-            Log.e("QRDecode", "Error decoding QR from image", e)
-            null
-        }
-    }
-}
-
-private fun saveQRCodeToGallery(context: Context, bitmap: Bitmap, onComplete: (Boolean) -> Unit) {
-    try {
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "QR_Code_${System.currentTimeMillis()}.jpg")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Allfy")
-            }
-        }
-        val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-        uri?.let {
-            resolver.openOutputStream(it)?.use { outputStream ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-                onComplete(true)
-            } ?: onComplete(false)
-        } ?: onComplete(false)
-    } catch (e: Exception) {
-        Log.e("SaveQR", "Error saving QR code", e)
-        onComplete(false)
-    }
-}
 
 @Composable
 private fun ProfileContent(
