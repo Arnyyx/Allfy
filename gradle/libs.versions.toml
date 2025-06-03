@@ -53,6 +53,9 @@ firebaseFunctionsKtx = "21.1.1"
 hiltCommon = "1.2.0"
 composeNavigation = "2.8.9"
 serialization = "1.8.0"
+zxingAndroidEmbedded = "4.3.0"
+playServicesMlkitBarcodeScanning = "18.3.1"
+cameraView = "1.4.2"
 
 [libraries]
 accompanist-swiperefresh = { module = "com.google.accompanist:accompanist-swiperefresh", version.ref = "accompanistSwiperefresh" }
@@ -122,6 +125,9 @@ firebase-functions-ktx = { group = "com.google.firebase", name = "firebase-funct
 androidx-hilt-common = { group = "androidx.hilt", name = "hilt-common", version.ref = "hiltCommon" }
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "composeNavigation" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxingAndroidEmbedded" }
+play-services-mlkit-barcode-scanning = { group = "com.google.android.gms", name = "play-services-mlkit-barcode-scanning", version.ref = "playServicesMlkitBarcodeScanning" }
+androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraView" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

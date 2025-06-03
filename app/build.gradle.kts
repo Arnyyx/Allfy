@@ -65,6 +65,8 @@ dependencies {
     implementation(libs.firebase.database)
     implementation(libs.firebase.functions.ktx)
     implementation(libs.androidx.hilt.common)
+    implementation(libs.play.services.mlkit.barcode.scanning)
+    implementation(libs.androidx.camera.view)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -106,10 +108,11 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
 
-    implementation (libs.androidx.camera.core)
-    implementation (libs.androidx.camera.camera2)
-    implementation (libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
 
+    implementation(libs.zxing.android.embedded)
 }
 kapt {
     correctErrorTypes = true

@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.toRoute
@@ -32,6 +33,7 @@ import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.ui.theme.AllfyTheme
 import com.arny.allfy.utils.Screen
+import com.arny.allfy.utils.handleQRResult
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
@@ -120,10 +122,20 @@ class MainActivity : ComponentActivity() {
                     )
                     Log.d("ChatNotification", "Navigate to chat screen")
                 }
+
+                it.action == Intent.ACTION_VIEW && it.data != null -> {
+                    val uri = it.data
+                    if (uri?.scheme == "allfy" && uri.host == "profile") {
+                        val userId = uri.pathSegments.firstOrNull()
+                        if (userId != null) {
+                            navController.navigate(Screen.ProfileScreen(userId = userId))
+                            Log.d("DeepLink", "Navigating to profile: $userId")
+                        }
+                    }
+                }
             }
         }
     }
-
 
     private fun updateFcmToken(auth: FirebaseAuth, db: FirebaseFirestore) {
         val preferences = getSharedPreferences("FCMPrefs", MODE_PRIVATE)
@@ -270,6 +282,13 @@ fun AllfyApp(
                 otherUserId = args.otherUserId,
                 userViewModel = userViewModel,
                 navController = navController
+            )
+        }
+        composable<Screen.QRScannerScreen> {
+            QRScannerScreen(
+                navController = navController,
+                onQRScanned = { },
+                onScanFromGallery = { }
             )
         }
     }

@@ -33,6 +33,9 @@ sealed class Screen {
     object ConversationsScreen : Screen()
 
     @Serializable
+    object QRScannerScreen : Screen()
+
+    @Serializable
     data class ProfileScreen(val userId: String? = null) : Screen()
 
     @Serializable
