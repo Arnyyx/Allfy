@@ -1,6 +1,5 @@
 package com.arny.allfy.domain.usecase.message
 
-
 data class MessageUseCases(
     val loadConversations: LoadConversations,
     val markMessageAsRead: MarkMessageAsRead,
@@ -9,5 +8,6 @@ data class MessageUseCases(
     val getMessages: GetMessages,
     val sendVoiceMessage: SendVoiceMessage,
     val initializeConversation: InitializeConversation,
-    val deleteMessage: DeleteMessage
+    val deleteMessage: DeleteMessage,
+    val editMessage: EditMessage
 )

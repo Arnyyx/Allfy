@@ -88,6 +88,16 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    fun editMessage(conversationId: String, messageId: String, newContent: String) {
+        viewModelScope.launch {
+            _chatState.update { it.copy(editMessageState = Response.Loading) }
+            messageUseCases.editMessage(conversationId, messageId, newContent).collect { response ->
+                _chatState.update { it.copy(editMessageState = response) }
+            }
+        }
+    }
+
+
     // Reset Functions
     fun resetLoadConversationsState() {
         _chatState.update { it.copy(loadConversationsState = Response.Idle) }
@@ -111,6 +121,10 @@ class ChatViewModel @Inject constructor(
 
     fun resetDeleteMessageState() {
         _chatState.update { it.copy(deleteMessageState = Response.Idle) }
+    }
+
+    fun resetEditMessageState() {
+        _chatState.update { it.copy(editMessageState = Response.Idle) }
     }
 
     fun clearChatState() {

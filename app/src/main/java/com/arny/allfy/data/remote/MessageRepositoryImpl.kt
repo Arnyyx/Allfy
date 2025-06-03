@@ -363,6 +363,86 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun editMessage(
+        conversationID: String,
+        messageId: String,
+        newContent: String
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+        try {
+            val senderId = FirebaseAuth.getInstance().currentUser?.uid
+                ?: throw Exception("User not authenticated")
+
+            val messageSnapshot = firebaseDatabase.reference
+                .child("conversations")
+                .child(conversationID)
+                .child("messages")
+                .child(messageId)
+                .get()
+                .await()
+
+            if (!messageSnapshot.exists()) {
+                emit(Response.Error("Message not found"))
+                return@flow
+            }
+
+            val message = messageSnapshot.getValue(Message::class.java)
+                ?: throw Exception("Failed to retrieve message")
+
+            if (message.senderId != senderId) {
+                emit(Response.Error("You can only edit your own messages"))
+                return@flow
+            }
+
+            if (message.type != MessageType.TEXT) {
+                emit(Response.Error("Only text messages can be edited"))
+                return@flow
+            }
+
+            // Lưu nội dung gốc nếu chưa có
+            val updatedMessage = message.copy(
+                content = newContent,
+                originalContent = message.originalContent ?: message.content,
+                editedTimestamp = System.currentTimeMillis()
+            )
+
+            // Cập nhật tin nhắn trong Firebase
+            firebaseDatabase.reference
+                .child("conversations")
+                .child(conversationID)
+                .child("messages")
+                .child(messageId)
+                .setValue(updatedMessage)
+                .await()
+
+            // Kiểm tra và cập nhật lastMessage nếu cần
+            val lastMessageSnapshot = firebaseDatabase.reference
+                .child("conversations")
+                .child(conversationID)
+                .child("lastMessage")
+                .get()
+                .await()
+
+            if (lastMessageSnapshot.exists() && lastMessageSnapshot.child("id")
+                    .getValue(String::class.java) == messageId
+            ) {
+                firebaseDatabase.reference
+                    .child("conversations")
+                    .child(conversationID)
+                    .updateChildren(
+                        mapOf(
+                            "lastMessage" to updatedMessage,
+                            "timestamp" to ServerValue.TIMESTAMP
+                        )
+                    ).await()
+            }
+
+            emit(Response.Success(true))
+        } catch (e: Exception) {
+            emit(Response.Error(e.message ?: "Failed to edit message"))
+        }
+    }
+
     private fun createConversationId(participants: List<String>): String {
         return participants.sorted().joinToString("_")
     }

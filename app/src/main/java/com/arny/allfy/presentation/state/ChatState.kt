@@ -14,5 +14,6 @@ data class ChatState(
     val sendImagesState: Response<Boolean> = Response.Idle,
     val sendVoiceMessageState: Response<Boolean> = Response.Idle,
     val initializeConversationState: Response<Boolean> = Response.Idle,
-    val deleteMessageState: Response<Boolean> = Response.Idle
+    val deleteMessageState: Response<Boolean> = Response.Idle,
+    val editMessageState: Response<Boolean> = Response.Idle
 )

@@ -16,22 +16,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -42,28 +27,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,10 +39,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavHostController
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.rememberAsyncImagePainter
@@ -87,17 +57,13 @@ import com.arny.allfy.presentation.common.Dialog
 import com.arny.allfy.presentation.state.ChatState
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
-import com.arny.allfy.utils.Response
-import com.arny.allfy.utils.Screen
-import com.arny.allfy.utils.formatDuration
-import com.arny.allfy.utils.formatTimestamp
-import com.arny.allfy.utils.getDataOrNull
-import com.arny.allfy.utils.getErrorMessageOrNull
-import com.arny.allfy.utils.isError
-import com.arny.allfy.utils.isLoading
+import com.arny.allfy.utils.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.core.net.toUri
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.DpOffset
 
 @Composable
 fun ChatScreen(
@@ -114,6 +80,8 @@ fun ChatScreen(
 
     var isConversationInitialized by remember { mutableStateOf(conversationId != null) }
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
+    var editingMessage by remember { mutableStateOf<Message?>(null) }
+    var showOriginalContentDialog by remember { mutableStateOf<Message?>(null) }
 
     LaunchedEffect(conversationId, currentUserId, otherUserId) {
         if (conversationId != null) {
@@ -129,7 +97,8 @@ fun ChatScreen(
             chatState.sendMessageState.isLoading ||
             chatState.sendImagesState.isLoading ||
             chatState.sendVoiceMessageState.isLoading ||
-            chatState.deleteMessageState.isLoading
+            chatState.deleteMessageState.isLoading ||
+            chatState.editMessageState.isLoading
 
     val error = chatState.loadConversationsState.getErrorMessageOrNull()
         ?: chatState.sendMessageState.getErrorMessageOrNull()
@@ -137,8 +106,11 @@ fun ChatScreen(
         ?: chatState.sendVoiceMessageState.getErrorMessageOrNull()
         ?: chatState.initializeConversationState.getErrorMessageOrNull()
         ?: chatState.deleteMessageState.getErrorMessageOrNull()
+        ?: chatState.editMessageState.getErrorMessageOrNull()
 
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize(),
         topBar = {
             Column {
                 ChatTopBar(
@@ -176,8 +148,7 @@ fun ChatScreen(
                     )
                 }
             }
-        },
-        modifier = Modifier.fillMaxSize()
+        }
     ) { paddingValues ->
         ChatContent(
             chatState = chatState,
@@ -187,26 +158,37 @@ fun ChatScreen(
             currentUserId = currentUserId,
             conversationId = conversationId,
             sendMessageState = isLoading,
+            editingMessage = editingMessage,
             onMessageInputChanged = chatViewModel::onMessageInputChanged,
             onSendMessage = { message ->
-                if (!isConversationInitialized) {
-                    chatViewModel.initializeConversation(listOf(currentUserId, otherUserId))
-                    isConversationInitialized = true
-                    if (!chatState.initializeConversationState.isLoading) {
-                        val conversations =
-                            chatState.loadConversationsState.getDataOrNull() ?: emptyList()
-                        val converId = conversations.firstOrNull {
-                            it.participants.containsAll(listOf(currentUserId, otherUserId))
-                        }?.id ?: return@ChatContent
-                        chatViewModel.sendMessage(converId, message)
-                    }
-                } else {
+                if (editingMessage != null) {
                     val conversations =
                         chatState.loadConversationsState.getDataOrNull() ?: emptyList()
                     val converId = conversationId ?: conversations.firstOrNull {
                         it.participants.containsAll(listOf(currentUserId, otherUserId))
                     }?.id ?: return@ChatContent
-                    chatViewModel.sendMessage(converId, message)
+                    chatViewModel.editMessage(converId, editingMessage!!.id, message.content)
+                    editingMessage = null
+                } else {
+                    if (!isConversationInitialized) {
+                        chatViewModel.initializeConversation(listOf(currentUserId, otherUserId))
+                        isConversationInitialized = true
+                        if (!chatState.initializeConversationState.isLoading) {
+                            val conversations =
+                                chatState.loadConversationsState.getDataOrNull() ?: emptyList()
+                            val converId = conversations.firstOrNull {
+                                it.participants.containsAll(listOf(currentUserId, otherUserId))
+                            }?.id ?: return@ChatContent
+                            chatViewModel.sendMessage(converId, message)
+                        }
+                    } else {
+                        val conversations =
+                            chatState.loadConversationsState.getDataOrNull() ?: emptyList()
+                        val converId = conversationId ?: conversations.firstOrNull {
+                            it.participants.containsAll(listOf(currentUserId, otherUserId))
+                        }?.id ?: return@ChatContent
+                        chatViewModel.sendMessage(converId, message)
+                    }
                 }
             },
             onSendImages = { uris ->
@@ -229,6 +211,18 @@ fun ChatScreen(
             },
             onDeleteMessage = { messageId ->
                 showDeleteDialog = messageId
+            },
+            onEditMessage = { message ->
+                if (message.senderId == currentUserId && message.type == MessageType.TEXT) {
+                    editingMessage = message
+                    chatViewModel.onMessageInputChanged(message.content)
+                }
+            },
+            onCancelEdit = { editingMessage = null },
+            onShowOriginalContent = { message ->
+                if (message.editedTimestamp != null && message.originalContent != null) {
+                    showOriginalContentDialog = message
+                }
             }
         )
         if (showDeleteDialog != null) {
@@ -253,12 +247,35 @@ fun ChatScreen(
                 onDismiss = { showDeleteDialog = null }
             )
         }
+        if (showOriginalContentDialog != null) {
+            Dialog(
+                title = "Original Message",
+                message = showOriginalContentDialog?.originalContent ?: "",
+                confirmText = "OK",
+                onConfirm = { showOriginalContentDialog = null },
+                onDismiss = { showOriginalContentDialog = null }
+            )
+        }
     }
 
     LaunchedEffect(chatState.deleteMessageState) {
         if (chatState.deleteMessageState is Response.Success) {
             chatViewModel.resetDeleteMessageState()
             Toast.makeText(context, "Message deleted", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(chatState.editMessageState) {
+        if (chatState.editMessageState is Response.Success) {
+            chatViewModel.resetEditMessageState()
+            Toast.makeText(context, "Message edited", Toast.LENGTH_SHORT).show()
+        } else if (chatState.editMessageState.isError) {
+            Toast.makeText(
+                context,
+                chatState.editMessageState.getErrorMessageOrNull() ?: "Failed to edit message",
+                Toast.LENGTH_SHORT
+            ).show()
+            chatViewModel.resetEditMessageState()
         }
     }
 }
@@ -365,11 +382,15 @@ private fun ChatContent(
     currentUserId: String,
     conversationId: String?,
     sendMessageState: Boolean,
+    editingMessage: Message?,
     onMessageInputChanged: (String) -> Unit,
     onSendMessage: (Message) -> Unit,
     onSendImages: (List<Uri>) -> Unit,
     onSendVoiceMessage: (Uri) -> Unit,
-    onDeleteMessage: (String) -> Unit
+    onDeleteMessage: (String) -> Unit,
+    onEditMessage: (Message) -> Unit,
+    onShowOriginalContent: (Message) -> Unit,
+    onCancelEdit: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val imagePicker =
@@ -395,11 +416,14 @@ private fun ChatContent(
                 messages = messages,
                 currentUserId = currentUserId,
                 modifier = Modifier.weight(1f),
-                onDeleteMessage = onDeleteMessage
+                onDeleteMessage = onDeleteMessage,
+                onEditMessage = onEditMessage,
+                onShowOriginalContent = onShowOriginalContent
             )
             ChatInput(
                 messageInput = messageInput,
                 isSendingMessage = sendMessageState,
+                isEditing = editingMessage != null,
                 onMessageInputChanged = onMessageInputChanged,
                 onSendMessage = {
                     if (messageInput.isNotBlank()) {
@@ -414,7 +438,8 @@ private fun ChatContent(
                 onImagePick = {
                     imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 },
-                onSendVoiceMessage = onSendVoiceMessage
+                onSendVoiceMessage = onSendVoiceMessage,
+                onCancelEdit = onCancelEdit
             )
         }
     }
@@ -447,7 +472,9 @@ private fun ChatMessagesList(
     messages: List<Message>,
     currentUserId: String,
     modifier: Modifier = Modifier,
-    onDeleteMessage: (String) -> Unit
+    onDeleteMessage: (String) -> Unit,
+    onEditMessage: (Message) -> Unit,
+    onShowOriginalContent: (Message) -> Unit
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -466,7 +493,10 @@ private fun ChatMessagesList(
             AnimatedMessageItem(
                 message = message,
                 isFromCurrentUser = message.senderId == currentUserId,
-                onLongPress = { onDeleteMessage(message.id) }
+                currentUserId = currentUserId,
+                onDeleteMessage = onDeleteMessage,
+                onEditMessage = onEditMessage,
+                onShowOriginalContent = onShowOriginalContent
             )
         }
     }
@@ -484,11 +514,17 @@ private fun ChatMessagesList(
 private fun AnimatedMessageItem(
     message: Message,
     isFromCurrentUser: Boolean,
-    onLongPress: () -> Unit
+    currentUserId: String,
+    onDeleteMessage: (String) -> Unit,
+    onEditMessage: (Message) -> Unit,
+    onShowOriginalContent: (Message) -> Unit
 ) {
     val context = LocalContext.current
     val mediaPlayer = remember { MediaPlayer() }
     var isPlaying by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    var menuOffset by remember { mutableStateOf(Offset(0f, 0f)) }
+    val density = LocalDensity.current
 
     AnimatedVisibility(
         visible = true,
@@ -500,7 +536,12 @@ private fun AnimatedMessageItem(
                 .fillMaxWidth()
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onLongPress = { onLongPress() }
+                        onLongPress = { offset ->
+                            if (isFromCurrentUser) {
+                                showMenu = true
+                                menuOffset = offset
+                            }
+                        }
                     )
                 },
             horizontalAlignment = if (isFromCurrentUser) Alignment.End else Alignment.Start
@@ -514,11 +555,28 @@ private fun AnimatedMessageItem(
             ) {
                 when (message.type) {
                     MessageType.TEXT -> {
-                        Text(
-                            text = message.content,
-                            color = if (isFromCurrentUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        Column(
                             modifier = Modifier.padding(12.dp)
-                        )
+                        ) {
+                            Text(
+                                text = message.content,
+                                color = if (isFromCurrentUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (message.editedTimestamp != null) {
+                                TextButton(
+                                    onClick = { onShowOriginalContent(message) },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text(
+                                        text = "Edited",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isFromCurrentUser) MaterialTheme.colorScheme.onPrimary.copy(
+                                            alpha = 0.7f
+                                        ) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     MessageType.IMAGE -> {
@@ -549,7 +607,7 @@ private fun AnimatedMessageItem(
                                     } else {
                                         mediaPlayer.setDataSource(
                                             context,
-                                            Uri.parse(message.content)
+                                            message.content.toUri()
                                         )
                                         mediaPlayer.prepare()
                                         mediaPlayer.start()
@@ -613,6 +671,50 @@ private fun AnimatedMessageItem(
                     }
                 }
             }
+            if (isFromCurrentUser) {
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    offset = with(density) {
+                        DpOffset(
+                            x = menuOffset.x.toDp(),
+                            y = menuOffset.y.toDp() - 50.dp
+                        )
+                    }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        onClick = {
+                            if (message.type == MessageType.TEXT) {
+                                onEditMessage(message)
+                            }
+                            showMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Edit",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        enabled = message.type == MessageType.TEXT
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        onClick = {
+                            onDeleteMessage(message.id)
+                            showMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    )
+                }
+            }
             Text(
                 text = formatTimestamp(message.timestamp),
                 style = MaterialTheme.typography.bodySmall,
@@ -636,10 +738,12 @@ private fun AnimatedMessageItem(
 private fun ChatInput(
     messageInput: String,
     isSendingMessage: Boolean,
+    isEditing: Boolean,
     onMessageInputChanged: (String) -> Unit,
     onSendMessage: () -> Unit,
     onImagePick: () -> Unit,
-    onSendVoiceMessage: (Uri) -> Unit
+    onSendVoiceMessage: (Uri) -> Unit,
+    onCancelEdit: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -688,13 +792,35 @@ private fun ChatInput(
             .navigationBarsPadding()
             .background(MaterialTheme.colorScheme.surface)
     ) {
+        if (isEditing) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Editing message",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = onCancelEdit) {
+                    Text("Cancel")
+                }
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onImagePick, enabled = !isSendingMessage) {
+            IconButton(
+                onClick = onImagePick,
+                enabled = !isSendingMessage && !isRecording && !isEditing
+            ) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Attach Images",
@@ -708,7 +834,7 @@ private fun ChatInput(
                     .weight(1f)
                     .padding(horizontal = 4.dp),
                 enabled = !isSendingMessage && !isRecording,
-                placeholder = { Text("Type a message...") },
+                placeholder = { Text(if (isEditing) "Edit message..." else "Type a message...") },
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
@@ -721,7 +847,7 @@ private fun ChatInput(
             if (!isRecording) {
                 IconButton(
                     onClick = { recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                    enabled = !isSendingMessage
+                    enabled = !isSendingMessage && !isEditing
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_mic),

@@ -21,6 +21,7 @@ import com.arny.allfy.domain.usecase.authentication.SignUp
 import com.arny.allfy.domain.usecase.authentication.IsAuthenticated
 import com.arny.allfy.domain.usecase.authentication.SignInWithGoogle
 import com.arny.allfy.domain.usecase.message.DeleteMessage
+import com.arny.allfy.domain.usecase.message.EditMessage
 import com.arny.allfy.domain.usecase.message.GetMessages
 import com.arny.allfy.domain.usecase.message.InitializeConversation
 import com.arny.allfy.domain.usecase.message.LoadConversations
@@ -195,7 +196,8 @@ class AllfyModule {
         markMessageAsRead = MarkMessageAsRead(repository),
         loadConversations = LoadConversations(repository),
         sendVoiceMessage = SendVoiceMessage(repository),
-        deleteMessage = DeleteMessage(repository)
+        deleteMessage = DeleteMessage(repository),
+        editMessage = EditMessage(repository)
     )
 
     @Provides

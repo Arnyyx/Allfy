@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -343,25 +344,32 @@ private fun ProfileDetails(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Button(
-                    onClick = {
-                        if (isFollowingState) {
+                if (isFollowingState) {
+                    OutlinedButton(
+                        onClick = {
                             userViewModel.unfollowUser(currentUser.userId, user.userId)
-                        } else {
+                            isFollowingState = false
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Following", fontSize = 14.sp)
+                    }
+                } else {
+                    Button(
+                        onClick = {
                             userViewModel.followUser(currentUser.userId, user.userId)
-                        }
-                        isFollowingState = !isFollowingState
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(36.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isFollowingState) Color(0xFFF5F5F5) else MaterialTheme.colorScheme.primary,
-                        contentColor = if (isFollowingState) Color.Black else Color.White
-                    )
-                ) {
-                    Text(if (isFollowingState) "Following" else "Follow", fontSize = 14.sp)
+                            isFollowingState = true
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Follow", fontSize = 14.sp)
+                    }
                 }
                 OutlinedButton(
                     onClick = {
