@@ -19,6 +19,36 @@ class UserRepositoryImpl @Inject constructor(
     private val storage: FirebaseStorage
 ) : UserRepository {
 
+    private suspend fun checkUserHasActiveStory(userId: String): Boolean {
+        return try {
+            val storyRefs = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                .document(userId)
+                .collection("stories")
+                .get()
+                .await()
+
+            val storyIds = storyRefs.documents.mapNotNull { it.getString("storyID") }
+
+            if (storyIds.isEmpty()) return false
+
+            val stories = firestore.collection(Constants.COLLECTION_NAME_STORIES)
+                .whereIn("storyID", storyIds)
+                .get()
+                .await()
+
+            stories.documents.any { doc ->
+                val timestamp = doc.getTimestamp("timestamp")
+                val duration = doc.getLong("duration") ?: (24 * 3600)
+                if (timestamp != null) {
+                    val expiryTime = timestamp.toDate().time + (duration * 1000)
+                    System.currentTimeMillis() <= expiryTime
+                } else false
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     override suspend fun setUserDetails(user: User, imageUri: Uri?): Flow<Response<Boolean>> =
         flow {
             emit(Response.Loading)
@@ -122,7 +152,14 @@ class UserRepositoryImpl @Inject constructor(
 
             if (snapshot.exists()) {
                 val user = snapshot.toObject(User::class.java)
-                emit(Response.Success(user!!))
+                if (user != null) {
+                    // Check story status
+                    val hasStory = checkUserHasActiveStory(userID)
+                    val userWithStory = user.copy(hasStory = hasStory)
+                    emit(Response.Success(userWithStory))
+                } else {
+                    emit(Response.Error("User data is null"))
+                }
             } else {
                 emit(Response.Error("User not found"))
             }
@@ -144,7 +181,12 @@ class UserRepositoryImpl @Inject constructor(
                     .get()
                     .await()
 
-                val followers = documents.mapNotNull { it.toObject(User::class.java) }
+                val followers = documents.mapNotNull { doc ->
+                    doc.toObject(User::class.java).let { user ->
+                        val hasStory = checkUserHasActiveStory(user.userId)
+                        user.copy(hasStory = hasStory)
+                    }
+                }
                 emit(Response.Success(followers))
             } catch (e: Exception) {
                 emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
@@ -172,7 +214,12 @@ class UserRepositoryImpl @Inject constructor(
                 .get()
                 .await()
 
-            val followings = userDocs.mapNotNull { it.toObject(User::class.java) }
+            val followings = userDocs.mapNotNull { doc ->
+                doc.toObject(User::class.java).let { user ->
+                    val hasStory = checkUserHasActiveStory(user.userId)
+                    user.copy(hasStory = hasStory)
+                }
+            }
             emit(Response.Success(followings))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
@@ -191,7 +238,12 @@ class UserRepositoryImpl @Inject constructor(
                 .get()
                 .await()
 
-            val users = documents.mapNotNull { it.toObject(User::class.java) }
+            val users = documents.mapNotNull { doc ->
+                doc.toObject(User::class.java).let { user ->
+                    val hasStory = checkUserHasActiveStory(user.userId)
+                    user.copy(hasStory = hasStory)
+                }
+            }
             emit(Response.Success(users))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
@@ -219,7 +271,12 @@ class UserRepositoryImpl @Inject constructor(
                 .get()
                 .await()
 
-            val followers = userDocs.mapNotNull { it.toObject(User::class.java) }
+            val followers = userDocs.mapNotNull { doc ->
+                doc.toObject(User::class.java).let { user ->
+                    val hasStory = checkUserHasActiveStory(user.userId)
+                    user.copy(hasStory = hasStory)
+                }
+            }
             emit(Response.Success(followers))
         } catch (e: Exception) {
             emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))

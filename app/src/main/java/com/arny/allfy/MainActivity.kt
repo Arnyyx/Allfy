@@ -30,6 +30,7 @@ import com.arny.allfy.presentation.ui.*
 import com.arny.allfy.presentation.viewmodel.AuthViewModel
 import com.arny.allfy.presentation.viewmodel.ChatViewModel
 import com.arny.allfy.presentation.viewmodel.PostViewModel
+import com.arny.allfy.presentation.viewmodel.StoryViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.ui.theme.AllfyTheme
 import com.arny.allfy.utils.Screen
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
                     val authViewModel: AuthViewModel = hiltViewModel()
                     val userViewModel: UserViewModel = hiltViewModel()
                     val postViewModel: PostViewModel = hiltViewModel()
+                    val storyViewModel: StoryViewModel = hiltViewModel()
 
                     AllfyApp(
                         navController = navController,
@@ -79,6 +81,7 @@ class MainActivity : ComponentActivity() {
                         userViewModel = userViewModel,
                         postViewModel = postViewModel,
                         chatViewModel = chatViewModel,
+                        storyViewModel = storyViewModel,
                         googleAuthClient = googleAuthClient
                     )
                     LaunchedEffect(intent) {
@@ -213,6 +216,7 @@ fun AllfyApp(
     userViewModel: UserViewModel,
     postViewModel: PostViewModel,
     chatViewModel: ChatViewModel,
+    storyViewModel: StoryViewModel,
     googleAuthClient: GoogleAuthClient,
 ) {
     NavHost(
@@ -295,6 +299,11 @@ fun AllfyApp(
         composable<Screen.FollowScreen> {
             val args = it.toRoute<Screen.FollowScreen>()
             FollowScreen(navController, userViewModel, args.userId, args.initialTab)
+        }
+
+        composable<Screen.StoryViewerScreen> {
+            val args = it.toRoute<Screen.StoryViewerScreen>()
+            StoryViewerScreen(navController, storyViewModel, userViewModel, args.userId)
         }
     }
 }

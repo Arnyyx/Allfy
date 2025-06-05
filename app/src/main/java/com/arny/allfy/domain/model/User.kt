@@ -8,4 +8,5 @@ data class User(
     val imageUrl: String = "",
     val bio: String? = "",
     val fcmToken: String = "",
+    val hasStory: Boolean = false
 )

@@ -7,11 +7,13 @@ import com.arny.allfy.data.remote.CallRepositoryImpl
 import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.data.remote.MessageRepositoryImpl
 import com.arny.allfy.data.remote.PostRepositoryImpl
+import com.arny.allfy.data.remote.StoryRepositoryImpl
 import com.arny.allfy.data.remote.UserRepositoryImpl
 import com.arny.allfy.domain.repository.AuthenticationRepository
 import com.arny.allfy.domain.repository.CallRepository
 import com.arny.allfy.domain.repository.MessageRepository
 import com.arny.allfy.domain.repository.PostRepository
+import com.arny.allfy.domain.repository.StoryRepository
 import com.arny.allfy.domain.repository.UserRepository
 import com.arny.allfy.domain.usecase.authentication.AuthenticationUseCases
 import com.arny.allfy.domain.usecase.authentication.GetCurrentUserId
@@ -41,6 +43,7 @@ import com.arny.allfy.domain.usecase.post.PostUseCases
 import com.arny.allfy.domain.usecase.post.ToggleLikeComment
 import com.arny.allfy.domain.usecase.post.ToggleLikePost
 import com.arny.allfy.domain.usecase.post.UploadPost
+import com.arny.allfy.domain.usecase.story.StoryUseCases
 import com.arny.allfy.domain.usecase.user.CheckIfFollowing
 import com.arny.allfy.domain.usecase.user.FollowUser
 import com.arny.allfy.domain.usecase.user.GetFollowersCount
@@ -145,6 +148,16 @@ class AllfyModule {
 
     @Singleton
     @Provides
+    fun provideStoryRepository(
+        firestore: FirebaseFirestore,
+        storage: FirebaseStorage,
+        @ApplicationContext context: Context
+    ): StoryRepository {
+        return StoryRepositoryImpl(firestore, storage, context)
+    }
+
+    @Singleton
+    @Provides
     fun provideAuthUseCases(
         repositoryImpl: AuthenticationRepositoryImpl
     ) = AuthenticationUseCases(
@@ -206,5 +219,11 @@ class AllfyModule {
     @Singleton
     fun provideCallRepository(firebaseDatabase: FirebaseDatabase): CallRepository {
         return CallRepositoryImpl(firebaseDatabase)
+    }
+
+    @Provides
+    @Singleton
+    fun provideStoryUseCases(repository: StoryRepository): StoryUseCases {
+        return StoryUseCases(repository)
     }
 }

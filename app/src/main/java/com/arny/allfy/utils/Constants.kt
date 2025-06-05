@@ -3,6 +3,8 @@ package com.arny.allfy.utils
 object Constants {
     const val COLLECTION_NAME_USERS = "users"
     const val COLLECTION_NAME_POSTS = "posts"
+    const val COLLECTION_NAME_STORIES = "stories"
+    const val COLLECTION_NAME_STORY_HIGHLIGHTS = "storyHighlights"
     const val COLLECTION_NAME_COMMENTS = "comments"
     const val COLLECTION_NAME_LIKES = "likes"
 

@@ -57,4 +57,10 @@ sealed class Screen {
         val isCaller: Boolean,
         val otherUserId: String
     ) : Screen()
+
+    @Serializable
+    data class StoryViewerScreen(
+        val userId: String
+    ) : Screen()
+
 }
