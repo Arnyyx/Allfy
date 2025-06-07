@@ -1,20 +1,38 @@
 package com.arny.allfy.presentation.ui
 
 import android.graphics.Bitmap
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.*
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.BottomNavigation
@@ -24,8 +42,14 @@ import com.arny.allfy.presentation.components.ProfileContent
 import com.arny.allfy.presentation.components.QRCodeDisplayDialog
 import com.arny.allfy.presentation.components.QROptionsDialog
 import com.arny.allfy.presentation.viewmodel.PostViewModel
+import com.arny.allfy.presentation.viewmodel.StoryViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
-import com.arny.allfy.utils.*
+import com.arny.allfy.utils.CameraPermissionLauncher
+import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.Screen
+import com.arny.allfy.utils.StoragePermissionLauncher
+import com.arny.allfy.utils.generateQRCode
+import com.arny.allfy.utils.getDataOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,10 +57,12 @@ fun ProfileScreen(
     navController: NavController,
     userViewModel: UserViewModel,
     postViewModel: PostViewModel,
+    storyViewModel: StoryViewModel,
     userId: String? = null
 ) {
     val userState by userViewModel.userState.collectAsState()
     val postState by postViewModel.postState.collectAsState()
+    val storyState by storyViewModel.storyState.collectAsState()
     val context = LocalContext.current
     var showQrOptionsDialog by remember { mutableStateOf(false) }
     var showQrCodeDialog by remember { mutableStateOf(false) }
@@ -58,6 +84,21 @@ fun ProfileScreen(
     LaunchedEffect(userId) {
         if (userId != null) {
             userViewModel.getUserDetails(userId)
+        }
+    }
+
+    LaunchedEffect(storyState.uploadStoryState) {
+        when (storyState.uploadStoryState) {
+            is Response.Success -> {
+                if (isCurrentUser && currentUserId != null) {
+                    userViewModel.getCurrentUser(currentUserId)
+                } else if (!isCurrentUser && userId != null) {
+                    userViewModel.getUserDetails(userId)
+                }
+                storyViewModel.resetUploadStoryState()
+            }
+
+            else -> {}
         }
     }
 
@@ -181,7 +222,19 @@ fun ProfileScreen(
                 userViewModel = userViewModel,
                 isCurrentUser = isCurrentUser,
                 paddingValues = paddingValues,
-                onAvatarClick = { showBottomSheet = true }
+                onAvatarClick = {
+                    val userResponse =
+                        if (isCurrentUser) userState.currentUserState else userState.otherUserState
+                    val user = (userResponse as? Response.Success)?.data
+                    user?.let {
+                        if (it.hasStory) {
+                            showBottomSheet = true
+                        } else {
+                            showImageViewer = true
+                        }
+                    }
+                },
+                onCreateStoryClick = { navController.navigate(Screen.CreateStoryScreen) }
             )
         }
 
@@ -214,7 +267,14 @@ fun ProfileScreen(
                     hasStories = it.hasStory,
                     onDismiss = { showBottomSheet = false },
                     onViewAvatar = { showImageViewer = true },
-                    onViewStories = { navController.navigate(Screen.StoryViewerScreen(it.userId)) }
+                    onViewStories = {
+                        navController.navigate(
+                            Screen.StoryViewerScreen(
+                                it.userId,
+                                isCurrentUser
+                            )
+                        )
+                    }
                 )
             }
         }

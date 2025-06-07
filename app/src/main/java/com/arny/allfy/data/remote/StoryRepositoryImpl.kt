@@ -7,12 +7,12 @@ import com.arny.allfy.domain.repository.StoryRepository
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.getVideoDuration
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -26,6 +26,11 @@ class StoryRepositoryImpl @Inject constructor(
     override suspend fun uploadStory(story: Story, mediaUri: Uri): Flow<Response<Boolean>> = flow {
         emit(Response.Loading)
         try {
+            if (story.duration <= 0) {
+                emit(Response.Error("Story duration must be greater than 0"))
+                return@flow
+            }
+
             val storyID = firestore.collection(Constants.COLLECTION_NAME_STORIES).document().id
             val mimeType = context.contentResolver.getType(mediaUri)
             val extension = if (mimeType?.startsWith("image/") == true) ".jpg" else ".mp4"
@@ -35,7 +40,7 @@ class StoryRepositoryImpl @Inject constructor(
             if (mediaType == "video") {
                 val videoDuration = getVideoDuration(mediaUri, context)
                 if (videoDuration > story.maxVideoDuration!!) {
-                    emit(Response.Error("Video vượt quá độ dài tối đa ${story.maxVideoDuration / 1000} giây"))
+                    emit(Response.Error("Video exceeds maximum duration of ${story.maxVideoDuration / 1000} seconds"))
                     return@flow
                 }
             }
@@ -50,7 +55,8 @@ class StoryRepositoryImpl @Inject constructor(
                 mediaUrl = mediaUrl,
                 mediaType = mediaType,
                 imageDuration = if (mediaType == "image") story.imageDuration else null,
-                maxVideoDuration = if (mediaType == "video") story.maxVideoDuration else null
+                maxVideoDuration = if (mediaType == "video") story.maxVideoDuration else null,
+                timestamp = Timestamp.now()
             )
 
             firestore.collection(Constants.COLLECTION_NAME_STORIES)
@@ -74,7 +80,6 @@ class StoryRepositoryImpl @Inject constructor(
     override suspend fun getUserStories(userID: String): Flow<Response<List<Story>>> = flow {
         emit(Response.Loading)
         try {
-            // Get story IDs from user's sub-collection
             val storyRefs = firestore.collection(Constants.COLLECTION_NAME_USERS)
                 .document(userID)
                 .collection("stories")
@@ -89,14 +94,12 @@ class StoryRepositoryImpl @Inject constructor(
                 return@flow
             }
 
-            // Get stories from main collection
             val stories = firestore.collection(Constants.COLLECTION_NAME_STORIES)
                 .whereIn("storyID", storyIds)
                 .get()
                 .await()
                 .toObjects(Story::class.java)
                 .filter { story ->
-                    // Filter out expired stories
                     val expiryTime = story.timestamp.toDate().time + (story.duration * 1000)
                     System.currentTimeMillis() <= expiryTime
                 }
@@ -165,13 +168,11 @@ class StoryRepositoryImpl @Inject constructor(
         flow {
             emit(Response.Loading)
             try {
-                // Delete from Firestore
                 firestore.collection(Constants.COLLECTION_NAME_STORIES)
                     .document(storyID)
                     .delete()
                     .await()
 
-                // Delete from user stories
                 firestore.collection(Constants.COLLECTION_NAME_USERS)
                     .document(userID)
                     .collection("stories")
@@ -179,7 +180,6 @@ class StoryRepositoryImpl @Inject constructor(
                     .delete()
                     .await()
 
-                // Delete media from Storage
                 val storageRef =
                     storage.reference.child("${Constants.COLLECTION_NAME_STORIES}/$userID/$storyID")
                 val listResult = storageRef.listAll().await()

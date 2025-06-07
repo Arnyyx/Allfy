@@ -2,6 +2,7 @@ package com.arny.allfy.domain.usecase.story
 
 import android.net.Uri
 import com.arny.allfy.domain.model.Story
+import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.repository.StoryRepository
 import com.arny.allfy.utils.Response
 import kotlinx.coroutines.flow.Flow

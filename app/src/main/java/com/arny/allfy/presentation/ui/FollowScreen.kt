@@ -37,7 +37,7 @@ fun FollowScreen(
     val userState by userViewModel.userState.collectAsState()
     var selectedTabIndex by remember { mutableIntStateOf(initialTab) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(userId) {
         userViewModel.getFollowers(userId)
         userViewModel.getFollowings(userId)
         userViewModel.getFollowingCount(userId)

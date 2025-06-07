@@ -239,7 +239,7 @@ fun AllfyApp(
         }
         composable<Screen.ProfileScreen> {
             val args = it.toRoute<Screen.ProfileScreen>()
-            ProfileScreen(navController, userViewModel, postViewModel, args.userId)
+            ProfileScreen(navController, userViewModel, postViewModel, storyViewModel, args.userId)
         }
         composable<Screen.SearchScreen> {
             SearchScreen(navController)
@@ -303,7 +303,16 @@ fun AllfyApp(
 
         composable<Screen.StoryViewerScreen> {
             val args = it.toRoute<Screen.StoryViewerScreen>()
-            StoryViewerScreen(navController, storyViewModel, userViewModel, args.userId)
+            StoryViewerScreen(
+                navController,
+                storyViewModel,
+                userViewModel,
+                args.userId,
+                args.isCurrentUser
+            )
+        }
+        composable<Screen.CreateStoryScreen> {
+            CreateStoryScreen(navController, storyViewModel, userViewModel)
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.arny.allfy.utils
 
+import com.arny.allfy.domain.model.User
 import kotlinx.serialization.Serializable
 import org.webrtc.SurfaceViewRenderer
 
@@ -60,7 +61,11 @@ sealed class Screen {
 
     @Serializable
     data class StoryViewerScreen(
-        val userId: String
+        val userId: String,
+        val isCurrentUser: Boolean,
     ) : Screen()
+
+    @Serializable
+    data object CreateStoryScreen : Screen()
 
 }

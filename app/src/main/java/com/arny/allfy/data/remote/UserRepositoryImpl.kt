@@ -12,6 +12,7 @@ import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
+import okhttp3.internal.wait
 import javax.inject.Inject
 
 class UserRepositoryImpl @Inject constructor(
@@ -29,7 +30,10 @@ class UserRepositoryImpl @Inject constructor(
 
             val storyIds = storyRefs.documents.mapNotNull { it.getString("storyID") }
 
-            if (storyIds.isEmpty()) return false
+            if (storyIds.isEmpty()) {
+                Log.d("UserRepositoryImpl", "No story IDs found for user $userId")
+                return false
+            }
 
             val stories = firestore.collection(Constants.COLLECTION_NAME_STORIES)
                 .whereIn("storyID", storyIds)
@@ -38,13 +42,26 @@ class UserRepositoryImpl @Inject constructor(
 
             stories.documents.any { doc ->
                 val timestamp = doc.getTimestamp("timestamp")
-                val duration = doc.getLong("duration") ?: (24 * 3600)
-                if (timestamp != null) {
+                val duration = doc.getLong("duration")
+
+                if (timestamp == null || duration == null) {
+                    Log.w(
+                        "UserRepositoryImpl",
+                        "Invalid story data for storyID: ${doc.id}, timestamp: $timestamp, duration: $duration"
+                    )
+                    false
+                } else {
                     val expiryTime = timestamp.toDate().time + (duration * 1000)
-                    System.currentTimeMillis() <= expiryTime
-                } else false
+                    val isActive = System.currentTimeMillis() <= expiryTime
+                    Log.d(
+                        "UserRepositoryImpl",
+                        "Story ${doc.id} isActive: $isActive, expiryTime: $expiryTime, currentTime: ${System.currentTimeMillis()}"
+                    )
+                    isActive
+                }
             }
         } catch (e: Exception) {
+            Log.e("UserRepositoryImpl", "Error checking active stories for user $userId", e)
             false
         }
     }
@@ -153,7 +170,6 @@ class UserRepositoryImpl @Inject constructor(
             if (snapshot.exists()) {
                 val user = snapshot.toObject(User::class.java)
                 if (user != null) {
-                    // Check story status
                     val hasStory = checkUserHasActiveStory(userID)
                     val userWithStory = user.copy(hasStory = hasStory)
                     emit(Response.Success(userWithStory))

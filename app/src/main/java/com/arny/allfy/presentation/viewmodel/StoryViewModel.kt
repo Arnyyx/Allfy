@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arny.allfy.domain.model.Story
+import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.usecase.story.StoryUseCases
 import com.arny.allfy.presentation.state.StoryState
 import com.arny.allfy.utils.Response

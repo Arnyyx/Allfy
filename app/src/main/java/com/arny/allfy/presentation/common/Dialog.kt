@@ -20,11 +20,11 @@ fun Dialog(
     message: String,
     confirmText: String = "Yes",
     dismissText: String = "Cancel",
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onConfirm: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null
 ) {
     AlertDialog(
-        onDismissRequest = { onDismiss() },
+        onDismissRequest = { onDismiss?.invoke() },
         title = {
             Text(
                 text = title,
@@ -42,37 +42,39 @@ fun Dialog(
             )
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                Text(
-                    text = confirmText,
-                    color = Color(0xFFED4956),
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
-                )
+            if (confirmText.isNotEmpty() && onConfirm != null) {
+                TextButton(
+                    onClick = { onConfirm() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = confirmText,
+                        color = Color(0xFFED4956),
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = { onDismiss() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                Text(
-                    text = dismissText,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.bodyLarge
-                )
+            if (dismissText.isNotEmpty() && onDismiss != null) {
+                TextButton(
+                    onClick = { onDismiss() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = dismissText,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
             }
         },
-        shape = RoundedCornerShape(12.dp), // Góc bo nhẹ giống Instagram
-        containerColor = MaterialTheme.colorScheme.surface, // Nền trắng
+        shape = RoundedCornerShape(12.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
         properties = DialogProperties(dismissOnClickOutside = true)
     )
 }

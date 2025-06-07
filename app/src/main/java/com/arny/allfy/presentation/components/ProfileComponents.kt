@@ -11,6 +11,8 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -41,9 +43,12 @@ fun ProfileContent(
     userViewModel: UserViewModel,
     isCurrentUser: Boolean,
     paddingValues: PaddingValues,
-    onAvatarClick: () -> Unit
+    onAvatarClick: () -> Unit,
+    onCreateStoryClick: () -> Unit
+
 ) {
     val userResponse = if (isCurrentUser) userState.currentUserState else userState.otherUserState
+    var showBottomSheet by remember { mutableStateOf(false) }
 
     when (userResponse) {
         is Response.Loading -> {
@@ -81,12 +86,32 @@ fun ProfileContent(
                     postViewModel = postViewModel,
                     paddingValues = paddingValues,
                     currentUser = if (!isCurrentUser) userState.currentUserState.getDataOrNull() else null,
-                    onAvatarClick = onAvatarClick
+                    onAvatarClick = onAvatarClick,
+                    onCreateStoryClick = onCreateStoryClick
                 )
             }
         }
 
         is Response.Idle -> {}
+    }
+
+    if (showBottomSheet) {
+        val user = (userResponse as? Response.Success)?.data
+        user?.let {
+            ProfileBottomSheet(
+                hasStories = it.hasStory,
+                onDismiss = { showBottomSheet = false },
+                onViewAvatar = { onAvatarClick() },
+                onViewStories = {
+                    navController.navigate(
+                        Screen.StoryViewerScreen(
+                            it.userId,
+                            isCurrentUser
+                        )
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -103,10 +128,9 @@ fun ProfileDetails(
     postViewModel: PostViewModel,
     paddingValues: PaddingValues,
     currentUser: User?,
-    onAvatarClick: () -> Unit
+    onAvatarClick: () -> Unit,
+    onCreateStoryClick: () -> Unit
 ) {
-    Log.d("ProfileScreen", ": $user")
-
     var isFollowingState by remember(key1 = isFollowing) { mutableStateOf(isFollowing) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     Column(
@@ -119,13 +143,33 @@ fun ProfileDetails(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            StoryRingAvatar(
-                imageUrl = user.imageUrl,
-                hasStory = user.hasStory,
-                hasUnseenStory = true,
-                size = 120.dp,
-                onClick = onAvatarClick
-            )
+            Box {
+                StoryRingAvatar(
+                    imageUrl = user.imageUrl,
+                    hasStory = user.hasStory,
+                    hasUnseenStory = true,
+                    size = 120.dp,
+                    onClick = onAvatarClick
+                )
+                if (isCurrentUser) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable { onCreateStoryClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Create",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.width(16.dp))
             Row(
@@ -271,7 +315,6 @@ fun StatisticItem(
         )
     }
 }
-
 
 @Composable
 fun StoryRingAvatar(
