@@ -75,7 +75,7 @@ fun PostDetailScreen(
                     title = {
                         when (val postResponse = postState.getPostState) {
                             is Response.Success -> {
-                                Text(postResponse.data.postOwnerUsername)
+                                postResponse.data.postOwner?.let { Text(it.username) }
                             }
 
                             else -> Text("Post")

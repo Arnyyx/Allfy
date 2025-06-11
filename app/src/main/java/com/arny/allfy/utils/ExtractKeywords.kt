@@ -10,7 +10,7 @@ object KeywordExtractor {
         stopWords = loadStopWords(context)
     }
 
-    fun extractKeywords(text: String, maxKeywords: Int = 5): List<String> {
+    fun extractKeywords(text: String, maxKeywords: Int = 20): List<String> {
         if (!::stopWords.isInitialized) {
             throw IllegalStateException("KeywordExtractor must be initialized with a context first!")
         }

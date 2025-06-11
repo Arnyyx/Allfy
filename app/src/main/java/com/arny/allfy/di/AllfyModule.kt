@@ -7,6 +7,7 @@ import com.arny.allfy.data.remote.CallRepositoryImpl
 import com.arny.allfy.data.remote.GoogleAuthClient
 import com.arny.allfy.data.remote.MessageRepositoryImpl
 import com.arny.allfy.data.remote.PostRepositoryImpl
+import com.arny.allfy.data.remote.RecommendationApi
 import com.arny.allfy.data.remote.StoryRepositoryImpl
 import com.arny.allfy.data.remote.UserRepositoryImpl
 import com.arny.allfy.domain.repository.AuthenticationRepository
@@ -132,9 +133,10 @@ class AllfyModule {
     fun providePostRepository(
         firestore: FirebaseFirestore,
         storage: FirebaseStorage,
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        recommendationApi: RecommendationApi
     ): PostRepository {
-        return PostRepositoryImpl(firestore, storage, context)
+        return PostRepositoryImpl(firestore, storage, context, recommendationApi)
     }
 
     @Singleton

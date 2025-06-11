@@ -109,8 +109,6 @@ fun CreatePostScreen(
                         }
                         val post = Post(
                             postOwnerID = currentUser.userId,
-                            postOwnerUsername = currentUser.username,
-                            postOwnerImageUrl = currentUser.imageUrl,
                             caption = captionText,
                             mediaItems = emptyList()
                         )

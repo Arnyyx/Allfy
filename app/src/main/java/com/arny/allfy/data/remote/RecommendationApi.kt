@@ -9,10 +9,7 @@ interface RecommendationApi {
     @GET("recommend/{userId}")
     suspend fun getRecommendations(
         @Path("userId") userId: String,
-        @Query("limit") limit: Int
+        @Query("limit") limit: Int,
+        @Query("last_post") lastPost: String? = null
     ): Response<RecommendationResponse>
 }
-
-data class RecommendationResponse(
-    val postIds: List<String>
-)

@@ -1,5 +1,6 @@
 package com.arny.allfy.presentation.common
 
+import android.icu.text.DecimalFormat
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.annotation.OptIn
@@ -80,12 +81,14 @@ import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
+import com.arny.allfy.presentation.components.StoryRingAvatar
 import com.arny.allfy.presentation.state.PostState
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.getDataOrNull
 import com.arny.allfy.utils.isLoading
+import com.arny.allfy.utils.toTimeAgo
 
 @Composable
 fun PostItem(
@@ -178,8 +181,6 @@ fun PostItem(
         Column(modifier = Modifier.fillMaxWidth()) {
             PostHeader(
                 post = post,
-                postOwnerUsername = post.postOwnerUsername,
-                postOwnerImageUrl = post.postOwnerImageUrl,
                 navController = navController,
                 currentUser = currentUser,
                 isDeletingPost = isDeleteLoading,
@@ -219,8 +220,6 @@ fun PostItem(
 @Composable
 private fun PostHeader(
     post: Post,
-    postOwnerUsername: String,
-    postOwnerImageUrl: String,
     navController: NavController,
     currentUser: User,
     isDeletingPost: Boolean = false,
@@ -229,6 +228,9 @@ private fun PostHeader(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    val decimalFormat = remember { DecimalFormat("0.000") }
+    val formattedScore = if (post.score <= 0.7) "N/A" else
+        post.score.let { decimalFormat.format(it) } ?: "N/A"
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -243,26 +245,47 @@ private fun PostHeader(
                     navController.navigate(Screen.ProfileScreen(post.postOwnerID))
                 }
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(postOwnerImageUrl.ifEmpty { null })
-                        .crossfade(true)
-                        .placeholder(R.drawable.ic_user)
-                        .error(R.drawable.ic_user)
-                        .build(),
-                    contentDescription = "User Avatar",
-                    placeholder = painterResource(R.drawable.ic_user),
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
+                StoryRingAvatar(
+                    imageUrl = post.postOwner.imageUrl.ifEmpty { null },
+                    hasStory = currentUser.hasStory,
+                    hasUnseenStory = true,
+                    size = 40.dp,
+                    strokeWidth = 1.dp,
+                    onClick = {
+                        navController.navigate(Screen.ProfileScreen(post.postOwnerID))
+                    }
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = postOwnerUsername,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
+                Column {
+                    Text(
+                        text = post.postOwner.username,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Text(
+                        text = post.timestamp.toTimeAgo(),
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Row {
+                        if (formattedScore != "N/A")
+                            Text(
+                                text = post.reason,
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = formattedScore,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+
+                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
