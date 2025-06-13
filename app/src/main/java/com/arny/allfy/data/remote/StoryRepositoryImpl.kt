@@ -3,11 +3,13 @@ package com.arny.allfy.data.remote
 import android.content.Context
 import android.net.Uri
 import com.arny.allfy.domain.model.Story
+import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.repository.StoryRepository
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.getVideoDuration
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -94,14 +96,24 @@ class StoryRepositoryImpl @Inject constructor(
                 return@flow
             }
 
+            // Lấy thông tin user
+            val userSnapshot = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                .document(userID)
+                .get()
+                .await()
+            val user = userSnapshot.toObject(User::class.java) ?: User()
+
             val stories = firestore.collection(Constants.COLLECTION_NAME_STORIES)
                 .whereIn("storyID", storyIds)
                 .get()
                 .await()
                 .toObjects(Story::class.java)
                 .filter { story ->
-                    val expiryTime = story.timestamp.toDate().time + (story.duration * 1000)
+                    val expiryTime =
+                        story.timestamp?.toDate()?.time?.plus(story.duration * 1000) ?: 0
                     System.currentTimeMillis() <= expiryTime
+                }.map { story ->
+                    story.copy(storyOwner = user)
                 }
 
             emit(Response.Success(stories))
@@ -119,24 +131,40 @@ class StoryRepositoryImpl @Inject constructor(
                     return@flow
                 }
 
-                val stories = mutableListOf<Story>()
-                userIds.chunked(10).forEach { batch ->
-                    val batchStories = firestore.collection(Constants.COLLECTION_NAME_STORIES)
-                        .whereIn("userID", batch)
+                val chunkedUserIds = userIds.chunked(10)
+                val allStories = mutableListOf<Story>()
+
+                for (chunk in chunkedUserIds) {
+                    val snapshot = firestore.collection(Constants.COLLECTION_NAME_STORIES)
+                        .whereIn("userID", chunk)
                         .orderBy("timestamp", Query.Direction.DESCENDING)
                         .get()
                         .await()
-                        .toObjects(Story::class.java)
-                        .filter { story ->
-                            val expiryTime = story.timestamp.toDate().time + (story.duration * 1000)
-                            System.currentTimeMillis() <= expiryTime
-                        }
-                    stories.addAll(batchStories)
+                    val stories = snapshot.toObjects(Story::class.java)
+                    allStories.addAll(stories)
                 }
 
-                emit(Response.Success(stories.sortedByDescending { it.timestamp }))
+                val ownerIds = allStories.map { it.userID }.distinct()
+                val users = if (ownerIds.isNotEmpty()) {
+                    val userDocs = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                        .whereIn(FieldPath.documentId(), ownerIds)
+                        .get()
+                        .await()
+                    userDocs.associate { it.id to it.toObject(User::class.java) }
+                } else {
+                    emptyMap()
+                }
+
+                val sortedStories = userIds.flatMap { userId ->
+                    allStories.filter { it.userID == userId }
+                        .map { story ->
+                            story.copy(storyOwner = users[story.userID] ?: User())
+                        }
+                }
+
+                emit(Response.Success(sortedStories))
             } catch (e: Exception) {
-                emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
+                emit(Response.Error(e.localizedMessage ?: "An unexpected error occurred"))
             }
         }
 

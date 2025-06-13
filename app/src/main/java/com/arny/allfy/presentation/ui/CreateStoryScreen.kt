@@ -22,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -29,9 +30,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.media3.common.MediaItem
@@ -67,7 +70,7 @@ fun CreateStoryScreen(
     var isDurationMenuExpanded by remember { mutableStateOf(false) }
 
     val durationOptions = listOf(
-        DurationOption("5 minutes", 30L),
+        DurationOption("5 mins", 300L),
         DurationOption("1 hour", 3600L),
         DurationOption("6 hours", 21600L),
         DurationOption("12 hours", 43200L),
@@ -98,8 +101,8 @@ fun CreateStoryScreen(
         }
     }
 
-    val userId = when (val state = userState.currentUserState) {
-        is Response.Success -> state.data.userId
+    val currentUser = when (val state = userState.currentUserState) {
+        is Response.Success -> state.data
         else -> null
     }
 
@@ -224,292 +227,398 @@ fun CreateStoryScreen(
         )
     }
 
-    Scaffold(
-        containerColor = Color.Black
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        // Loading progress indicator at top
+        if (isUploading) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(10f),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = Color.Transparent
+            )
+        }
+
+        // Main content
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Main content
-            Column(
-                modifier = Modifier.fillMaxSize()
+            TopHeader(
+                currentUser = currentUser,
+                selectedUri = selectedUri,
+                isUploading = isUploading,
+                onBackClick = { navController.popBackStack() },
+                onShareClick = {
+                    selectedUri?.let { uri ->
+                        currentUser?.userId?.let { id ->
+                            val story = Story(
+                                userID = id,
+                                imageDuration = if (selectedMediaType == "image") 5000L else null,
+                                maxVideoDuration = if (selectedMediaType == "video") 30000L else null,
+                                duration = selectedDuration
+                            )
+                            storyViewModel.uploadStory(story, uri)
+                        } ?: run {
+                            errorMessage = "Unable to get user information"
+                        }
+                    }
+                }
+            )
+
+            // Content area - more space for media
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = { navController.popBackStack() }
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White
-                        )
-                    }
-
-                    Text(
-                        text = "Create Story",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium
+                if (selectedUri != null) {
+                    MediaPreview(
+                        uri = selectedUri!!,
+                        mediaType = selectedMediaType ?: "",
+                        exoPlayer = exoPlayer
                     )
-
-                    IconButton(
-                        onClick = { /* Settings */ }
-                    ) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = Color.White
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (selectedUri != null) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(9f / 16f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            when (selectedMediaType) {
-                                "image" -> {
-                                    Image(
-                                        painter = rememberAsyncImagePainter(selectedUri),
-                                        contentDescription = "Selected image",
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                }
-
-                                "video" -> {
-                                    AndroidView(
-                                        factory = { context ->
-                                            PlayerView(context).apply {
-                                                player = exoPlayer
-                                                useController = false // Hide controls
-                                                layoutParams = android.view.ViewGroup.LayoutParams(
-                                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                                                )
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        // Empty state
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.PhotoCamera,
-                                contentDescription = null,
-                                modifier = Modifier.size(80.dp),
-                                tint = Color.White.copy(alpha = 0.6f)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Select a photo or video\nto create your story",
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 16.sp,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-
-                // Bottom controls
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.8f)
-                                )
-                            )
-                        )
-                        .padding(24.dp)
-                ) {
-                    // Duration selection
-                    ExposedDropdownMenuBox(
-                        expanded = isDurationMenuExpanded,
-                        onExpandedChange = { isDurationMenuExpanded = !isDurationMenuExpanded }
-                    ) {
-                        TextField(
-                            value = durationOptions.find { it.seconds == selectedDuration }?.label
-                                ?: "Select Duration",
-                            onValueChange = {},
-                            readOnly = true,
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = if (isDurationMenuExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                                    contentDescription = "Toggle duration menu",
-                                    tint = Color.White
-                                )
-                            },
-                            colors = TextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                disabledTextColor = Color.White.copy(alpha = 0.6f),
-                                focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                                unfocusedContainerColor = Color.White.copy(alpha = 0.1f),
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor()
-                        )
-
-                        ExposedDropdownMenu(
-                            expanded = isDurationMenuExpanded,
-                            onDismissRequest = { isDurationMenuExpanded = false },
-                            modifier = Modifier.background(Color.Black)
-                        ) {
-                            durationOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = option.label,
-                                            color = Color.White,
-                                            fontSize = 14.sp
-                                        )
-                                    },
-                                    onClick = {
-                                        selectedDuration = option.seconds
-                                        isDurationMenuExpanded = false
-                                    },
-                                    modifier = Modifier.background(Color.Black)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Media type selection
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(getMediaOptions()) { option ->
-                            MediaOptionItem(
-                                option = option,
-                                onClick = {
-                                    when (option.type) {
-                                        "camera" -> {
-                                            if (ContextCompat.checkSelfPermission(
-                                                    context,
-                                                    Manifest.permission.CAMERA
-                                                ) == PackageManager.PERMISSION_GRANTED
-                                            ) {
-                                                val uri = createImageFile()
-                                                if (uri != null) {
-                                                    cameraImageUri = uri
-                                                    cameraLauncher.launch(uri)
-                                                } else {
-                                                    errorMessage =
-                                                        "Failed to create image file for camera"
-                                                }
-                                            } else {
-                                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                            }
-                                        }
-
-                                        "gallery_image" -> imagePickerLauncher.launch("image/*")
-                                        "gallery_video" -> videoPickerLauncher.launch("video/*")
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Upload button
-                    Button(
-                        onClick = {
-                            selectedUri?.let { uri ->
-                                userId?.let { id ->
-                                    val story = Story(
-                                        userID = id,
-                                        imageDuration = if (selectedMediaType == "image") 5000L else null,
-                                        maxVideoDuration = if (selectedMediaType == "video") 30000L else null,
-                                        duration = selectedDuration
-                                    )
-                                    storyViewModel.uploadStory(story, uri)
-                                } ?: run {
-                                    errorMessage = "Unable to get user information"
-                                }
-                            }
-                        },
-                        enabled = selectedUri != null && !isUploading && userId != null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            disabledContainerColor = Color.Gray
-                        ),
-                        shape = RoundedCornerShape(25.dp)
-                    ) {
-                        if (isUploading) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Uploading...",
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = "Share to Story",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
+                } else {
+                    EmptyState()
                 }
             }
 
-            // Loading overlay
-            if (isUploading) {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopCenter),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Transparent
+            // Bottom controls - compact layout
+            BottomControls(
+                selectedUri = selectedUri,
+                selectedDuration = selectedDuration,
+                isDurationMenuExpanded = isDurationMenuExpanded,
+                durationOptions = durationOptions,
+                onDurationExpandedChange = { isDurationMenuExpanded = it },
+                onDurationSelected = { selectedDuration = it },
+                onCameraClick = {
+                    if (ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.CAMERA
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        val uri = createImageFile()
+                        if (uri != null) {
+                            cameraImageUri = uri
+                            cameraLauncher.launch(uri)
+                        } else {
+                            errorMessage = "Failed to create image file for camera"
+                        }
+                    } else {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                },
+                onImagePickerClick = { imagePickerLauncher.launch("image/*") },
+                onVideoPickerClick = { videoPickerLauncher.launch("video/*") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopHeader(
+    currentUser: com.arny.allfy.domain.model.User?,
+    selectedUri: Uri?,
+    isUploading: Boolean,
+    onBackClick: () -> Unit,
+    onShareClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .zIndex(5f),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Back button
+        IconButton(
+            onClick = onBackClick,
+            modifier = Modifier.size(40.dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        // User info
+        currentUser?.let { user ->
+            // Avatar
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Color.Gray.copy(alpha = 0.3f))
+            ) {
+                Image(
+                    painter = rememberAsyncImagePainter(user.imageUrl),
+                    contentDescription = "Avatar",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Username
+            Text(
+                text = user.username,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Share button - only show when media is selected
+        if (selectedUri != null) {
+            Button(
+                onClick = onShareClick,
+                enabled = !isUploading && currentUser != null,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = Color.White.copy(alpha = 0.3f)
+                ),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.height(36.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp)
+            ) {
+                if (isUploading) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 1.5.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Sharing...",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Share",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediaPreview(
+    uri: Uri,
+    mediaType: String,
+    exoPlayer: ExoPlayer
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        when (mediaType) {
+            "image" -> {
+                Image(
+                    painter = rememberAsyncImagePainter(uri),
+                    contentDescription = "Selected image",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.FillHeight
+                )
+            }
+
+            "video" -> {
+                AndroidView(
+                    factory = { context ->
+                        PlayerView(context).apply {
+                            player = exoPlayer
+                            useController = false
+                            layoutParams = android.view.ViewGroup.LayoutParams(
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyState() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(horizontal = 32.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .background(
+                    Color.White.copy(alpha = 0.05f),
+                    CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.PhotoCamera,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = Color.White.copy(alpha = 0.4f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Add to your story",
+            color = Color.White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Share photos and videos that disappear after 24 hours",
+            color = Color.White.copy(alpha = 0.6f),
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BottomControls(
+    selectedUri: Uri?,
+    selectedDuration: Long,
+    isDurationMenuExpanded: Boolean,
+    durationOptions: List<DurationOption>,
+    onDurationExpandedChange: (Boolean) -> Unit,
+    onDurationSelected: (Long) -> Unit,
+    onCameraClick: () -> Unit,
+    onImagePickerClick: () -> Unit,
+    onVideoPickerClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.Black.copy(alpha = 0.4f),
+                        Color.Black.copy(alpha = 0.8f),
+                        Color.Black
+                    )
+                )
+            )
+            .padding(horizontal = 20.dp, vertical = 16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                items(getMediaOptions()) { option ->
+                    MediaOptionItem(
+                        option = option,
+                        onClick = {
+                            when (option.type) {
+                                "camera" -> onCameraClick()
+                                "gallery_image" -> onImagePickerClick()
+                                "gallery_video" -> onVideoPickerClick()
+                            }
+                        }
+                    )
+                }
+            }
+
+            if (selectedUri != null) {
+                ExposedDropdownMenuBox(
+                    expanded = isDurationMenuExpanded,
+                    onExpandedChange = onDurationExpandedChange,
+                    modifier = Modifier.weight(0.7f)
+                ) {
+                    OutlinedTextField(
+                        value = durationOptions.find { it.seconds == selectedDuration }?.label
+                            ?: "24h",
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = {
+                            Icon(
+                                imageVector = if (isDurationMenuExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                contentDescription = "Toggle duration menu",
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                            cursorColor = Color.White
+                        ),
+                        modifier = Modifier
+                            .menuAnchor(),
+                        shape = RoundedCornerShape(8.dp),
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = isDurationMenuExpanded,
+                        onDismissRequest = { onDurationExpandedChange(false) },
+                        modifier = Modifier.background(
+                            Color.Black.copy(alpha = 0.95f),
+                            RoundedCornerShape(8.dp)
+                        )
+                    ) {
+                        durationOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = option.label,
+                                        color = Color.White,
+                                        fontSize = 12.sp
+                                    )
+                                },
+                                onClick = {
+                                    onDurationSelected(option.seconds)
+                                    onDurationExpandedChange(false)
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -520,44 +629,39 @@ private fun MediaOptionItem(
     option: MediaOption,
     onClick: () -> Unit
 ) {
+    val size = 52.dp
+    val iconSize = 22.dp
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.clickable { onClick() }
     ) {
         Box(
             modifier = Modifier
-                .size(60.dp)
+                .size(size)
                 .background(
                     color = Color.White.copy(alpha = 0.1f),
                     shape = CircleShape
                 )
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.3f),
+                    color = Color.White.copy(alpha = 0.2f),
                     shape = CircleShape
                 ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = option.icon,
-                contentDescription = option.label,
+                contentDescription = option.type,
                 tint = Color.White,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(iconSize)
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = option.label,
-            color = Color.White.copy(alpha = 0.8f),
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
 private data class MediaOption(
     val type: String,
-    val label: String,
     val icon: ImageVector
 )
 
@@ -567,7 +671,7 @@ private data class DurationOption(
 )
 
 private fun getMediaOptions(): List<MediaOption> = listOf(
-    MediaOption("camera", "Camera", Icons.Default.PhotoCamera),
-    MediaOption("gallery_image", "Photo", Icons.Default.Photo),
-    MediaOption("gallery_video", "Video", Icons.Default.Videocam)
+    MediaOption("camera", Icons.Default.PhotoCamera),
+    MediaOption("gallery_image", Icons.Default.Photo),
+    MediaOption("gallery_video", Icons.Default.Videocam)
 )

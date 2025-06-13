@@ -147,7 +147,6 @@ fun ProfileDetails(
                 StoryRingAvatar(
                     imageUrl = user.imageUrl,
                     hasStory = user.hasStory,
-                    hasUnseenStory = true,
                     size = 120.dp,
                     onClick = onAvatarClick
                 )
@@ -320,7 +319,6 @@ fun StatisticItem(
 fun StoryRingAvatar(
     imageUrl: String?,
     hasStory: Boolean,
-    hasUnseenStory: Boolean = true,
     size: Dp = 120.dp,
     strokeWidth: Dp = 3.dp,
     onClick: () -> Unit,
@@ -334,31 +332,22 @@ fun StoryRingAvatar(
                 val strokeWidthPx = strokeWidth.toPx()
                 val radius = (size.toPx() - strokeWidthPx) / 2
 
-                if (hasUnseenStory) {
-                    val gradient = Brush.sweepGradient(
-                        colors = listOf(
-                            Color(0xFFE91E63),
-                            Color(0xFFFF5722),
-                            Color(0xFFFFC107),
-                            Color(0xFFE91E63)
-                        ),
-                        center = center
-                    )
+                val gradient = Brush.sweepGradient(
+                    colors = listOf(
+                        Color(0xFFE91E63),
+                        Color(0xFFFF5722),
+                        Color(0xFFFFC107),
+                        Color(0xFFE91E63)
+                    ),
+                    center = center
+                )
 
-                    drawCircle(
-                        brush = gradient,
-                        radius = radius,
-                        style = Stroke(width = strokeWidthPx),
-                        center = center
-                    )
-                } else {
-                    drawCircle(
-                        color = Color.Gray.copy(alpha = 0.5f),
-                        radius = radius,
-                        style = Stroke(width = strokeWidthPx),
-                        center = center
-                    )
-                }
+                drawCircle(
+                    brush = gradient,
+                    radius = radius,
+                    style = Stroke(width = strokeWidthPx),
+                    center = center
+                )
             }
         }
 

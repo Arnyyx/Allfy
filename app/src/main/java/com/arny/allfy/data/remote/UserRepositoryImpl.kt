@@ -6,13 +6,11 @@ import com.arny.allfy.domain.model.User
 import com.arny.allfy.domain.repository.UserRepository
 import com.arny.allfy.utils.Constants
 import com.arny.allfy.utils.Response
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
-import okhttp3.internal.wait
 import javax.inject.Inject
 
 class UserRepositoryImpl @Inject constructor(
@@ -28,38 +26,46 @@ class UserRepositoryImpl @Inject constructor(
                 .get()
                 .await()
 
-            val storyIds = storyRefs.documents.mapNotNull { it.getString("storyID") }
+            if (storyRefs.isEmpty) {
+                Log.d("UserRepositoryImpl", "No stories found for user $userId")
+                return false
+            }
 
+            val storyIds = storyRefs.documents.mapNotNull { it.getString("storyID") }
             if (storyIds.isEmpty()) {
                 Log.d("UserRepositoryImpl", "No story IDs found for user $userId")
                 return false
             }
 
-            val stories = firestore.collection(Constants.COLLECTION_NAME_STORIES)
-                .whereIn("storyID", storyIds)
-                .get()
-                .await()
+            val activeStory = storyIds.chunked(10).any { batch ->
+                val stories = firestore.collection(Constants.COLLECTION_NAME_STORIES)
+                    .whereIn("storyID", batch)
+                    .get()
+                    .await()
 
-            stories.documents.any { doc ->
-                val timestamp = doc.getTimestamp("timestamp")
-                val duration = doc.getLong("duration")
+                stories.documents.any { doc ->
+                    val timestamp = doc.getTimestamp("timestamp")
+                    val duration = doc.getLong("duration")
 
-                if (timestamp == null || duration == null) {
-                    Log.w(
-                        "UserRepositoryImpl",
-                        "Invalid story data for storyID: ${doc.id}, timestamp: $timestamp, duration: $duration"
-                    )
-                    false
-                } else {
-                    val expiryTime = timestamp.toDate().time + (duration * 1000)
-                    val isActive = System.currentTimeMillis() <= expiryTime
-                    Log.d(
-                        "UserRepositoryImpl",
-                        "Story ${doc.id} isActive: $isActive, expiryTime: $expiryTime, currentTime: ${System.currentTimeMillis()}"
-                    )
-                    isActive
+                    if (timestamp == null || duration == null) {
+                        Log.w(
+                            "UserRepositoryImpl",
+                            "Invalid story data for storyID: ${doc.id}, timestamp: $timestamp, duration: $duration"
+                        )
+                        false
+                    } else {
+                        val expiryTime = timestamp.toDate().time + (duration * 1000)
+                        val isActive = System.currentTimeMillis() <= expiryTime
+                        Log.d(
+                            "UserRepositoryImpl",
+                            "Story ${doc.id} isActive: $isActive, expiryTime: $expiryTime, currentTime: ${System.currentTimeMillis()}"
+                        )
+                        isActive
+                    }
                 }
             }
+
+            activeStory
         } catch (e: Exception) {
             Log.e("UserRepositoryImpl", "Error checking active stories for user $userId", e)
             false
@@ -192,15 +198,36 @@ class UserRepositoryImpl @Inject constructor(
                     emit(Response.Success(emptyList()))
                     return@flow
                 }
-                val documents = firestore.collection(Constants.COLLECTION_NAME_USERS)
+                // Lấy thông tin users và kiểm tra active stories trong cùng batch
+                val userDocs = firestore.collection(Constants.COLLECTION_NAME_USERS)
                     .whereIn("userId", followerIds)
                     .get()
                     .await()
 
-                val followers = documents.mapNotNull { doc ->
+                // Tạo map để lưu kết quả check active stories
+                val userStoryMap = mutableMapOf<String, Boolean>()
+                followerIds.chunked(10).forEach { batch ->
+                    val storyRefs = firestore.collectionGroup("stories")
+                        .whereIn("userId", batch)
+                        .get()
+                        .await()
+
+                    storyRefs.documents.forEach { doc ->
+                        val userId = doc.getString("userId") ?: return@forEach
+                        val timestamp = doc.getTimestamp("timestamp")
+                        val duration = doc.getLong("duration")
+                        if (timestamp != null && duration != null) {
+                            val expiryTime = timestamp.toDate().time + (duration * 1000)
+                            if (System.currentTimeMillis() <= expiryTime) {
+                                userStoryMap[userId] = true
+                            }
+                        }
+                    }
+                }
+
+                val followers = userDocs.mapNotNull { doc ->
                     doc.toObject(User::class.java).let { user ->
-                        val hasStory = checkUserHasActiveStory(user.userId)
-                        user.copy(hasStory = hasStory)
+                        user.copy(hasStory = userStoryMap[user.userId] ?: false)
                     }
                 }
                 emit(Response.Success(followers))
@@ -225,15 +252,36 @@ class UserRepositoryImpl @Inject constructor(
                 return@flow
             }
 
+            // Lấy thông tin users và kiểm tra active stories trong cùng batch
             val userDocs = firestore.collection(Constants.COLLECTION_NAME_USERS)
                 .whereIn("userId", followingIds)
                 .get()
                 .await()
 
+            // Tạo map để lưu kết quả check active stories
+            val userStoryMap = mutableMapOf<String, Boolean>()
+            followingIds.chunked(10).forEach { batch ->
+                val storyRefs = firestore.collectionGroup("stories")
+                    .whereIn("userId", batch)
+                    .get()
+                    .await()
+
+                storyRefs.documents.forEach { doc ->
+                    val userId1 = doc.getString("userId") ?: return@forEach
+                    val timestamp = doc.getTimestamp("timestamp")
+                    val duration = doc.getLong("duration")
+                    if (timestamp != null && duration != null) {
+                        val expiryTime = timestamp.toDate().time + (duration * 1000)
+                        if (System.currentTimeMillis() <= expiryTime) {
+                            userStoryMap[userId1] = true
+                        }
+                    }
+                }
+            }
+
             val followings = userDocs.mapNotNull { doc ->
                 doc.toObject(User::class.java).let { user ->
-                    val hasStory = checkUserHasActiveStory(user.userId)
-                    user.copy(hasStory = hasStory)
+                    user.copy(hasStory = userStoryMap[user.userId] ?: false)
                 }
             }
             emit(Response.Success(followings))
@@ -249,15 +297,34 @@ class UserRepositoryImpl @Inject constructor(
                 emit(Response.Success(emptyList()))
                 return@flow
             }
-            val documents = firestore.collection(Constants.COLLECTION_NAME_USERS)
+            val userDocs = firestore.collection(Constants.COLLECTION_NAME_USERS)
                 .whereIn("userId", userIDs)
                 .get()
                 .await()
 
-            val users = documents.mapNotNull { doc ->
+            val userStoryMap = mutableMapOf<String, Boolean>()
+            userIDs.chunked(10).forEach { batch ->
+                val storyRefs = firestore.collectionGroup("stories")
+                    .whereIn("userId", batch)
+                    .get()
+                    .await()
+
+                storyRefs.documents.forEach { doc ->
+                    val userId = doc.getString("userId") ?: return@forEach
+                    val timestamp = doc.getTimestamp("timestamp")
+                    val duration = doc.getLong("duration")
+                    if (timestamp != null && duration != null) {
+                        val expiryTime = timestamp.toDate().time + (duration * 1000)
+                        if (System.currentTimeMillis() <= expiryTime) {
+                            userStoryMap[userId] = true
+                        }
+                    }
+                }
+            }
+
+            val users = userDocs.mapNotNull { doc ->
                 doc.toObject(User::class.java).let { user ->
-                    val hasStory = checkUserHasActiveStory(user.userId)
-                    user.copy(hasStory = hasStory)
+                    user.copy(hasStory = userStoryMap[user.userId] ?: false)
                 }
             }
             emit(Response.Success(users))
@@ -282,15 +349,36 @@ class UserRepositoryImpl @Inject constructor(
                 return@flow
             }
 
+            // Lấy thông tin users và kiểm tra active stories trong cùng batch
             val userDocs = firestore.collection(Constants.COLLECTION_NAME_USERS)
                 .whereIn("userId", followerIds)
                 .get()
                 .await()
 
+            // Tạo map để lưu kết quả check active stories
+            val userStoryMap = mutableMapOf<String, Boolean>()
+            followerIds.chunked(10).forEach { batch ->
+                val storyRefs = firestore.collectionGroup("stories")
+                    .whereIn("userId", batch)
+                    .get()
+                    .await()
+
+                storyRefs.documents.forEach { doc ->
+                    val userId = doc.getString("userId") ?: return@forEach
+                    val timestamp = doc.getTimestamp("timestamp")
+                    val duration = doc.getLong("duration")
+                    if (timestamp != null && duration != null) {
+                        val expiryTime = timestamp.toDate().time + (duration * 1000)
+                        if (System.currentTimeMillis() <= expiryTime) {
+                            userStoryMap[userId] = true
+                        }
+                    }
+                }
+            }
+
             val followers = userDocs.mapNotNull { doc ->
                 doc.toObject(User::class.java).let { user ->
-                    val hasStory = checkUserHasActiveStory(user.userId)
-                    user.copy(hasStory = hasStory)
+                    user.copy(hasStory = userStoryMap[user.userId] ?: false)
                 }
             }
             emit(Response.Success(followers))

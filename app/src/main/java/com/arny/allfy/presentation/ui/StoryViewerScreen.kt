@@ -3,9 +3,6 @@ package com.arny.allfy.presentation.ui
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.VideoView
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -21,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -36,11 +32,11 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Story
-import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.common.Dialog
 import com.arny.allfy.presentation.viewmodel.StoryViewModel
 import com.arny.allfy.presentation.viewmodel.UserViewModel
 import com.arny.allfy.utils.Response
+import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.getDataOrNull
 import com.arny.allfy.utils.toTimeAgo
 import kotlinx.coroutines.delay
@@ -53,10 +49,11 @@ fun StoryViewerScreen(
     userViewModel: UserViewModel,
     userId: String,
     isCurrentUser: Boolean,
+    userIdsWithStories: List<String> = emptyList()
 ) {
     val storyState by storyViewModel.storyState.collectAsState()
-    val userState by userViewModel.userState.collectAsState()
     var currentStoryIndex by remember { mutableIntStateOf(0) }
+    var currentUserIndex by remember { mutableIntStateOf(userIdsWithStories.indexOf(userId)) }
     var isPaused by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -70,14 +67,16 @@ fun StoryViewerScreen(
         }
     }
 
-    LaunchedEffect(currentStoryIndex, isPaused) {
+    LaunchedEffect(userId, currentStoryIndex, isPaused, storyState.userStoriesState) {
         val stories = (storyState.userStoriesState as? Response.Success)?.data ?: emptyList()
         if (stories.isNotEmpty() && currentStoryIndex < stories.size && !isPaused) {
             val currentStory = stories[currentStoryIndex]
             val currentUserId =
                 userViewModel.userState.value.currentUserState.getDataOrNull()?.userId ?: ""
 
-            storyViewModel.logStoryView(currentUserId, currentStory.storyID)
+            if (!isCurrentUser) {
+                storyViewModel.logStoryView(currentUserId, currentStory.storyID)
+            }
 
             val duration = when (currentStory.mediaType) {
                 "video" -> currentStory.maxVideoDuration ?: 15000L
@@ -97,6 +96,14 @@ fun StoryViewerScreen(
             if (currentStoryIndex < stories.size - 1) {
                 currentStoryIndex++
                 progress = 0f
+            } else if (currentUserIndex < userIdsWithStories.size - 1) {
+                // Chuyển sang story của user tiếp theo
+                currentUserIndex++
+                val nextUserId = userIdsWithStories[currentUserIndex]
+                storyViewModel.resetUserStoriesState()
+                storyViewModel.getUserStories(nextUserId)
+                currentStoryIndex = 0
+                progress = 0f
             } else {
                 navController.popBackStack()
             }
@@ -110,6 +117,14 @@ fun StoryViewerScreen(
                 val stories =
                     (storyState.userStoriesState as? Response.Success)?.data ?: emptyList()
                 if (stories.isNotEmpty() && currentStoryIndex < stories.size) {
+                    progress = 0f
+                } else if (currentUserIndex < userIdsWithStories.size - 1) {
+                    // Chuyển sang story của user tiếp theo
+                    currentUserIndex++
+                    val nextUserId = userIdsWithStories[currentUserIndex]
+                    storyViewModel.resetUserStoriesState()
+                    storyViewModel.getUserStories(nextUserId)
+                    currentStoryIndex = 0
                     progress = 0f
                 } else {
                     navController.popBackStack()
@@ -158,18 +173,7 @@ fun StoryViewerScreen(
             }
 
             is Response.Success -> {
-                val user = if (isCurrentUser) {
-                    userState.currentUserState.getDataOrNull()
-                } else {
-                    userState.otherUserState.getDataOrNull()
-                }
-
-                val stories = storiesResponse.data.map { story ->
-                    story.copy(
-                        userName = user?.username ?: "",
-                        userProfilePicture = user?.imageUrl ?: ""
-                    )
-                }
+                val stories = storiesResponse.data
                 if (stories.isNotEmpty() && currentStoryIndex < stories.size) {
                     StoryViewerContent(
                         stories = stories,
@@ -182,6 +186,13 @@ fun StoryViewerScreen(
                             if (currentStoryIndex < stories.size - 1) {
                                 currentStoryIndex++
                                 progress = 0f
+                            } else if (currentUserIndex < userIdsWithStories.size - 1) {
+                                currentUserIndex++
+                                val nextUserId = userIdsWithStories[currentUserIndex]
+                                storyViewModel.resetUserStoriesState()
+                                storyViewModel.getUserStories(nextUserId)
+                                currentStoryIndex = 0
+                                progress = 0f
                             } else {
                                 navController.popBackStack()
                             }
@@ -190,16 +201,33 @@ fun StoryViewerScreen(
                             if (currentStoryIndex > 0) {
                                 currentStoryIndex--
                                 progress = 0f
+                            } else if (currentUserIndex > 0) {
+                                currentUserIndex--
+                                val prevUserId = userIdsWithStories[currentUserIndex]
+                                storyViewModel.resetUserStoriesState()
+                                storyViewModel.getUserStories(prevUserId)
+                                currentStoryIndex = 0
+                                progress = 0f
                             }
                         },
                         onClose = { navController.popBackStack() },
                         onDelete = {
                             isPaused = true
                             showDeleteDialog = true
-                        }
+                        },
+                        userId = userId // Thêm tham số userId để reset media state
                     )
                 } else {
-                    navController.popBackStack()
+                    if (currentUserIndex < userIdsWithStories.size - 1) {
+                        currentUserIndex++
+                        val nextUserId = userIdsWithStories[currentUserIndex]
+                        storyViewModel.resetUserStoriesState()
+                        storyViewModel.getUserStories(nextUserId)
+                        currentStoryIndex = 0
+                        progress = 0f
+                    } else {
+                        navController.popBackStack()
+                    }
                 }
                 if (showDeleteDialog && stories.isNotEmpty() && currentStoryIndex < stories.size) {
                     Dialog(
@@ -222,8 +250,6 @@ fun StoryViewerScreen(
 
             is Response.Idle -> {}
         }
-
-
     }
 }
 
@@ -238,17 +264,18 @@ private fun StoryViewerContent(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onClose: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    userId: String
 ) {
     Log.d("StoryViewerContent", "Stories: $stories, Current Index: $currentIndex")
     val currentStory = stories[currentIndex]
-    var isMediaReady by remember { mutableStateOf(false) }
-    var videoProgress by remember { mutableFloatStateOf(0f) }
-    var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+    var isMediaReady by remember(userId, currentIndex) { mutableStateOf(false) }
+    var videoProgress by remember(userId, currentIndex) { mutableFloatStateOf(0f) }
+    var videoViewRef by remember(userId, currentIndex) { mutableStateOf<VideoView?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(currentIndex, isPaused, videoViewRef) {
-        if (currentStory.mediaType == "video" && videoViewRef != null && !isPaused) {
+    LaunchedEffect(userId, currentIndex, isPaused, videoViewRef) {
+        if (currentStory.mediaType == "video" && videoViewRef != null && !isPaused && isMediaReady) {
             coroutineScope.launch {
                 while (videoViewRef?.isPlaying == true) {
                     val currentPosition = videoViewRef?.currentPosition ?: 0
@@ -317,7 +344,7 @@ private fun StoryViewerContent(
                     update = { videoView ->
                         if (isPaused) {
                             videoView.pause()
-                        } else {
+                        } else if (isMediaReady) {
                             videoView.start()
                         }
                     },
@@ -382,8 +409,10 @@ private fun StoryViewerContent(
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(currentStory.userProfilePicture)
+                        .data(currentStory.storyOwner.imageUrl)
                         .crossfade(true)
+                        .placeholder(R.drawable.placehoder_image)
+                        .error(R.drawable.placehoder_image)
                         .build(),
                     contentDescription = "Profile Picture",
                     modifier = Modifier
@@ -396,7 +425,7 @@ private fun StoryViewerContent(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = currentStory.userName,
+                        text = currentStory.storyOwner.username,
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -404,7 +433,7 @@ private fun StoryViewerContent(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = currentStory.timestamp.toTimeAgo(),
+                        text = currentStory.timestamp?.toTimeAgo() ?: "",
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 12.sp
                     )
@@ -451,7 +480,7 @@ private fun StoryViewerContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .padding(top = 64.dp) // Add padding to avoid overlap with top bar
+                    .padding(top = 64.dp)
             ) {
                 Box(
                     modifier = Modifier

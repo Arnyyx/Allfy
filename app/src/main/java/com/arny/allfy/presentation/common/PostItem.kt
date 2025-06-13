@@ -229,8 +229,7 @@ private fun PostHeader(
     var showMenu by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     val decimalFormat = remember { DecimalFormat("0.000") }
-    val formattedScore = if (post.score <= 0.7) "N/A" else
-        post.score.let { decimalFormat.format(it) } ?: "N/A"
+    val formattedScore = post.score.let { decimalFormat.format(it) }
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -247,8 +246,7 @@ private fun PostHeader(
             ) {
                 StoryRingAvatar(
                     imageUrl = post.postOwner.imageUrl.ifEmpty { null },
-                    hasStory = currentUser.hasStory,
-                    hasUnseenStory = true,
+                    hasStory = post.postOwner.hasStory,
                     size = 40.dp,
                     strokeWidth = 1.dp,
                     onClick = {
@@ -269,20 +267,20 @@ private fun PostHeader(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     Row {
-                        if (formattedScore != "N/A")
-                            Text(
-                                text = post.reason,
-                                fontWeight = FontWeight.Normal,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = formattedScore,
                             fontWeight = FontWeight.Normal,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        if (post.score > 0.7f)
+                            Text(
+                                text = post.reason,
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
                     }
 
                 }

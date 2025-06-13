@@ -16,7 +16,7 @@ object NetworkModule {
     @Singleton
     fun provideRecommendationApi(): RecommendationApi {
         return Retrofit.Builder()
-            .baseUrl("https://72a0-2001-ee0-4141-ec65-fd35-b8bd-3d14-4b0e.ngrok-free.app/")
+            .baseUrl("https://proper-lenient-wallaby.ngrok-free.app/")
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(RecommendationApi::class.java)

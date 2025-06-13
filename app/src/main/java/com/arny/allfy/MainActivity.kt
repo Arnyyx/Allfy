@@ -232,7 +232,7 @@ fun AllfyApp(
             SignUpScreen(navController, authViewModel, googleAuthClient)
         }
         composable<Screen.FeedScreen> {
-            FeedScreen(navController, userViewModel, postViewModel, authViewModel)
+            FeedScreen(navController, userViewModel, postViewModel, storyViewModel, authViewModel)
         }
         composable<Screen.SplashScreen> {
             SplashScreen(navController, authViewModel, userViewModel)
@@ -300,15 +300,15 @@ fun AllfyApp(
             val args = it.toRoute<Screen.FollowScreen>()
             FollowScreen(navController, userViewModel, args.userId, args.initialTab)
         }
-
         composable<Screen.StoryViewerScreen> {
             val args = it.toRoute<Screen.StoryViewerScreen>()
             StoryViewerScreen(
-                navController,
-                storyViewModel,
-                userViewModel,
-                args.userId,
-                args.isCurrentUser
+                navController = navController,
+                storyViewModel = storyViewModel,
+                userViewModel = userViewModel,
+                userId = args.userId,
+                isCurrentUser = args.isCurrentUser,
+                userIdsWithStories = args.userIdsWithStories
             )
         }
         composable<Screen.CreateStoryScreen> {

@@ -63,6 +63,7 @@ sealed class Screen {
     data class StoryViewerScreen(
         val userId: String,
         val isCurrentUser: Boolean,
+        val userIdsWithStories: List<String> = emptyList()
     ) : Screen()
 
     @Serializable
