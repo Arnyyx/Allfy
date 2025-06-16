@@ -4,9 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -20,17 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
-import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.utils.Screen
 
 enum class BottomNavigationItem(val icon: ImageVector, val route: Screen, val label: String) {
     Feed(Icons.Default.Home, Screen.FeedScreen, "Home"),
     Search(Icons.Default.Search, Screen.SearchScreen, "Search"),
-    Create(Icons.Default.Add, Screen.CreatePostScreen, "Create"),
+    Create(Icons.Default.Add, Screen.PostEditorScreen(), "Create"),
     Profile(Icons.Default.Person, Screen.ProfileScreen(), "Profile"),
 }
 

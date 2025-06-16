@@ -21,7 +21,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.toRoute
@@ -247,8 +246,9 @@ fun AllfyApp(
         composable<Screen.EditProfileScreen> {
             EditProfileScreen(navController, userViewModel)
         }
-        composable<Screen.CreatePostScreen> {
-            CreatePostScreen(navController, postViewModel, userViewModel)
+        composable<Screen.PostEditorScreen> {
+            val args = it.toRoute<Screen.PostEditorScreen>()
+            PostEditorScreen(navController, postViewModel, userViewModel, args.postID)
         }
         composable<Screen.SettingsScreen> {
             SettingsScreen(

@@ -10,5 +10,6 @@ class PostUseCases(
     val addComment: AddComment,
     val toggleLikePost: ToggleLikePost,
     val toggleLikeComment: ToggleLikeComment,
-    val logPostView: LogPostView
+    val logPostView: LogPostView,
+    val editPost: EditPost
 )

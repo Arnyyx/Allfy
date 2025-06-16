@@ -35,6 +35,7 @@ import com.arny.allfy.domain.usecase.message.SendMessage
 import com.arny.allfy.domain.usecase.message.SendVoiceMessage
 import com.arny.allfy.domain.usecase.post.AddComment
 import com.arny.allfy.domain.usecase.post.DeletePost
+import com.arny.allfy.domain.usecase.post.EditPost
 import com.arny.allfy.domain.usecase.post.GetComments
 import com.arny.allfy.domain.usecase.post.GetFeedPosts
 import com.arny.allfy.domain.usecase.post.GetPostByID
@@ -200,7 +201,8 @@ class AllfyModule {
         addComment = AddComment(repository),
         getComments = GetComments(repository),
         toggleLikeComment = ToggleLikeComment(repository),
-        logPostView = LogPostView(repository)
+        logPostView = LogPostView(repository),
+        editPost = EditPost(repository)
     )
 
     @Singleton

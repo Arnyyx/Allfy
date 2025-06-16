@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -46,7 +45,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -56,7 +54,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -75,19 +72,15 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.arny.allfy.R
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.model.User
 import com.arny.allfy.presentation.components.StoryRingAvatar
-import com.arny.allfy.presentation.state.PostState
 import com.arny.allfy.presentation.viewmodel.PostViewModel
 import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.getDataOrNull
-import com.arny.allfy.utils.isLoading
 import com.arny.allfy.utils.toTimeAgo
 
 @Composable
@@ -184,6 +177,9 @@ fun PostItem(
                 navController = navController,
                 currentUser = currentUser,
                 isDeletingPost = isDeleteLoading,
+                onEditPost = {
+                    navController.navigate(Screen.PostEditorScreen(post.postID))
+                },
                 onDeletePost = { postViewModel.deletePost(post.postID, post.postOwnerID) }
             )
             if (post.mediaItems.isNotEmpty()) PostImages(post)

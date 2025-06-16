@@ -49,7 +49,6 @@ import com.arny.allfy.utils.Response
 import com.arny.allfy.utils.Screen
 import com.arny.allfy.utils.StoragePermissionLauncher
 import com.arny.allfy.utils.generateQRCode
-import com.arny.allfy.utils.getDataOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -181,7 +180,7 @@ fun ProfileScreen(
                         },
                         actions = {
                             if (isCurrentUser) {
-                                IconButton(onClick = { navController.navigate(Screen.CreatePostScreen) }) {
+                                IconButton(onClick = { navController.navigate(Screen.PostEditorScreen()) }) {
                                     Icon(Icons.Default.Add, "New Post")
                                 }
                                 IconButton(onClick = { showQrOptionsDialog = true }) {

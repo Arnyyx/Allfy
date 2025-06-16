@@ -17,12 +17,19 @@ interface PostRepository {
     suspend fun deletePost(postID: String, currentUserID: String): Flow<Response<Boolean>>
     suspend fun getPostByID(postID: String): Flow<Response<Post>>
     suspend fun getPostsByIDs(postIDs: List<String>): Flow<Response<List<Post>>>
-
     suspend fun getComments(
         postID: String,
         lastVisible: Comment? = null,
         limit: Int = 10
     ): Flow<Response<List<Comment>>>
+
+    suspend fun editPost(
+        postID: String,
+        userID: String,
+        newCaption: String,
+        newImageUris: List<Uri>,
+        mediaItemsToRemove: List<String>
+    ): Flow<Response<Boolean>>
 
     suspend fun addComment(
         postID: String,

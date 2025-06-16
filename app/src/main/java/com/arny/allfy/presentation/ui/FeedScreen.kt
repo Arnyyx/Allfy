@@ -88,7 +88,11 @@ fun FeedScreen(
 
     when (val currentUserResponse = userState.currentUserState) {
         is Response.Loading -> LoadingScreenWithNavigation(navController)
-        is Response.Error -> ErrorToast(currentUserResponse.message)
+        is Response.Error -> {
+            Toast.makeText(LocalContext.current, currentUserResponse.message, Toast.LENGTH_SHORT)
+                .show()
+        }
+
         is Response.Success -> {
             FeedContent(
                 currentUser = currentUserResponse.data,
@@ -388,46 +392,6 @@ private fun LoadingScreenWithNavigation(navController: NavController) {
             contentAlignment = Alignment.Center
         ) {
             Text("Loading...", style = MaterialTheme.typography.bodyLarge)
-        }
-    }
-}
-
-@Composable
-private fun ErrorScreen(errorMessage: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = errorMessage,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodyMedium
-        )
-    }
-}
-
-@Composable
-private fun EmptyScreen(message: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-        )
-    }
-}
-
-@Composable
-private fun ErrorToast(message: String) {
-    var showToast by remember { mutableStateOf(true) }
-    if (showToast) {
-        Toast.makeText(LocalContext.current, message, Toast.LENGTH_SHORT).show()
-        LaunchedEffect(Unit) {
-            delay(2000)
-            showToast = false
         }
     }
 }

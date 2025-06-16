@@ -1,8 +1,6 @@
 package com.arny.allfy.utils
 
-import com.arny.allfy.domain.model.User
 import kotlinx.serialization.Serializable
-import org.webrtc.SurfaceViewRenderer
 
 @Serializable
 sealed class Screen {
@@ -25,7 +23,9 @@ sealed class Screen {
     object EditProfileScreen : Screen()
 
     @Serializable
-    object CreatePostScreen : Screen()
+    data class PostEditorScreen(
+        val postID: String? = null
+    ) : Screen()
 
     @Serializable
     object SettingsScreen : Screen()
@@ -68,5 +68,4 @@ sealed class Screen {
 
     @Serializable
     data object CreateStoryScreen : Screen()
-
 }

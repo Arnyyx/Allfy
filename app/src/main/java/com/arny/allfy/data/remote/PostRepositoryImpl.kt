@@ -18,7 +18,6 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
@@ -187,6 +186,75 @@ class PostRepositoryImpl @Inject constructor(
                 emit(Response.Error(e.localizedMessage ?: "An Unexpected Error"))
             }
         }
+
+    override suspend fun editPost(
+        postID: String,
+        userID: String,
+        newCaption: String,
+        newImageUris: List<Uri>,
+        mediaItemsToRemove: List<String>
+    ): Flow<Response<Boolean>> = flow {
+        emit(Response.Loading)
+        try {
+            val postSnapshot = firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .get()
+                .await()
+
+            if (!postSnapshot.exists()) {
+                emit(Response.Error("Post not found"))
+                return@flow
+            }
+
+            val post = postSnapshot.toObject(Post::class.java)
+            if (post?.postOwnerID != userID) {
+                emit(Response.Error("You are not authorized to edit this post"))
+                return@flow
+            }
+            val existingMediaItems = post.mediaItems.toMutableList()
+            for (mediaUrl in mediaItemsToRemove) {
+                try {
+                    val storageRef = storage.getReferenceFromUrl(mediaUrl)
+                    storageRef.delete().await()
+                    existingMediaItems.removeAll { it.url == mediaUrl }
+                } catch (e: Exception) {
+                    Log.e("PostRepositoryImpl", "Failed to delete media item: $mediaUrl, $e")
+                }
+            }
+            val newMediaItems = if (newImageUris.isNotEmpty()) {
+                newImageUris
+                    .filter { it.scheme == "content" || it.scheme == "file" } // Filter local URIs
+                    .map { uri ->
+                        val mimeType = context.contentResolver.getType(uri)
+                        val mediaType = when {
+                            mimeType?.startsWith("image/") == true -> "image"
+                            mimeType?.startsWith("video/") == true -> "video"
+                            mimeType?.startsWith("audio/") == true -> "audio"
+                            else -> "image"
+                        }
+                        val mediaUrl = uploadImageToFirebase(postID, uri)
+                        MediaItem(url = mediaUrl, mediaType = mediaType, thumbnailUrl = null)
+                    }
+            } else {
+                emptyList()
+            }
+            val updatedMediaItems = (existingMediaItems + newMediaItems).distinctBy { it.url }
+            val updatedKeywords = extractKeywords(newCaption)
+            val updatedPostMap = mapOf(
+                "caption" to newCaption,
+                "mediaItems" to updatedMediaItems,
+                "keywords" to updatedKeywords
+            )
+            firestore.collection(Constants.COLLECTION_NAME_POSTS)
+                .document(postID)
+                .update(updatedPostMap)
+                .await()
+            emit(Response.Success(true))
+        } catch (e: Exception) {
+            Log.e("PostRepositoryImpl", "editPost: $e")
+            emit(Response.Error(e.localizedMessage ?: "Error editing post"))
+        }
+    }
 
     private suspend fun uploadImageToFirebase(postID: String, uri: Uri): String {
         try {
@@ -527,11 +595,6 @@ class PostRepositoryImpl @Inject constructor(
             val snapshot = commentRef.get().await()
             if (snapshot.exists()) {
                 val comment = snapshot.toObject(Comment::class.java)!!
-                // Check if comment belongs to the user
-                if (comment.commentOwnerID == userID) {
-                    emit(Response.Error("Cannot like own comment"))
-                    return@flow
-                }
 
                 val isLiked = comment.likes.contains(userID)
                 val updatedLikes = if (isLiked) {
@@ -636,11 +699,6 @@ class PostRepositoryImpl @Inject constructor(
         flow {
             emit(Response.Loading)
             try {
-                if (post.postOwnerID == userID) {
-                    emit(Response.Success(true))
-                    return@flow
-                }
-
                 val postRef = firestore.collection("posts").document(post.postID)
                 val interactionRef = firestore.collection("users")
                     .document(userID)
@@ -649,47 +707,48 @@ class PostRepositoryImpl @Inject constructor(
 
                 firestore.runTransaction { transaction ->
                     val postSnapshot = transaction.get(postRef)
-                    val interactionSnapshot = transaction.get(interactionRef)
-
                     val currentLikes = postSnapshot.get("likes") as? List<String> ?: emptyList()
                     val isLiked = userID in currentLikes
                     val updatedLikes = if (isLiked) currentLikes - userID else currentLikes + userID
 
-                    val likeData = mapOf("timestamp" to Timestamp.now())
+                    transaction.update(postRef, "likes", updatedLikes)
 
-                    if (interactionSnapshot.exists()) {
-                        val likes = interactionSnapshot.get("likes") as? List<Map<String, Any>>
-                            ?: emptyList()
-                        val recentLike = likes.any { like ->
-                            val ts = like["timestamp"] as? Timestamp
-                            ts != null && ts.toDate().time > System.currentTimeMillis() - 60000
-                        }
+                    if (post.postOwnerID != userID) {
+                        val interactionSnapshot = transaction.get(interactionRef)
+                        val likeData = mapOf("timestamp" to Timestamp.now())
 
-                        if (!recentLike || isLiked) {
-                            transaction.update(
+                        if (interactionSnapshot.exists()) {
+                            val likes = interactionSnapshot.get("likes") as? List<Map<String, Any>>
+                                ?: emptyList()
+                            val recentLike = likes.any { like ->
+                                val ts = like["timestamp"] as? Timestamp
+                                ts != null && ts.toDate().time > System.currentTimeMillis() - 60000
+                            }
+
+                            if (!recentLike || isLiked) {
+                                transaction.update(
+                                    interactionRef, mapOf(
+                                        "likes" to if (isLiked) FieldValue.arrayRemove(likeData) else FieldValue.arrayUnion(
+                                            likeData
+                                        ),
+                                        "interactionScore" to FieldValue.increment(if (isLiked) -1.0 else 1.0),
+                                        "lastUpdated" to Timestamp.now()
+                                    )
+                                )
+                            }
+                        } else if (!isLiked) {
+                            transaction.set(
                                 interactionRef, mapOf(
-                                    "likes" to if (isLiked) FieldValue.arrayRemove(likeData) else FieldValue.arrayUnion(
-                                        likeData
-                                    ),
-                                    "interactionScore" to FieldValue.increment(if (isLiked) -1.0 else 1.0),
+                                    "postId" to post.postID,
+                                    "views" to emptyList<Map<String, Any>>(),
+                                    "likes" to listOf(likeData),
+                                    "comments" to emptyList<Map<String, Any>>(),
+                                    "interactionScore" to 1.0,
                                     "lastUpdated" to Timestamp.now()
                                 )
                             )
                         }
-                    } else if (!isLiked) {
-                        transaction.set(
-                            interactionRef, mapOf(
-                                "postId" to post.postID,
-                                "views" to emptyList<Map<String, Any>>(),
-                                "likes" to listOf(likeData),
-                                "comments" to emptyList<Map<String, Any>>(),
-                                "interactionScore" to 1.0,
-                                "lastUpdated" to Timestamp.now()
-                            )
-                        )
                     }
-
-                    transaction.update(postRef, "likes", updatedLikes)
                 }.await()
 
                 emit(Response.Success(true))

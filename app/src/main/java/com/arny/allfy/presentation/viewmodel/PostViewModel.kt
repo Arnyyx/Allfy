@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arny.allfy.domain.model.Comment
+import com.arny.allfy.domain.model.MediaItem
 import com.arny.allfy.domain.model.Post
 import com.arny.allfy.domain.usecase.post.PostUseCases
 import com.arny.allfy.presentation.state.PostState
@@ -128,20 +129,9 @@ class PostViewModel @Inject constructor(
 
     fun loadComments(postID: String, reset: Boolean = false) {
         viewModelScope.launch {
-            Log.d("Comments", "loadComments called - reset: $reset")
-
-            // Nếu reset, clear lastLoadedComment và set loading state
             if (reset) {
                 lastLoadedComment = null
                 _postState.update { it.copy(loadCommentsState = Response.Loading) }
-            }
-
-            // Nếu đang loading page tiếp theo, không set Loading state để tránh UI bị reset
-            if (!reset) {
-                Log.d(
-                    "Comments",
-                    "Loading more comments, lastLoadedComment: ${lastLoadedComment?.commentID}"
-                )
             }
 
             postUseCases.getComments(postID, lastLoadedComment, commentsPerPage)
@@ -149,28 +139,18 @@ class PostViewModel @Inject constructor(
                     when (response) {
                         is Response.Success -> {
                             val newComments = response.data
-                            Log.d("Comments", "Received ${newComments.size} new comments")
 
                             if (newComments.isNotEmpty()) {
-                                // Update lastLoadedComment cho lần load tiếp theo
                                 lastLoadedComment = newComments.lastOrNull()
-                                Log.d(
-                                    "Comments",
-                                    "Updated lastLoadedComment: ${lastLoadedComment?.commentID}"
-                                )
                             }
 
                             val currentComments = if (reset) {
                                 emptyList()
                             } else {
-                                // Lấy comments hiện tại từ state
                                 (_postState.value.loadCommentsState as? Response.Success)?.data
                                     ?: emptyList()
                             }
 
-                            Log.d("Comments", "Current comments size: ${currentComments.size}")
-
-                            // Merge comments: current + new (tránh duplicate)
                             val allComments = if (reset) {
                                 newComments
                             } else {
@@ -180,9 +160,6 @@ class PostViewModel @Inject constructor(
                                 currentComments + filteredNewComments
                             }
 
-                            Log.d("Comments", "Total comments after merge: ${allComments.size}")
-
-                            // Determine if there are more comments to load
                             val hasMore = newComments.size == commentsPerPage
 
                             _postState.update { currentState ->
@@ -193,23 +170,18 @@ class PostViewModel @Inject constructor(
                                     )
                                 )
                             }
-
-                            Log.d("Comments", "State updated - hasMore: $hasMore")
                         }
 
                         is Response.Error -> {
-                            Log.e("Comments", "Error loading comments: ${response.message}")
                             if (reset) {
                                 _postState.update { it.copy(loadCommentsState = response) }
                             }
-                            // Nếu không phải reset, giữ nguyên comments hiện tại và chỉ log error
                         }
 
                         is Response.Loading -> {
                             if (reset) {
                                 _postState.update { it.copy(loadCommentsState = response) }
                             }
-                            // Nếu không phải reset, không update loading state
                         }
 
                         else -> {
@@ -336,6 +308,82 @@ class PostViewModel @Inject constructor(
         }
     }
 
+    fun editPost(
+        postID: String,
+        userID: String,
+        newCaption: String,
+        newImageUris: List<Uri>,
+        mediaItemsToRemove: List<String>
+    ) {
+        viewModelScope.launch {
+            _loadingPosts.update { it + (postID to (it[postID] ?: emptySet()) + "edit") }
+
+            val originalFeedPosts = _postState.value.feedPostsState.getDataOrNull() ?: emptyList()
+            val originalGetPost = _postState.value.getPostState.getDataOrNull()
+            _postState.update { currentState ->
+                val updatedFeedPosts = originalFeedPosts.map { post ->
+                    if (post.postID == postID) {
+                        post.copy(
+                            caption = newCaption,
+                            mediaItems = post.mediaItems
+                                .filterNot { it.url in mediaItemsToRemove } + newImageUris.map { uri ->
+                                MediaItem(
+                                    url = uri.toString(),
+                                    mediaType = if (uri.toString()
+                                            .contains("video")
+                                    ) "video" else "image",
+                                    thumbnailUrl = null
+                                )
+                            }
+                        )
+                    } else {
+                        post
+                    }
+                }
+                val updatedGetPostState = if (originalGetPost?.postID == postID) {
+                    Response.Success(
+                        originalGetPost.copy(
+                            caption = newCaption,
+                            mediaItems = originalGetPost.mediaItems
+                                .filterNot { it.url in mediaItemsToRemove } + newImageUris.map { uri ->
+                                MediaItem(
+                                    url = uri.toString(),
+                                    mediaType = if (uri.toString()
+                                            .contains("video")
+                                    ) "video" else "image",
+                                    thumbnailUrl = null
+                                )
+                            }
+                        )
+                    )
+                } else {
+                    currentState.getPostState
+                }
+                currentState.copy(
+                    feedPostsState = Response.Success(updatedFeedPosts),
+                    getPostState = updatedGetPostState,
+                    editPostState = Response.Loading
+                )
+            }
+
+            postUseCases.editPost(postID, userID, newCaption, newImageUris, mediaItemsToRemove)
+                .collect { response ->
+                    _postState.update { it.copy(editPostState = response.mapSuccess { true }) }
+                    if (response is Response.Error) {
+                        _postState.update { currentState ->
+                            currentState.copy(
+                                feedPostsState = Response.Success(originalFeedPosts),
+                                getPostState = if (originalGetPost != null) Response.Success(
+                                    originalGetPost
+                                ) else currentState.getPostState
+                            )
+                        }
+                    }
+                    _loadingPosts.update { it + (postID to (it[postID] ?: emptySet()) - "edit") }
+                }
+        }
+    }
+
     fun resetFeedPostsState() {
         _postState.update { it.copy(feedPostsState = Response.Idle) }
     }
@@ -375,6 +423,10 @@ class PostViewModel @Inject constructor(
 
     fun resetLogViewState() {
         _postState.update { it.copy(logViewState = Response.Idle) }
+    }
+
+    fun resetEditPostState() {
+        _postState.update { it.copy(editPostState = Response.Idle) }
     }
 
     fun clearPostState() {

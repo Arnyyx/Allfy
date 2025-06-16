@@ -14,7 +14,8 @@ data class PostState(
     val loadCommentsState: Response<List<Comment>> = Response.Idle,
     val addCommentState: Response<Boolean> = Response.Idle,
     val likeCommentState: Response<Boolean> = Response.Idle,
-    val logViewState: Response<Boolean> = Response.Idle
+    val logViewState: Response<Boolean> = Response.Idle,
+    val editPostState: Response<Boolean> = Response.Idle
 ) {
     data class Success<T>(
         val data: T,
